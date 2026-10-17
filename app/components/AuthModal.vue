@@ -46,7 +46,7 @@ async function submit() {
 </script>
 
 <template>
-  <AppModal v-if="authOpen" :title="mode === 'login' ? t('ui.sign_in_to_loop') : t('ui.create_your_loop_account')" @close="authOpen = false">
+  <ModalTransition><AppModal v-if="authOpen" :title="mode === 'login' ? t('ui.sign_in_to_loop') : t('ui.create_your_loop_account')" @close="authOpen = false">
     <div class="auth-modal account-auth">
       <div class="auth-logo"><BrandLogo /></div>
       <div class="auth-tabs" :aria-label="t('ui.account_access')">
@@ -75,5 +75,5 @@ async function submit() {
       <div class="auth-security"><AppIcon name="ShieldCheck" :size="15" />{{ t('ui.password_protected_your_wallet_is_included') }}</div>
       <NuxtLink class="auth-demo-link" to="/dashboard" @click="authOpen = false">{{ t('ui.explore_the_plan_preview') }}<AppIcon name="ArrowUpRight" :size="15" /></NuxtLink>
     </div>
-  </AppModal>
+  </AppModal></ModalTransition>
 </template>

@@ -124,8 +124,8 @@ async function connectSponsor() {
       </section>
     </template>
 
-    <AppModal v-if="purchaseOpen" :title="t('referral.confirmTitle')" @close="closePurchase">
+    <ModalTransition><AppModal v-if="purchaseOpen" :title="t('referral.confirmTitle')" @close="closePurchase">
       <div class="admin-dialog referral-purchase-dialog"><span class="admin-dialog-icon"><AppIcon name="LockKeyhole" :size="25" /></span><h2>{{ t('referral.confirmTitle') }}</h2><p>{{ t('referral.confirmHint') }}</p><dl class="admin-details"><div><dt>{{ t('referral.activationFee') }}</dt><dd>{{ formatUsdt(price) }} USDT</dd></div><div><dt>{{ t('ui.available_balance') }}</dt><dd>{{ formatUsdt(available) }} USDT</dd></div><div><dt>{{ t('referral.balanceAfter') }}</dt><dd>{{ formatUsdt(Math.max(0, available - price)) }} USDT</dd></div></dl><form class="account-form" @submit.prevent="activate"><label for="referral-purchase-password">{{ t('ui.confirm_with_your_password') }}</label><input id="referral-purchase-password" v-model="password" class="auth-input" type="password" autocomplete="current-password" required maxlength="128" :disabled="busy" /><p v-if="purchaseError" class="auth-error" role="alert">{{ tr(purchaseError) }}</p><button class="button button-orange" type="submit" :disabled="busy || !canAfford"><AppIcon v-if="busy" name="LoaderCircle" class="auth-loading" :size="16" />{{ busy ? t('ui.please_wait') : t('referral.confirmPay', { amount: formatUsdt(price) }) }}</button></form></div>
-    </AppModal>
+    </AppModal></ModalTransition>
   </div>
 </template>

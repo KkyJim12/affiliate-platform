@@ -37,7 +37,7 @@ export default defineNuxtConfig({
   app: {
     pageTransition: { name: "page", mode: "out-in" },
     head: {
-      title: "Loop — Your network, connected.",
+      title: "UNXO",
       meta: [
         {
           name: "description",

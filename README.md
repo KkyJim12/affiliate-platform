@@ -1,6 +1,6 @@
-# Loop — matrix and referral workspace
+# UNXO — matrix and referral workspace
 
-Nuxt 4 app with a three-layer binary matrix UI, 15-rank explorer, 15-level unilevel projections, username/password accounts, and persistent in-app USDT ledger wallets. The Loop interface uses a modern gold palette with light and dark themes.
+Nuxt 4 app with a three-layer binary matrix UI, 15-rank explorer, 15-level unilevel projections, username/password accounts, and persistent in-app USDT ledger wallets. The UNXO interface uses a modern gold palette with light and dark themes.
 
 Branding uses the supplied UNXO artwork from `public/logo.jpg`. The horizontal, transparent version is in `public/unxo-horizontal.webp`, with its full-resolution PNG master alongside it. `BrandLogo.vue` shares responsive sizing across navigation, account dialogs, footers, and compact decorative emblems. The original image also supplies the browser icon. See `design/unxo-logo-prompt.md` for generation details.
 
@@ -10,7 +10,7 @@ English and Thai use `@nuxtjs/i18n` (Vue I18n). Switch languages in either heade
 
 All selection controls use the shared `AppDropdown` component, with themed listbox menus, selected-item indicators, keyboard navigation and typeahead, Escape cancellation, and outside-click dismissal. Menus render above card boundaries and adjust their position to fit the viewport on desktop and mobile.
 
-Motion is shared through `app/assets/css/motion.css` and `usePageMotion`: route fades, staggered scroll reveals across all dashboard views, floating brand artwork, card/button feedback, FAQ expansion, dialog/dropdown entrances, transaction rows, and matrix branches. Server-rendered content stays readable before JavaScript loads. Reduced-motion preferences disable both CSS and browser-driven animation, including live preference changes; keyboard focus reveals controls immediately. View transitions preserve the existing form and filter state.
+Motion is shared through `app/assets/css/motion.css` and `usePageMotion`: route fades, staggered scroll reveals across all dashboard views, floating brand artwork, card/button feedback, FAQ expansion, modal slide-down entrances and slide-up exits, dropdown entrances, transaction rows, and matrix branches. Server-rendered content stays readable before JavaScript loads. Reduced-motion preferences disable both CSS and browser-driven animation, including live preference changes; keyboard focus reveals controls immediately. View transitions preserve the existing form and filter state. `ModalTransition` wraps every conditional dialog, retains the backdrop and body scroll lock through the exit, makes departing content inactive, and restores focus after closing.
 
 ## Run locally
 

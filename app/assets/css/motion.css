@@ -43,8 +43,13 @@
 .faq-item > button > svg { transition: rotate .25s var(--motion-ease); }
 .faq-item.open > button > svg { rotate: 90deg; }
 
-.modal-backdrop { animation: fade-in .2s ease both; }
-.modal-card { animation: dialog-arrive .4s var(--motion-ease) both; }
+.modal-backdrop, .modal-card { animation: none; }
+.modal-enter-active { transition: opacity .32s var(--motion-ease); }
+.modal-leave-active { transition: opacity .22s ease-in; }
+.modal-enter-active .modal-card { transition: translate .32s var(--motion-ease); }
+.modal-leave-active .modal-card { transition: translate .22s ease-in; }
+.modal-enter-from, .modal-leave-to { opacity: 0; }
+.modal-enter-from .modal-card, .modal-leave-to .modal-card { translate: 0 -36px; }
 .auth-error, .form-error { animation: error-nudge .3s ease; }
 .app-toast > svg { animation: icon-arrive .4s var(--motion-ease); }
 .dropdown-enter-active, .dropdown-leave-active { transition: opacity .16s ease, translate .2s var(--motion-ease), scale .2s var(--motion-ease); transform-origin: top center; }

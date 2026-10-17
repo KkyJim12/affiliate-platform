@@ -161,10 +161,10 @@ test("create account and wallet, request funding, restore session, and sign back
   await page.getByRole("button", { name: "Sign in", exact: true }).last().click();
   await page.getByLabel("Username", { exact: true }).fill(username.toUpperCase());
   await page.getByLabel("Password", { exact: true }).fill("wrong password");
-  await page.getByRole("button", { name: "Sign in to Loop", exact: true }).click();
+  await page.getByRole("button", { name: "Sign in to UNXO", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("incorrect");
   await page.getByLabel("Password", { exact: true }).fill(password);
-  await page.getByRole("button", { name: "Sign in to Loop", exact: true }).click();
+  await page.getByRole("button", { name: "Sign in to UNXO", exact: true }).click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
   await expect(page.locator(".dashboard-greeting")).toContainText(username.toUpperCase());
   await navigate(page, "In-app wallet");
@@ -398,6 +398,33 @@ test("page motion reveals content, preserves keyboard access, and respects reduc
   await expect(page.getByRole("heading", { level: 1 })).toHaveCSS("opacity", "1");
   await page.locator(".step").first().scrollIntoViewIfNeeded();
   await expect(page.locator(".step").first()).toHaveCSS("opacity", "1");
+  const openModal = page.locator(".hero-copy .button").first();
+  async function slideDirection() {
+    return page.locator(".modal-card").evaluate(async (element) => {
+      for (let frame = 0; frame < 5; frame++) {
+        const animation = element.getAnimations().find(item => item.effect instanceof KeyframeEffect && item.effect.getKeyframes().some(keyframe => keyframe.translate !== undefined));
+        if (animation?.effect instanceof KeyframeEffect) {
+          const frames = animation.effect.getKeyframes();
+          const y = (value: unknown) => value === "none" ? 0 : Number.parseFloat(String(value).trim().split(/\s+/).at(-1) || "0");
+          return { direction: y(frames.at(-1)?.translate) - y(frames[0]?.translate), inert: (element as HTMLElement).inert, locked: document.body.style.overflow === "hidden" };
+        }
+        await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      }
+      return { direction: 0, inert: (element as HTMLElement).inert, locked: document.body.style.overflow === "hidden" };
+    });
+  }
+  await openModal.click();
+  expect((await slideDirection()).direction).toBeGreaterThan(0);
+  await expect(page.getByRole("dialog")).toBeFocused();
+  await page.locator(".modal-backdrop").evaluate(element => Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {}))));
+  await page.keyboard.press("Escape");
+  const leaving = await slideDirection();
+  expect(leaving.direction).toBeLessThan(0);
+  expect(leaving.inert).toBe(true);
+  expect(leaving.locked).toBe(true);
+  await expect(page.locator(".modal-backdrop")).toHaveCount(0);
+  await expect(openModal).toBeFocused();
+  await expect(page.locator("body")).not.toHaveCSS("overflow", "hidden");
   const finalAction = page.locator(".final-cta button");
   await finalAction.focus();
   await expect(finalAction).toBeFocused();
@@ -406,6 +433,11 @@ test("page motion reveals content, preserves keyboard access, and respects reduc
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
   await expect(page.locator(".center-token")).toHaveCSS("animation-name", "none");
+  await openModal.click();
+  expect(await page.locator(".modal-backdrop").evaluate(element => element.getAnimations({ subtree: true }).length)).toBe(0);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".modal-backdrop")).toHaveCount(0);
+  await expect(openModal).toBeFocused();
   await gotoReady(page, "/dashboard?view=settings");
   await expect(page.locator(".account-settings")).toHaveCSS("opacity", "1");
   await chooseDropdown(page, page.getByRole("combobox", { name: "Theme preference", exact: true }), "dark");

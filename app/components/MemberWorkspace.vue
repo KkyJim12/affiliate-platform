@@ -44,7 +44,7 @@ const navigation = [
 ] as const;
 const titles: Record<string, string> = { overview: "Your network, at a glance.", matrix: "Every connection has a place.", referrals: "Good people. Growing together.", ranks: "A clearer view of every rank.", wallet: "Your rewards, right at home.", settings: "Your little corner of Loop." };
 const subtitles: Record<string, string> = { overview: "Your matrix, commissions, and wallet. All connected.", matrix: "A binary structure. Three layers. Fourteen positions.", referrals: "Your personal invites and 15 levels of referral commissions.", ranks: "Explore the 15 ranks and the maths behind each one.", wallet: "Manage your USDT balance and follow every transaction.", settings: "Your account, invite code, and security in one place." };
-useHead({ title: computed(() => `${tr(navigation.find((item) => item.view === currentView.value)?.label)} — Loop`) });
+useHead({ title: computed(() => `${tr(navigation.find((item) => item.view === currentView.value)?.label)} — UNXO`) });
 const origin = useRequestURL().origin;
 const referralLink = computed(() => `${String(config.public.appUrl || origin).replace(/\/$/, "")}/referrals?ref=${user.value?.referralCode || ""}`);
 const projections = computed(() => unilevelProjection(selectedRank.value));

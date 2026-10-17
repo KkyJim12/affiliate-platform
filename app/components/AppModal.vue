@@ -4,8 +4,6 @@ const { t, tr, localeTag, formatDate } = useLoopI18n();
 const props = defineProps<{ title: string }>();
 const emit = defineEmits<{ close: [] }>();
 const dialog = ref<HTMLElement | null>(null);
-let previousFocus: HTMLElement | null = null;
-let previousOverflow = "";
 function onKeydown(event: KeyboardEvent) {
   if (event.key === "Escape") emit("close");
   if (event.key !== "Tab") return;
@@ -28,16 +26,11 @@ function onKeydown(event: KeyboardEvent) {
   }
 }
 onMounted(() => {
-  previousFocus = document.activeElement as HTMLElement;
-  previousOverflow = document.body.style.overflow;
-  document.body.style.overflow = "hidden";
   dialog.value?.focus({ preventScroll: true });
   document.addEventListener("keydown", onKeydown);
 });
 onBeforeUnmount(() => {
-  document.body.style.overflow = previousOverflow;
   document.removeEventListener("keydown", onKeydown);
-  previousFocus?.focus({ preventScroll: true });
 });
 </script>
 <template>

@@ -90,7 +90,7 @@ function closeAction() { action.value = null; password.value = ""; }
       </div>
       <p v-if="!compact" class="wallet-history-note">{{ preview ? t('ui.sample_amounts_illustrate_the_plan_they_are_not_account_funds') : t('ui.your_wallet_is_an_internal_usdt_ledger_funding_requests_stay_pending_until_settled_on') }}</p>
     </div>
-    <AppModal v-if="action" :title="action === 'deposit' ? t('ui.request_wallet_funding') : t('ui.transfer_to_a_member')" @close="closeAction">
+    <ModalTransition><AppModal v-if="action" :title="action === 'deposit' ? t('ui.request_wallet_funding') : t('ui.transfer_to_a_member')" @close="closeAction">
       <div class="wallet-action-modal"><span class="modal-feature-icon"><AppIcon :name="action === 'deposit' ? 'Wallet' : 'Send'" :size="26" /></span><h2>{{ action === 'deposit' ? t('ui.a_little_fuel_for_your_wallet') : t('ui.send_to_someone_in_your_loop') }}</h2><p>{{ action === 'deposit' ? t('ui.save_a_funding_request_for_your_account_funds_become_available_only_after_verificatio') : t('ui.transfer_available_funds_instantly_to_another_loop_member') }}</p>
         <form class="account-form" @submit.prevent="submit">
           <template v-if="action === 'transfer'"><label for="transfer-recipient">{{ t('ui.recipient_username') }}</label><input id="transfer-recipient" v-model="recipient" class="auth-input" autocomplete="off" :placeholder="tr('their_username')" required maxlength="24" :disabled="loading" /></template>
@@ -100,6 +100,6 @@ function closeAction() { action.value = null; password.value = ""; }
           <button class="button button-orange auth-wallet-button" :disabled="loading" type="submit"><AppIcon v-if="loading" name="LoaderCircle" class="auth-loading" :size="17" />{{ loading ? t('ui.please_wait') : action === 'deposit' ? t('ui.save_funding_request') : t('ui.confirm_transfer') }}<AppIcon v-if="!loading" name="ArrowRight" :size="17" /></button>
         </form>
       </div>
-    </AppModal>
+    </AppModal></ModalTransition>
   </section>
 </template>

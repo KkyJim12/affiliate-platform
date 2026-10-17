@@ -16,7 +16,7 @@ const { toast } = useAppUI();
 const colorMode = useColorMode();
 useHead({
   htmlAttrs: { lang: computed(() => localeTag.value), dir: "ltr" },
-  title: computed(() => `Loop — ${tr('Your network, connected.')}`),
+  title: "UNXO",
   meta: [
     { name: "theme-color", content: computed(() => colorMode.value === "dark" ? "#0d1017" : "#f5f6f8") },
     { name: "description", content: computed(() => tr('Your three-layer binary matrix, 15 referral levels, and in-app USDT wallet. Sign in with your username and password.')) },
