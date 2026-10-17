@@ -1,2 +1,2 @@
 import { platformSettings } from "../utils/admin";
-export default defineEventHandler(() => platformSettings());
+export default defineEventHandler(async () => await platformSettings());

@@ -11,7 +11,7 @@ const post = (api: APIRequestContext, path: string, data: object) => api.post(pa
 function provisionAdmin(username: string) {
   const output = execFileSync(process.execPath, ["scripts/create-admin.mjs"], {
     cwd: resolve("."), encoding: "utf8",
-    env: { ...process.env, LOOP_DATABASE_PATH: resolve(".data/playwright.sqlite"), LOOP_ADMIN_USERNAME: username, LOOP_ADMIN_PASSWORD: password, NODE_NO_WARNINGS: "1" },
+    env: { ...process.env, DATABASE_URL: process.env.TEST_DATABASE_URL, LOOP_ADMIN_USERNAME: username, LOOP_ADMIN_PASSWORD: password, NODE_NO_WARNINGS: "1" },
   });
   expect(output).toContain(`Administrator @${username} created`);
   expect(output).not.toContain(password);

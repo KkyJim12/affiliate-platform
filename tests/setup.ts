@@ -1,15 +1,12 @@
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import { openTestDatabase } from "./database";
+import { migrate, readMigrations } from "../server/lib/migrations";
 
-export default function setup() {
+export default async function setup() {
   // Reset throttles and operational controls only in the dedicated test database.
-  const path = resolve(".data/playwright.sqlite");
-  if (!existsSync(path)) return;
-  const database = new DatabaseSync(path);
-  const table = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'rate_limits'").get();
-  if (table) database.exec("DELETE FROM rate_limits");
-  const settings = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'platform_settings'").get();
-  if (settings) database.exec("UPDATE platform_settings SET registration_open = 1, funding_open = 1, support_email = '' WHERE id = 1");
-  database.close();
+  const database = openTestDatabase();
+  try {
+    await migrate(database.pool, readMigrations());
+    await database.execute("DELETE FROM rate_limits");
+    await database.execute("UPDATE platform_settings SET registration_open = 1, funding_open = 1, support_email = '' WHERE id = 1");
+  } finally { await database.close(); }
 }

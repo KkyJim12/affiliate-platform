@@ -1,3 +1,3 @@
 import { requireUser } from "../../utils/auth";
 import { activityFor } from "../../utils/explorer";
-export default defineEventHandler(event => activityFor(event, requireUser(event)));
+export default defineEventHandler(async (event) => await activityFor(event, await requireUser(event)));

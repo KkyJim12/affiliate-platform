@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { DatabaseSync } from "node:sqlite";
+import type { Pool, PoolClient } from "pg";
 
 export interface Migration { name: string; sql: string; checksum: string }
 interface AppliedMigration { name: string; checksum: string; applied_at: string }
@@ -26,9 +26,9 @@ export function readMigrations(directory = fileURLToPath(new URL("../../database
     .map(entry => ({ name: entry.name, sql: readFileSync(join(directory, entry.name), "utf8") })));
 }
 
-export function migrationStatus(connection: DatabaseSync, migrations: readonly Migration[]) {
-  const exists = connection.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'").get();
-  const history = exists ? connection.prepare("SELECT name, checksum, applied_at FROM schema_migrations ORDER BY name").all() as unknown as AppliedMigration[] : [];
+export async function migrationStatus(connection: Pick<PoolClient, "query">, migrations: readonly Migration[]) {
+  const exists = (await connection.query("SELECT to_regclass('schema_migrations') AS name")).rows[0].name;
+  const history = exists ? (await connection.query("SELECT name, checksum, applied_at FROM schema_migrations ORDER BY name")).rows as AppliedMigration[] : [];
   for (const [index, applied] of history.entries()) {
     const expected = migrations[index];
     if (!expected || applied.name !== expected.name) throw new Error(`Migration history does not match this build at ${applied.name}. Restore the original migration files.`);
@@ -37,26 +37,27 @@ export function migrationStatus(connection: DatabaseSync, migrations: readonly M
   return migrations.map((migration, index) => ({ name: migration.name, status: index < history.length ? "applied" as const : "pending" as const, appliedAt: history[index]?.applied_at || null }));
 }
 
-export function migrate(connection: DatabaseSync, migrations: readonly Migration[]) {
-  connection.exec("BEGIN IMMEDIATE");
+export async function migrate(pool: Pool, migrations: readonly Migration[]) {
+  const connection = await pool.connect();
   try {
-    connection.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+    await connection.query("BEGIN");
+    await connection.query("SELECT pg_advisory_xact_lock(782438, 1)");
+    await connection.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
       name TEXT PRIMARY KEY,
       checksum TEXT NOT NULL,
       applied_at TEXT NOT NULL
     )`);
-    const pending = migrationStatus(connection, migrations).filter(item => item.status === "pending");
-    const insert = connection.prepare("INSERT INTO schema_migrations VALUES (?, ?, ?)");
+    const pending = (await migrationStatus(connection, migrations)).filter(item => item.status === "pending");
     for (const item of pending) {
       const migration = migrations.find(candidate => candidate.name === item.name)!;
-      try { connection.exec(migration.sql); }
+      try { await connection.query(migration.sql); }
       catch (cause) { throw new Error(`Database migration failed: ${migration.name}`, { cause }); }
-      insert.run(migration.name, migration.checksum, new Date().toISOString());
+      await connection.query("INSERT INTO schema_migrations VALUES ($1, $2, $3)", [migration.name, migration.checksum, new Date().toISOString()]);
     }
-    connection.exec("COMMIT");
+    await connection.query("COMMIT");
     return pending.map(item => item.name);
   } catch (error) {
-    connection.exec("ROLLBACK");
+    await connection.query("ROLLBACK");
     throw error;
-  }
+  } finally { connection.release(); }
 }

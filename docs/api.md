@@ -1,6 +1,9 @@
 # UNXO API
 
 The member and administrator interfaces use the same-origin Nuxt API under `/api`.
+The API stores all account and ledger data in PostgreSQL through `DATABASE_URL`.
+Schema migrations run before the server starts accepting requests; CLI migration
+and SQLite import commands are documented in [the README](../README.md#database-migrations).
 Use the browser session cookie returned by login or registration. Session cookies
 are HttpOnly and SameSite=Strict; HTTPS enables Secure. Every POST, PUT and PATCH
 requires an `Origin` header matching the application origin. Responses are private

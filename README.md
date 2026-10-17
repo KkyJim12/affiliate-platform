@@ -14,20 +14,26 @@ Motion is shared through `app/assets/css/motion.css` and `usePageMotion`: route 
 
 ## Run locally
 
-Requires Node.js 24 or later for built-in SQLite. Use `npm.cmd` on Windows if PowerShell blocks `npm.ps1`.
+Requires Node.js 24 or later and PostgreSQL 17 or later. Use `npm.cmd` on Windows if PowerShell blocks `npm.ps1`.
 
 ```sh
 npm install
+docker compose up -d postgres
+npm run db:migrate
 npm run dev
 ```
 
-Open http://localhost:3000. Create an account through the sign-in dialog. No Privy keys, browser wallet, email provider, or blockchain connection is required. An optional `.env` can use the values in `.env.example`.
+Before running these commands, set `DATABASE_URL` in `.env` using `.env.example`. The supplied local URL matches `compose.yaml`; Docker stores PostgreSQL data in a persistent volume and binds its port to localhost. An existing PostgreSQL installation or hosted database also works: create a database and supply its connection URL. Use your provider's SSL parameters for hosted connections. Local Compose credentials are for development only.
+
+Without Docker or an installed PostgreSQL service, run `npm run db:start` in a separate terminal before migrations and development. It starts a native PostgreSQL 17 process on the localhost port in `DATABASE_URL`, creates that database if missing, and keeps data in `.data/postgresql`. Keep the terminal open; Ctrl+C stops the service and retains its data. This development command requires the `embedded-postgres` dev dependency. Choose either this command or Docker for a given port.
+
+Open http://localhost:3000. Create an account through the sign-in dialog. No Privy keys, browser wallet, email provider, or blockchain connection is required.
 
 ## Administrator workspace
 
-Run `npm run admin:create` (`npm.cmd run admin:create` in PowerShell) and choose a new administrator username and a password of at least 12 characters. Password input is hidden. Then open `/admin/login`. Non-interactive setup accepts `LOOP_ADMIN_USERNAME` and `LOOP_ADMIN_PASSWORD`; it uses the same `LOOP_DATABASE_PATH` as the server. There are no default credentials or public admin registration. Existing accounts are never overwritten.
+Run `npm run admin:create` (`npm.cmd run admin:create` in PowerShell) and choose a new administrator username and a password of at least 12 characters. Password input is hidden. Then open `/admin/login`. Non-interactive setup accepts `LOOP_ADMIN_USERNAME` and `LOOP_ADMIN_PASSWORD`; it uses the same PostgreSQL `DATABASE_URL` as the server and applies pending migrations. There are no default credentials or public admin registration. Existing accounts are never overwritten.
 
-The protected `/admin/dashboard`, `/admin/users`, `/admin/payments`, and `/admin/settings` pages use live SQLite data, with English/Thai, light/dark mode, responsive navigation, custom dropdowns, and reduced-motion support. The dashboard shows account growth, funding totals, wallet balances, recent payments, and an admin activity log. Users can be searched, filtered, paginated, inspected, suspended, and reactivated. Suspension revokes sessions and blocks sign-in and transfers to the suspended recipient; administrator accounts are protected from suspension.
+The protected `/admin/dashboard`, `/admin/users`, `/admin/payments`, and `/admin/settings` pages use live PostgreSQL data, with English/Thai, light/dark mode, responsive navigation, custom dropdowns, and reduced-motion support. The dashboard shows account growth, funding totals, wallet balances, recent payments, and an admin activity log. Users can be searched, filtered, paginated, inspected, suspended, and reactivated. Suspension revokes sessions and blocks sign-in and transfers to the suspended recipient; administrator accounts are protected from suspension.
 
 Payments lists wallet funding requests. After independently verifying receipt, an administrator can approve a request using a unique settlement reference; the wallet credit, completion record, review, and audit entry commit atomically. Repeated identical approvals never credit twice. Rejection requires a reason, adds no funds, and appears as rejected in the member wallet. This records operator-confirmed settlement; it does not verify blockchain transactions automatically or implement withdrawals.
 
@@ -40,8 +46,8 @@ Member overview totals come from `/api/dashboard`, including completed ledger co
 - Usernames are case-insensitive, 3–24 characters, beginning with a letter. Passwords are 12–128 characters, salted and hashed with scrypt on the server.
 - Sessions use random tokens in HttpOnly, SameSite=Strict cookies with a seven-day expiry. Only token hashes are stored. HTTPS requests receive Secure cookies. Mutating requests require a matching Origin; authentication and wallet writes are rate limited.
 - Each registration atomically creates a user and zero-balance wallet. Personal referral codes are generated only after a one-time 10 USDT activation from the available wallet balance. Only activated codes from active accounts can establish a sponsor, at registration or later on the referral page. Account, referral, and wallet APIs resolve ownership from the session.
-- SQLite persists accounts, hashed credentials, sessions, wallet balances, and transaction records in `.data/loop.sqlite`. This directory is ignored by Git. Set `LOOP_DATABASE_PATH` to use another persistent path. Use the Node server build with durable local storage; static generation and ephemeral filesystem deployments do not support these accounts.
-- Money is stored as integer millionths of USDT. Internal transfers verify the sender's password and atomically debit/credit the two wallets with matching ledger entries. Request keys prevent duplicate transfers; insufficient balances and self-transfers are rejected.
+- PostgreSQL persists accounts, hashed credentials, sessions, wallet balances, and transaction records. Set `DATABASE_URL`; there is no SQLite fallback. Use the Node server build with a reachable PostgreSQL database; static generation cannot serve the account APIs.
+- Money is stored as BIGINT integer millionths of USDT with nonnegative, safe-integer balance constraints. Internal transfers verify the sender's password and atomically debit/credit the two wallets with matching ledger entries. Wallet row locks use consistent ordering to protect concurrent transfers. Request keys prevent duplicate transfers; insufficient balances and self-transfers are rejected. Referral activation locks the wallet before checking eligibility; payment review locks both request and wallet before settlement.
 - Funding requests create pending records and never increase the available balance. Only an authenticated administrator can credit a request after confirming receipt and recording a unique settlement reference. Automatic blockchain verification, withdrawals, custody, and reconciliation still require integration. Do not send funds to an internal wallet ID; it is not a blockchain address.
 - Password recovery, password changes, and multi-factor authentication are not implemented.
 
@@ -67,18 +73,26 @@ Transaction search covers ledger IDs, descriptions, owner usernames, and settlem
 
 ## Database migrations
 
-Versioned SQL files live in `database/migrations/`: accounts/wallets, administration, referral activation, and API query indexes. The server loads these as private Nitro server assets and applies pending migrations before serving requests. Production deployments only need `.output` plus persistent database storage; migration SQL is included in the server build.
+Versioned PostgreSQL SQL files live in `database/migrations/`: accounts/wallets, administration, referral activation, and API query indexes. The server loads these as private Nitro server assets and applies pending migrations before serving requests. Production deployments need `.output` and `DATABASE_URL` pointing to an existing PostgreSQL database; migration SQL is included in the server build.
 
 ```sh
 npm run db:status
 npm run db:migrate
 ```
 
-Both commands use `LOOP_DATABASE_PATH` from the environment or `.env`, matching the application and administrator setup. Status is read-only and does not create a missing database. Migrate records filenames, SHA-256 checksums, and timestamps in `schema_migrations`. Pending migrations and their history entries commit as one transaction; failures roll back the entire pending batch. Concurrent runners serialize through SQLite's write lock.
+Both commands use `DATABASE_URL` from the environment or `.env`, matching the application and administrator setup. Status only reads migration history; neither command creates the PostgreSQL database itself. Migrate records filenames, SHA-256 checksums, and timestamps in `schema_migrations`. Pending migrations and their history entries commit as one transaction on a single pooled connection; failures roll back the entire pending batch. Concurrent runners serialize through a PostgreSQL advisory transaction lock.
 
-Existing installations without migration history are adopted by the idempotent baseline files. Accounts, password hashes, sessions, sponsor relationships, balances, ledger entries, admin access, reviews, settings, and referral activations are preserved. Existing settings are never replaced by defaults. Migration checksums normalize Windows line endings; changing an applied migration or removing history files stops startup with an explicit error. Append a new numbered SQL file for future changes. Migration files contain schema/data SQL without their own transaction statements. Migrations are forward-only; there is no destructive reset or automatic rollback command.
+PostgreSQL has its own migration history. Existing SQLite files and their migration history are not used by the running application. Migration checksums normalize Windows line endings; changing an applied PostgreSQL migration or removing history files stops startup with an explicit error. Append a new numbered SQL file for future changes. Migration files contain schema/data SQL without their own transaction statements. Migrations are forward-only; there is no destructive reset or automatic rollback command.
 
-`npm run test:db` covers fresh schema creation, legacy adoption, constraints, idempotency, failed-batch rollback, checksum/history validation, and simultaneous migration processes using isolated databases.
+To move existing SQLite data, stop the old application so it cannot accept more writes, retain a backup, configure an empty PostgreSQL destination, and run this **before creating accounts or administrators in PostgreSQL**:
+
+```sh
+npm run db:import:sqlite -- --source .data/loop.sqlite
+```
+
+The importer reads SQLite in a snapshot without modifying it. It copies accounts, original password hashes, sessions, sponsor relationships, balances, ledger records, access roles, payment reviews, audit history, settings, referral activations, and throttles in one PostgreSQL transaction. It preserves ledger insertion order and reconnects sponsor relationships after inserting accounts. PostgreSQL must contain no business records and only default settings; import refuses an occupied destination. Constraint violations roll back all copied data. SQLite migration history is deliberately excluded. Change the source path if the old installation used a custom SQLite file. `LOOP_DATABASE_PATH` is no longer used.
+
+`npm run test:db` covers fresh schema creation, safe money constraints, case-insensitive uniqueness, idempotency, rollback, checksum/history validation, concurrent migration processes, competing debits, and SQLite import preservation using an isolated PostgreSQL server.
 
 ## Validation
 
@@ -89,4 +103,6 @@ npm run build
 npm run test:ui
 ```
 
-Build first, then run Playwright. It starts the production server on port 3100 with a separate `.data/playwright.sqlite` database. It uses installed Microsoft Edge for desktop and mobile emulation. Coverage includes account registration/login/logout, persistent sessions, referral ownership, funding-request idempotency, internal transfer conservation/concurrency, unauthorized requests, responsive matrix/rank/wallet interactions, and persisted English/Thai switching alongside theme preferences. Admin checks exercise local account setup, access control, concurrent approval idempotency, unique settlement references, rejection, suspension/session revocation, operational settings, and all management pages on desktop/mobile. Member-only wallet fixtures insert settled credits directly into the isolated test database; admin settlement tests use protected review APIs. Test setup resets operational controls and throttles only in that isolated database.
+Build first, then run Playwright. Both test commands start a disposable PostgreSQL server on a random localhost port, without reading the application's `DATABASE_URL`, and remove their own test files after shutdown. The development dependency `embedded-postgres` supplies real PostgreSQL binaries; its package installation scripts must be enabled. To use an existing test server instead, explicitly set `TEST_DATABASE_URL` to a disposable database whose name ends in `_test`. Test setup resets operational controls and throttles only in that test database.
+
+Playwright starts the production application on port 3100 and uses installed Microsoft Edge for desktop and mobile emulation. Coverage includes account registration/login/logout, persistent sessions, referral ownership, funding-request idempotency, internal transfer conservation/concurrency, unauthorized requests, responsive matrix/rank/wallet interactions, and persisted English/Thai switching alongside theme preferences. Admin checks exercise local account setup, access control, concurrent approval idempotency, unique settlement references, rejection, suspension/session revocation, operational settings, and all management pages on desktop/mobile. Member-only wallet fixtures insert settled credits directly into the isolated PostgreSQL database; admin settlement tests use protected review APIs.

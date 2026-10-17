@@ -7,11 +7,13 @@ CREATE TABLE IF NOT EXISTS user_access (
 CREATE TABLE IF NOT EXISTS payment_reviews (
   transaction_id TEXT PRIMARY KEY REFERENCES wallet_transactions(id),
   decision TEXT NOT NULL CHECK (decision IN ('approved', 'rejected')),
-  reference TEXT UNIQUE COLLATE NOCASE,
+  reference TEXT,
   note TEXT NOT NULL,
   admin_id TEXT NOT NULL REFERENCES users(id),
   created_at TEXT NOT NULL
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS payment_reviews_reference_unique ON payment_reviews(lower(reference));
 
 CREATE TABLE IF NOT EXISTS platform_settings (
   id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -20,7 +22,7 @@ CREATE TABLE IF NOT EXISTS platform_settings (
   support_email TEXT NOT NULL DEFAULT ''
 );
 
-INSERT OR IGNORE INTO platform_settings (id) VALUES (1);
+INSERT INTO platform_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS admin_audit (
   id TEXT PRIMARY KEY,
