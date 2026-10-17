@@ -12,6 +12,8 @@ node_modules
 # Logs
 logs
 *.log
+test-results*
+playwright-report
 
 # Misc
 .DS_Store

@@ -1,0 +1,93 @@
+import { expect, test, type APIRequestContext } from "@playwright/test";
+import { DatabaseSync } from "node:sqlite";
+import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
+
+const origin = "http://127.0.0.1:3100";
+const password = "A long integration password 42!";
+const post = (api: APIRequestContext, path: string, data: object) => api.post(path, { headers: { Origin: origin }, data });
+
+test("account ownership, sessions, CSRF, funding idempotency, and atomic transfers", async ({ playwright }) => {
+  const owner = await playwright.request.newContext({ baseURL: origin });
+  const friend = await playwright.request.newContext({ baseURL: origin });
+  const stranger = await playwright.request.newContext({ baseURL: origin });
+  const suffix = Date.now().toString(36);
+  const ownerName = `owner_${suffix}`;
+  const friendName = `friend_${suffix}`;
+  try {
+    expect((await stranger.get("/api/wallet")).status()).toBe(401);
+    const crossOrigin = await owner.post("/api/auth/register", { headers: { Origin: "https://unrelated.example" }, data: { username: ownerName, password } });
+    expect(crossOrigin.status()).toBe(403);
+    const registration = await post(owner, "/api/auth/register", { username: ownerName, password });
+    expect(registration.status()).toBe(201);
+    const account = (await registration.json()).user;
+    expect(JSON.stringify(account)).not.toContain("password");
+    const cookie = registration.headers()["set-cookie"]!;
+    expect(cookie).toContain("HttpOnly");
+    expect(cookie).toContain("SameSite=Strict");
+    expect((await post(friend, "/api/auth/register", { username: ownerName.toUpperCase(), password })).status()).toBe(409);
+    const friendRegistration = await post(friend, "/api/auth/register", { username: friendName, password, sponsorCode: account.referralCode });
+    expect(friendRegistration.status()).toBe(201);
+    const friendAccount = (await friendRegistration.json()).user;
+    const ownerWallet = await (await owner.get("/api/wallet")).json();
+    const friendWallet = await (await friend.get("/api/wallet")).json();
+    expect(ownerWallet.available).toBe(0);
+    expect(ownerWallet.transactions).toEqual([]);
+    expect(friendWallet.id).not.toBe(ownerWallet.id);
+    expect((await (await owner.get("/api/referrals")).json()).members[0].username).toBe(friendName);
+    expect((await (await friend.get("/api/referrals")).json()).members).toEqual([]);
+    const grandchildName = `child_${suffix}`;
+    expect((await post(stranger, "/api/auth/register", { username: grandchildName, password, sponsorCode: friendAccount.referralCode })).status()).toBe(201);
+    const ownerNetwork = await (await owner.get("/api/referrals")).json();
+    expect(ownerNetwork.members).toHaveLength(1);
+    expect(ownerNetwork.network).toHaveLength(2);
+    expect(ownerNetwork.network.find((member: { username: string }) => member.username === friendName)).toMatchObject({ parentId: account.id, depth: 1 });
+    expect(ownerNetwork.network.find((member: { username: string }) => member.username === grandchildName)).toMatchObject({ parentId: friendAccount.id, depth: 2 });
+    expect((await (await friend.get("/api/referrals")).json()).network).toHaveLength(1);
+    expect((await (await stranger.get("/api/referrals")).json()).network).toEqual([]);
+
+    const fundingKey = randomUUID();
+    const funding = { amount: "100.123456", requestKey: fundingKey, userId: friendWallet.id };
+    const firstFunding = await post(owner, "/api/wallet/deposit", funding);
+    expect(firstFunding.status()).toBe(200);
+    expect((await firstFunding.json()).available).toBe(0);
+    const repeated = await post(owner, "/api/wallet/deposit", funding);
+    expect((await repeated.json()).transactions).toHaveLength(1);
+    expect((await post(owner, "/api/wallet/deposit", { amount: "101", requestKey: fundingKey })).status()).toBe(409);
+    expect((await post(owner, "/api/wallet/deposit", { amount: "-10", requestKey: randomUUID() })).status()).toBe(400);
+    expect((await (await friend.get("/api/wallet")).json()).transactions).toEqual([]);
+    const insufficient = await post(owner, "/api/wallet/transfer", { amount: "1", recipient: friendName, password, requestKey: randomUUID() });
+    expect(insufficient.status()).toBe(400);
+
+    // Credit the isolated test database directly. Production has no mint endpoint.
+    const database = new DatabaseSync(resolve(".data/playwright.sqlite"));
+    database.exec("PRAGMA busy_timeout = 5000");
+    database.prepare("UPDATE wallets SET available = ? WHERE id = ?").run(100_000_000, ownerWallet.id);
+    database.prepare("INSERT INTO wallet_transactions VALUES (?, ?, 'deposit', ?, 'completed', 'Test-only settled funding', ?, ?)").run(randomUUID(), ownerWallet.id, 100_000_000, randomUUID(), new Date().toISOString());
+    const stored = database.prepare("SELECT password_hash FROM users WHERE username = ?").get(ownerName) as { password_hash: string };
+    expect(stored.password_hash).not.toContain(password);
+    database.close();
+    const transferKey = randomUUID();
+    const transferData = { amount: "25.123456", recipient: friendName, password, requestKey: transferKey };
+    expect((await post(owner, "/api/wallet/transfer", { ...transferData, password: "incorrect" })).status()).toBe(401);
+    expect((await post(owner, "/api/wallet/transfer", transferData)).status()).toBe(200);
+    expect((await post(owner, "/api/wallet/transfer", transferData)).status()).toBe(200);
+    const afterOwner = await (await owner.get("/api/wallet")).json();
+    const afterFriend = await (await friend.get("/api/wallet")).json();
+    expect(afterOwner.available).toBe(74.876544);
+    expect(afterFriend.available).toBe(25.123456);
+    expect(afterOwner.transactions.filter((item: { type: string }) => item.type === "transfer_out")).toHaveLength(1);
+    expect((await post(owner, "/api/wallet/transfer", { ...transferData, amount: "26" })).status()).toBe(409);
+    const competing = await Promise.all([1, 2].map(() => post(owner, "/api/wallet/transfer", { amount: "60", recipient: friendName, password, requestKey: randomUUID() })));
+    expect(competing.map((response) => response.status()).sort()).toEqual([200, 400]);
+    const finalOwner = await (await owner.get("/api/wallet")).json();
+    const finalFriend = await (await friend.get("/api/wallet")).json();
+    expect(Math.round((finalOwner.available + finalFriend.available) * 1_000_000)).toBe(100_000_000);
+    expect(finalOwner.available).toBeGreaterThanOrEqual(0);
+    const stolenToken = (await owner.storageState()).cookies;
+    await post(owner, "/api/auth/logout", {});
+    const stale = await playwright.request.newContext({ baseURL: origin, storageState: { cookies: stolenToken, origins: [] } });
+    expect((await stale.get("/api/wallet")).status()).toBe(401);
+    await stale.dispose();
+  } finally { await owner.dispose(); await friend.dispose(); await stranger.dispose(); }
+});
