@@ -7,6 +7,7 @@ import type { WalletTransaction } from "../../shared/types";
 const props = withDefaults(defineProps<{ preview?: boolean; compact?: boolean }>(), { preview: false, compact: false });
 const { authOpen, notify, copy } = useAppUI();
 const { wallet, walletError, refreshWallet, requestDeposit, transfer } = useWallet();
+const { summary, dashboardError, refreshDashboard } = useDashboard();
 const action = ref<"deposit" | "transfer" | null>(null);
 const amount = ref("");
 const recipient = ref("");
@@ -23,7 +24,8 @@ const sampleTransactions: WalletTransaction[] = [
 ];
 const transactions = computed(() => (props.preview ? sampleTransactions : wallet.value?.transactions || []).filter((item) => filter.value === "all" || item.status === filter.value));
 const available = computed(() => props.preview ? 152.8 : wallet.value?.available || 0);
-const pendingFunding = computed(() => props.preview ? 0 : (wallet.value?.transactions || []).filter((item) => item.type === "deposit" && item.status === "pending").reduce((sum, item) => sum + item.amount, 0));
+const pendingFunding = computed(() => props.preview ? 0 : summary.value?.pendingFunding ?? (wallet.value?.transactions || []).filter((item) => item.type === "deposit" && item.status === "pending").reduce((sum, item) => sum + item.amount, 0));
+async function refreshActivity() { await Promise.all([refreshWallet(), refreshDashboard()]); }
 const money = (value: number) => value.toLocaleString(localeTag.value, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 function openAction(value: "deposit" | "transfer") {
   if (props.preview) { authOpen.value = true; return; }
@@ -75,13 +77,14 @@ function closeAction() { action.value = null; password.value = ""; }
       <div class="wallet-actions"><button @click="openAction('deposit')"><AppIcon name="Plus" :size="17" />{{ t('ui.request_funds') }}</button><button @click="openAction('transfer')"><AppIcon name="Send" :size="16" />{{ t('ui.transfer') }}</button></div>
     </div>
     <p v-if="walletError && !preview" class="form-error" role="alert">{{ tr(walletError) }}</p>
+    <p v-if="dashboardError && !preview" class="form-error" role="alert">{{ tr(dashboardError) }}</p>
     <div v-if="!compact" class="wallet-details-row">
       <article class="panel wallet-detail"><span>{{ t('ui.pending_funding_requests') }}</span><strong>{{ money(pendingFunding) }} <small>USDT</small></strong><p>{{ t('ui.awaiting_verification_and_settlement') }}</p></article>
       <article class="panel wallet-detail"><span>{{ t('ui.total_commissions_credited') }}</span><strong>{{ formatUsdt(preview ? 152.8 : wallet?.earned || 0) }} <small>USDT</small></strong><p>{{ t('ui.completed_credits_to_your_wallet') }}</p></article>
     </div>
     <div class="panel wallet-history">
       <div class="section-card-header"><div><h2>{{ compact ? t('ui.latest_activity') : t('ui.transaction_history') }}</h2><p>{{ preview ? t('ui.an_example_of_your_wallet_activity') : t('ui.every_movement_all_in_one_place') }}</p></div><NuxtLink v-if="compact" to="/dashboard?view=wallet" class="inline-link">{{ t('ui.view_all') }}<AppIcon name="ArrowUpRight" :size="14" /></NuxtLink><button v-else class="button button-outline button-small" @click="exportCsv"><AppIcon name="Download" :size="15" />{{ t('ui.export') }}</button></div>
-      <div v-if="!compact" class="wallet-history-tools"><AppDropdown v-model="filter" :label="t('ui.filter_transactions')" :options="[{ value: 'all', label: t('ui.all_transactions') }, { value: 'completed', label: t('ui.completed') }, { value: 'pending', label: t('ui.pending') }, { value: 'rejected', label: t('ui.rejected') }]" /><button class="text-action" :disabled="preview" @click="refreshWallet"><AppIcon name="RefreshCw" :size="14" />{{ t('ui.refresh_balance') }}</button></div>
+      <div v-if="!compact" class="wallet-history-tools"><AppDropdown v-model="filter" :label="t('ui.filter_transactions')" :options="[{ value: 'all', label: t('ui.all_transactions') }, { value: 'completed', label: t('ui.completed') }, { value: 'pending', label: t('ui.pending') }, { value: 'rejected', label: t('ui.rejected') }]" /><button class="text-action" :disabled="preview" @click="refreshActivity"><AppIcon name="RefreshCw" :size="14" />{{ t('ui.refresh_balance') }}</button></div>
       <div v-if="!transactions.length" class="wallet-empty"><span class="empty-icon"><AppIcon name="Wallet" :size="26" /></span><h3>{{ filter === 'all' ? t('ui.a_fresh_start_for_your_wallet') : t('ui.no_matching_transactions') }}</h3><p>{{ filter === 'all' ? t('ui.settled_funds_transfers_and_commissions_will_appear_here') : t('ui.choose_another_filter_to_see_more_activity') }}</p></div>
       <div v-for="(item, index) in compact ? transactions.slice(0, 3) : transactions" :key="item.id" class="wallet-transaction" :style="{ '--row-index': Math.min(index, 5) }">
         <span class="transaction-icon" :class="{ outgoing: outgoing(item), pending: item.status === 'pending', rejected: item.status === 'rejected' }"><AppIcon :name="item.status === 'rejected' ? 'X' : item.status === 'pending' ? 'LoaderCircle' : outgoing(item) ? 'ArrowUpRight' : 'ArrowDownLeft'" :size="18" /></span>

@@ -441,5 +441,6 @@ export const messageKeys: Record<string, string> = {
   "You cannot use your own referral code.": "referral.ownCode",
   "Your account is already linked to a sponsor.": "referral.alreadyLinked",
   "This referral would create a circular network. Choose another sponsor.": "referral.circular",
-  "Referral activation": "referral.transactionDescription"
+  "Referral activation": "referral.transactionDescription",
+  "Your account activity could not be loaded. Please refresh to try again.": "dashboard.loadFailed"
 };

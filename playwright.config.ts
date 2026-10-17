@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 export default defineConfig({
   testDir: "./tests",
+  testMatch: "**/*.spec.ts",
   fullyParallel: false,
   workers: 1,
   globalSetup: "./tests/setup.ts",

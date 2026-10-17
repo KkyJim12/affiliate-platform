@@ -5,6 +5,7 @@ export function useWallet() {
   const wallet = useState<WalletSummary | null>("internal-wallet", () => null);
   const walletError = useState("wallet-error", () => "");
   const request = useRequestFetch();
+  const { refreshDashboard } = useDashboard();
 
   async function refreshWallet() {
     const accountId = user.value?.id;
@@ -21,10 +22,12 @@ export function useWallet() {
 
   async function requestDeposit(amount: string, requestKey: string) {
     wallet.value = await $fetch<WalletSummary>("/api/wallet/deposit", { method: "POST", body: { amount, requestKey } });
+    await refreshDashboard();
   }
 
   async function transfer(amount: string, recipient: string, password: string, requestKey: string) {
     wallet.value = await $fetch<WalletSummary>("/api/wallet/transfer", { method: "POST", body: { amount, recipient, password, requestKey } });
+    await refreshDashboard();
   }
 
   return { wallet, walletError, refreshWallet, requestDeposit, transfer };

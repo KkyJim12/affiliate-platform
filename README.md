@@ -35,6 +35,8 @@ Settings persist registration/funding availability and a support email shown in 
 
 ## Accounts and wallet
 
+Member overview totals come from `/api/dashboard`, including completed ledger commissions and real referral counts. The Refresh action reloads the overview, wallet, and referral network. Login/logout clears account-scoped cached values, while funding requests, transfers, and referral updates refresh the relevant totals. See [API endpoints and request formats](docs/api.md) for integration details.
+
 - Usernames are case-insensitive, 3–24 characters, beginning with a letter. Passwords are 12–128 characters, salted and hashed with scrypt on the server.
 - Sessions use random tokens in HttpOnly, SameSite=Strict cookies with a seven-day expiry. Only token hashes are stored. HTTPS requests receive Secure cookies. Mutating requests require a matching Origin; authentication and wallet writes are rate limited.
 - Each registration atomically creates a user and zero-balance wallet. Personal referral codes are generated only after a one-time 10 USDT activation from the available wallet balance. Only activated codes from active accounts can establish a sponsor, at registration or later on the referral page. Account, referral, and wallet APIs resolve ownership from the session.
@@ -63,10 +65,26 @@ The network explorer supports member inspection from clickable tree nodes, branc
 
 Transaction search covers ledger IDs, descriptions, owner usernames, and settlement references, with type/status/date filters, pagination, filtered credit/debit/pending totals, and a record detail dialog. Members receive only their own wallet records, including rejection notes and their settlement references. Admins can search all wallets. This is a read-only explorer of the existing in-app ledger; payment review remains in the admin Payments page.
 
+## Database migrations
+
+Versioned SQL files live in `database/migrations/`: accounts/wallets, administration, referral activation, and API query indexes. The server loads these as private Nitro server assets and applies pending migrations before serving requests. Production deployments only need `.output` plus persistent database storage; migration SQL is included in the server build.
+
+```sh
+npm run db:status
+npm run db:migrate
+```
+
+Both commands use `LOOP_DATABASE_PATH` from the environment or `.env`, matching the application and administrator setup. Status is read-only and does not create a missing database. Migrate records filenames, SHA-256 checksums, and timestamps in `schema_migrations`. Pending migrations and their history entries commit as one transaction; failures roll back the entire pending batch. Concurrent runners serialize through SQLite's write lock.
+
+Existing installations without migration history are adopted by the idempotent baseline files. Accounts, password hashes, sessions, sponsor relationships, balances, ledger entries, admin access, reviews, settings, and referral activations are preserved. Existing settings are never replaced by defaults. Migration checksums normalize Windows line endings; changing an applied migration or removing history files stops startup with an explicit error. Append a new numbered SQL file for future changes. Migration files contain schema/data SQL without their own transaction statements. Migrations are forward-only; there is no destructive reset or automatic rollback command.
+
+`npm run test:db` covers fresh schema creation, legacy adoption, constraints, idempotency, failed-batch rollback, checksum/history validation, and simultaneous migration processes using isolated databases.
+
 ## Validation
 
 ```sh
 npm run typecheck
+npm run test:db
 npm run build
 npm run test:ui
 ```

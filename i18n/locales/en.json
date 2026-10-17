@@ -701,5 +701,13 @@
     "alreadyLinked": "Your account is already linked to a sponsor.",
     "circular": "This referral would create a circular network. Choose another sponsor.",
     "transactionDescription": "Referral activation"
+  },
+  "dashboard": {
+    "accountActivity": "Your account activity",
+    "directReferrals": "Direct referrals",
+    "directHint": "Members connected to your sponsor code",
+    "networkMembers": "Network members",
+    "networkHint": "Across your first 15 referral levels",
+    "loadFailed": "Your account activity could not be loaded. Please refresh to try again."
   }
 }

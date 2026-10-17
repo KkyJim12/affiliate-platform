@@ -10,7 +10,10 @@
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "db:migrate": "node --env-file-if-exists=.env scripts/database.mjs migrate",
+    "db:status": "node --env-file-if-exists=.env scripts/database.mjs status",
+    "test:db": "node --test tests/migrations.test.mjs"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",

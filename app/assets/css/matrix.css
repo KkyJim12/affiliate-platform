@@ -433,3 +433,5 @@
   .account-form > label { font-size: 12px; }
   .wallet-action-modal h2 { font-size: 23px; }
 }
+.dashboard-activity-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 25px 0 13px; color: var(--text-secondary); font-size: 11px; }
+.dashboard-activity-bar > button { display: inline-flex; align-items: center; gap: 7px; }

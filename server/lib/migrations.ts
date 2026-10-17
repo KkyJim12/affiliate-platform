@@ -1,0 +1,62 @@
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { DatabaseSync } from "node:sqlite";
+
+export interface Migration { name: string; sql: string; checksum: string }
+interface AppliedMigration { name: string; checksum: string; applied_at: string }
+
+export function prepareMigrations(sources: { name: string; sql: string }[]): Migration[] {
+  if (!sources.length) throw new Error("No database migrations were found.");
+  const versions = new Set<string>();
+  return [...sources].sort((a, b) => a.name.localeCompare(b.name)).map(source => {
+    const version = /^(\d{4})_[a-z0-9_]+\.sql$/.exec(source.name)?.[1];
+    if (!version || versions.has(version)) throw new Error(`Invalid or duplicate migration version: ${source.name}`);
+    versions.add(version);
+    const sql = source.sql.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
+    if (!sql.trim()) throw new Error(`Migration is empty: ${source.name}`);
+    return { name: source.name, sql, checksum: createHash("sha256").update(sql).digest("hex") };
+  });
+}
+
+export function readMigrations(directory = fileURLToPath(new URL("../../database/migrations/", import.meta.url))) {
+  return prepareMigrations(readdirSync(directory, { withFileTypes: true })
+    .filter(entry => entry.isFile() && entry.name.endsWith(".sql"))
+    .map(entry => ({ name: entry.name, sql: readFileSync(join(directory, entry.name), "utf8") })));
+}
+
+export function migrationStatus(connection: DatabaseSync, migrations: readonly Migration[]) {
+  const exists = connection.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'").get();
+  const history = exists ? connection.prepare("SELECT name, checksum, applied_at FROM schema_migrations ORDER BY name").all() as unknown as AppliedMigration[] : [];
+  for (const [index, applied] of history.entries()) {
+    const expected = migrations[index];
+    if (!expected || applied.name !== expected.name) throw new Error(`Migration history does not match this build at ${applied.name}. Restore the original migration files.`);
+    if (applied.checksum !== expected.checksum) throw new Error(`Applied migration was changed: ${applied.name}. Add a new migration instead of editing an applied file.`);
+  }
+  return migrations.map((migration, index) => ({ name: migration.name, status: index < history.length ? "applied" as const : "pending" as const, appliedAt: history[index]?.applied_at || null }));
+}
+
+export function migrate(connection: DatabaseSync, migrations: readonly Migration[]) {
+  connection.exec("BEGIN IMMEDIATE");
+  try {
+    connection.exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
+      name TEXT PRIMARY KEY,
+      checksum TEXT NOT NULL,
+      applied_at TEXT NOT NULL
+    )`);
+    const pending = migrationStatus(connection, migrations).filter(item => item.status === "pending");
+    const insert = connection.prepare("INSERT INTO schema_migrations VALUES (?, ?, ?)");
+    for (const item of pending) {
+      const migration = migrations.find(candidate => candidate.name === item.name)!;
+      try { connection.exec(migration.sql); }
+      catch (cause) { throw new Error(`Database migration failed: ${migration.name}`, { cause }); }
+      insert.run(migration.name, migration.checksum, new Date().toISOString());
+    }
+    connection.exec("COMMIT");
+    return pending.map(item => item.name);
+  } catch (error) {
+    connection.exec("ROLLBACK");
+    throw error;
+  }
+}

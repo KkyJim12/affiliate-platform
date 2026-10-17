@@ -73,8 +73,11 @@ test("explorer APIs enforce network boundaries and wallet ownership with accurat
       expect((await guest.get(`/api/explorer/${part}`)).status()).toBe(401);
       expect((await guest.get(`/api/admin/explorer/${part}`)).status()).toBe(401);
     }
+    expect((await guest.get("/api/dashboard")).status()).toBe(401);
     expect((await post(member, "/api/auth/login", { username: data.owner.username, password })).status()).toBe(200);
     expect((await post(admin, "/api/admin/login", { username: data.adminName, password })).status()).toBe(200);
+    const overview = await (await member.get(`/api/dashboard?userId=${data.outsider.id}`)).json();
+    expect(overview).toEqual({ commissions: 3.15, pendingFunding: 3.25, completedTransfers: 1, referrals: { direct: 1, total: 15, depth: 15, truncated: false } });
     for (const part of ["network", "transactions"]) expect((await member.get(`/api/admin/explorer/${part}`)).status()).toBe(403);
     const network = await (await member.get("/api/explorer/network")).json();
     expect(network.members).toHaveLength(15);
@@ -105,6 +108,22 @@ test("explorer APIs enforce network boundaries and wallet ownership with accurat
     expect((await member.get("/api/explorer/transactions?status=invalid")).status()).toBe(400);
     const global = await (await admin.get(`/api/admin/explorer/transactions?search=${data.outsiderId}`)).json();
     expect(global.items[0]).toMatchObject({ id: data.outsiderId, username: data.outsider.username, amount: 99 });
+    // Totals must include records older than the wallet's 200-item activity window.
+    const database = new DatabaseSync(resolve(".data/playwright.sqlite"));
+    try {
+      database.exec("PRAGMA busy_timeout = 5000");
+      const insert = database.prepare("INSERT INTO wallet_transactions VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+      insert.run(randomUUID(), data.owner.walletId, "deposit", 7_000_000, "pending", "Older pending request", randomUUID(), new Date(Date.now() - 365 * 86400000).toISOString());
+      const timestamp = new Date(Date.now() + 1000).toISOString();
+      for (let index = 0; index < 201; index++) insert.run(randomUUID(), data.owner.walletId, "commission", 10_000, "completed", "Recent commission", randomUUID(), timestamp);
+      database.prepare("UPDATE wallets SET available = available + 2010000 WHERE id = ?").run(data.owner.walletId);
+    } finally { database.close(); }
+    const recent = await (await member.get("/api/wallet")).json();
+    expect(recent.transactions).toHaveLength(200);
+    expect(recent.transactions.every((item: { type: string }) => item.type === "commission")).toBe(true);
+    const complete = await (await member.get("/api/dashboard")).json();
+    expect(complete.commissions).toBe(5.16);
+    expect(complete.pendingFunding).toBe(10.25);
   } finally { await Promise.all([member.dispose(), admin.dispose(), guest.dispose()]); }
 });
 
@@ -115,6 +134,12 @@ test("member and admin explorers support branch navigation, transaction details,
   page.on("pageerror", error => errors.push(error.message));
   page.on("console", message => { if (message.type() === "warning" && /i18n|hydration/i.test(message.text())) errors.push(message.text()); });
   await post(page.request, "/api/auth/login", { username: data.owner.username, password });
+  await ready(page, "/dashboard");
+  await expect(page.getByTestId("overview-commissions")).toContainText("3.15");
+  await expect(page.getByTestId("overview-direct-referrals")).toHaveText("1");
+  await expect(page.getByTestId("overview-network-members")).toHaveText("15");
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Refresh", exact: true })).toBeEnabled();
   await ready(page, "/explorer");
   await expect(page.getByRole("tab", { name: "Network", exact: true })).toHaveAttribute("aria-selected", "true");
   const child = data.descendants[0]!;
