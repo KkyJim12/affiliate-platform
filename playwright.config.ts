@@ -30,7 +30,7 @@ export default defineConfig({
     },
     {
       name: "mobile",
-      testMatch: "**/interface.spec.ts",
+      testMatch: ["**/interface.spec.ts", "**/admin.spec.ts"],
       use: {
         ...devices["iPhone 13"],
         defaultBrowserType: "chromium",

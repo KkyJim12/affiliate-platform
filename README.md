@@ -23,6 +23,16 @@ npm run dev
 
 Open http://localhost:3000. Create an account through the sign-in dialog. No Privy keys, browser wallet, email provider, or blockchain connection is required. An optional `.env` can use the values in `.env.example`.
 
+## Administrator workspace
+
+Run `npm run admin:create` (`npm.cmd run admin:create` in PowerShell) and choose a new administrator username and a password of at least 12 characters. Password input is hidden. Then open `/admin/login`. Non-interactive setup accepts `LOOP_ADMIN_USERNAME` and `LOOP_ADMIN_PASSWORD`; it uses the same `LOOP_DATABASE_PATH` as the server. There are no default credentials or public admin registration. Existing accounts are never overwritten.
+
+The protected `/admin/dashboard`, `/admin/users`, `/admin/payments`, and `/admin/settings` pages use live SQLite data, with English/Thai, light/dark mode, responsive navigation, custom dropdowns, and reduced-motion support. The dashboard shows account growth, funding totals, wallet balances, recent payments, and an admin activity log. Users can be searched, filtered, paginated, inspected, suspended, and reactivated. Suspension revokes sessions and blocks sign-in and transfers to the suspended recipient; administrator accounts are protected from suspension.
+
+Payments lists wallet funding requests. After independently verifying receipt, an administrator can approve a request using a unique settlement reference; the wallet credit, completion record, review, and audit entry commit atomically. Repeated identical approvals never credit twice. Rejection requires a reason, adds no funds, and appears as rejected in the member wallet. This records operator-confirmed settlement; it does not verify blockchain transactions automatically or implement withdrawals.
+
+Settings persist registration/funding availability and a support email shown in the member workspace. The API enforces these switches. Admin routes and every management API require an active admin session; writes require a matching Origin and are rate limited. Access roles, reviews, settings, and the audit trail use additive tables, preserving existing accounts and ledger records.
+
 ## Accounts and wallet
 
 - Usernames are case-insensitive, 3–24 characters, beginning with a letter. Passwords are 12–128 characters, salted and hashed with scrypt on the server.
@@ -30,7 +40,7 @@ Open http://localhost:3000. Create an account through the sign-in dialog. No Pri
 - Each registration atomically creates a user, unique referral code, and zero-balance wallet. Valid invite codes establish a sponsor at registration. Account, referral, and wallet APIs resolve ownership from the session.
 - SQLite persists accounts, hashed credentials, sessions, wallet balances, and transaction records in `.data/loop.sqlite`. This directory is ignored by Git. Set `LOOP_DATABASE_PATH` to use another persistent path. Use the Node server build with durable local storage; static generation and ephemeral filesystem deployments do not support these accounts.
 - Money is stored as integer millionths of USDT. Internal transfers verify the sender's password and atomically debit/credit the two wallets with matching ledger entries. Request keys prevent duplicate transfers; insufficient balances and self-transfers are rejected.
-- Funding requests create pending records and never increase the available balance. There is no public endpoint to mint or credit funds. Actual USDT deposit verification, settlement, withdrawals, custody, reconciliation, and an operator settlement workflow still require integration. Do not send funds to an internal wallet ID; it is not a blockchain address.
+- Funding requests create pending records and never increase the available balance. Only an authenticated administrator can credit a request after confirming receipt and recording a unique settlement reference. Automatic blockchain verification, withdrawals, custody, and reconciliation still require integration. Do not send funds to an internal wallet ID; it is not a blockchain address.
 - Password recovery, password changes, and multi-factor authentication are not implemented.
 
 ## Compensation plan
@@ -51,4 +61,4 @@ npm run build
 npm run test:ui
 ```
 
-Build first, then run Playwright. It starts the production server on port 3100 with a separate `.data/playwright.sqlite` database. It uses installed Microsoft Edge for desktop and mobile emulation. Coverage includes account registration/login/logout, persistent sessions, referral ownership, funding-request idempotency, internal transfer conservation/concurrency, unauthorized requests, responsive matrix/rank/wallet interactions, and persisted English/Thai switching alongside theme preferences. Test-only settled credits are inserted directly into the isolated test database, never through a public API.
+Build first, then run Playwright. It starts the production server on port 3100 with a separate `.data/playwright.sqlite` database. It uses installed Microsoft Edge for desktop and mobile emulation. Coverage includes account registration/login/logout, persistent sessions, referral ownership, funding-request idempotency, internal transfer conservation/concurrency, unauthorized requests, responsive matrix/rank/wallet interactions, and persisted English/Thai switching alongside theme preferences. Admin checks exercise local account setup, access control, concurrent approval idempotency, unique settlement references, rejection, suspension/session revocation, operational settings, and all management pages on desktop/mobile. Member-only wallet fixtures insert settled credits directly into the isolated test database; admin settlement tests use protected review APIs. Test setup resets operational controls and throttles only in that isolated database.

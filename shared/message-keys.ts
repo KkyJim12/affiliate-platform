@@ -1,5 +1,18 @@
 // Source-message aliases for statuses, API errors, and activity records.
 export const messageKeys: Record<string, string> = {
+  "Administrator access is required.": "admin.errors.access",
+  "Administrator credentials are incorrect.": "admin.errors.credentials",
+  "Choose a valid account status.": "admin.errors.status",
+  "Administrator accounts cannot be suspended here.": "admin.errors.protected",
+  "Enter valid payment review details.": "admin.errors.review",
+  "Verify receipt of funds and enter a unique settlement reference.": "admin.errors.verify",
+  "Enter a reason for rejecting this request.": "admin.errors.reason",
+  "Payment request was not found.": "admin.errors.missing",
+  "This payment has already been reviewed.": "admin.errors.reviewed",
+  "This settlement reference has already been used.": "admin.errors.reference",
+  "Enter valid platform settings and a valid support email.": "admin.errors.settings",
+  "New registrations are temporarily paused.": "admin.errors.registration",
+  "Funding requests are temporarily paused.": "admin.errors.funding",
   "(optional)": "ui.optional",
   "+ {count} connections below": "ui.count_connections_below",
   "/ 14 filled": "ui.14_filled",

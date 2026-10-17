@@ -253,6 +253,10 @@ body { background: var(--canvas); color: var(--text-primary); }
 .wallet-transaction { border-color: var(--border); }
 .transaction-icon { background: var(--success-soft); color: var(--success); border-radius: 11px; }
 .transaction-icon.outgoing, .transaction-icon.pending { background: var(--gold-soft); color: var(--gold-text); }
+.transaction-icon.rejected { background: var(--danger-soft); color: var(--danger); }
+.transaction-amount.rejected { color: var(--danger); }
+.dashboard-footer:has(> a) { flex-wrap: wrap; }
+.dashboard-footer > a { color: var(--gold-text); }
 .transaction-info strong { color: var(--text-primary); font-size: 12px; }
 .transaction-info > span, .transaction-amount small { color: var(--text-secondary); font-size: 10px; }
 .transaction-amount { color: var(--success); font-size: 13px; }
@@ -270,8 +274,8 @@ body { background: var(--canvas); color: var(--text-primary); }
 .matrix-dashboard .dashboard-footer { color: var(--text-tertiary); font-size: 10px; }
 
 /* Sign-in, funding, and transfer dialogs. */
-.modal-backdrop { background: #05081099; backdrop-filter: blur(9px); }
-.modal-card { background: var(--surface); border-color: var(--border); border-radius: 21px; box-shadow: 0 24px 100px #00000040; }
+.modal-backdrop { width: 100dvw; height: 100dvh; right: auto; bottom: auto; background: #05081099; backdrop-filter: blur(9px); }
+.modal-card { min-width: 0; overscroll-behavior: contain; background: var(--surface); border-color: var(--border); border-radius: 21px; box-shadow: 0 24px 100px #00000040; }
 .account-auth h2, .wallet-action-modal h2 { color: var(--text-primary); font-weight: 700; }
 .account-auth > p, .wallet-action-modal > p, .account-auth .auth-security { color: var(--text-secondary); }
 .account-form > label { color: var(--text-primary); font-weight: 550; }

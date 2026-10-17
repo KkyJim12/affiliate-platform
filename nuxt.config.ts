@@ -9,6 +9,7 @@ export default defineNuxtConfig({
     "~/assets/css/main.css",
     "~/assets/css/matrix.css",
     "~/assets/css/theme.css",
+    "~/assets/css/admin.css",
     "~/assets/css/motion.css",
   ],
   colorMode: {

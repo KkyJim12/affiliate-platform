@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "typecheck": "nuxt typecheck",
+    "admin:create": "node --env-file-if-exists=.env scripts/create-admin.mjs",
     "test:ui": "playwright test",
     "build": "nuxt build",
     "dev": "nuxt dev",

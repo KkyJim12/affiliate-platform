@@ -4,13 +4,14 @@ export interface Account {
   referralCode: string;
   sponsorCode: string | null;
   createdAt: string;
+  role: "member" | "admin";
 }
 
 export interface WalletTransaction {
   id: string;
   type: "deposit" | "withdrawal" | "transfer_in" | "transfer_out" | "commission";
   amount: number;
-  status: "pending" | "completed";
+  status: "pending" | "completed" | "rejected";
   description: string;
   createdAt: string;
 }

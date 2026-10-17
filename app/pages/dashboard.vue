@@ -11,6 +11,7 @@ const { user, authenticated, sessionError, logout } = useAccount();
 const { wallet } = useWallet();
 const config = useRuntimeConfig();
 const colorMode = useColorMode();
+const { data: platform } = await useFetch<import("../../shared/admin").PlatformSettings>("/api/platform-settings");
 const sidebarOpen = ref(false);
 const selectedRank = ref(3);
 const search = ref("");
@@ -95,6 +96,7 @@ function exportReferrals() {
         <NuxtLink v-for="item in navigation" :key="item.view" :to="item.view === 'overview' ? '/dashboard' : `/dashboard?view=${item.view}`" :class="{ active: currentView === item.view }" :aria-current="currentView === item.view ? 'page' : undefined"><AppIcon :name="item.icon" :size="19" />{{ tr(item.label) }}<span v-if="item.view === 'referrals'" class="nav-count">{{ preview ? 8 : members.length }}</span></NuxtLink>
       </nav>
       <div class="sidebar-bottom">
+        <NuxtLink v-if="user?.role === 'admin'" to="/admin/dashboard" class="sidebar-help"><AppIcon name="ShieldCheck" :size="17" />{{ t('admin.controlCenter') }}<AppIcon name="ArrowUpRight" :size="14" /></NuxtLink>
         <div class="sidebar-invite"><span class="sidebar-spark">✳</span><strong>{{ t('ui.a_good_connection') }}<br />{{ t('ui.goes_a_long_way') }}</strong><p>{{ t('ui.your_people_your_growing_loop') }}</p><button @click="invite">{{ preview ? t('ui.create_your_account') : t('ui.invite_a_friend') }}<AppIcon name="ArrowUpRight" :size="16" /></button></div>
         <NuxtLink to="/#faq" class="sidebar-help"><AppIcon name="HelpCircle" :size="17" />{{ t('ui.need_a_little_help') }}<AppIcon name="ArrowUpRight" :size="14" /></NuxtLink>
         <div class="sidebar-network"><span class="green-dot"></span>{{ t('ui.in_app_usdt_wallet') }}<span>{{ t('ui.included') }}</span></div>
@@ -145,7 +147,7 @@ function exportReferrals() {
 
         <section v-if="currentView === 'settings'" class="panel account-settings"><div class="section-card-header"><div><h2>{{ t('ui.account_details') }}</h2><p>{{ t('ui.your_identity_and_wallet_connected') }}</p></div><AppIcon name="ShieldCheck" :size="24" /></div><div class="account-settings-row"><div><strong>{{ tr('Language') }}</strong><p>{{ tr('Preferred language') }}</p></div><LocaleSwitcher /></div><div class="account-settings-row"><div><strong>{{ t('ui.appearance') }}</strong><p>{{ t('ui.a_gold_workspace_in_your_preferred_light') }}</p></div><ClientOnly><AppDropdown v-model="colorMode.preference" class="theme-preference-dropdown" :label="t('ui.theme_preference')" :options="[{ value: 'light', label: t('ui.light_theme') }, { value: 'dark', label: t('ui.dark_theme') }]" /><template #fallback><span class="settings-tag">{{ t('ui.appearance') }}</span></template></ClientOnly></div><div class="account-settings-row"><div><strong>{{ t('ui.username') }}</strong><p>{{ user ? '@' + user.username : t('ui.sign_in_to_manage_your_account') }}</p></div><span class="settings-tag">{{ t('ui.username_password') }}</span></div><div class="account-settings-row"><div><strong>{{ t('ui.in_app_wallet') }}</strong><p>{{ wallet?.id || t('ui.automatically_created_with_your_account') }}</p></div><NuxtLink class="button button-outline button-small" to="/dashboard?view=wallet">{{ t('ui.open_wallet') }}<AppIcon name="ArrowUpRight" :size="15" /></NuxtLink></div><div class="account-settings-row"><div><strong>{{ t('ui.personal_invite_code') }}</strong><p>{{ user?.referralCode || t('ui.your_unique_code_is_included_at_registration') }}</p></div><button class="text-action" @click="invite"><AppIcon name="Copy" :size="15" />{{ user ? t('ui.copy_invite') : t('ui.get_started') }}</button></div><div class="account-settings-row"><div><strong>{{ t('ui.invited_by') }}</strong><p>{{ user?.sponsorCode || t('ui.no_sponsor_code_applied') }}</p></div><AppIcon name="Users" :size="20" /></div><div class="account-settings-row"><div><strong>{{ t('ui.session_security') }}</strong><p>{{ user ? t('ui.your_session_stays_signed_in_for_up_to_7_days') : t('ui.sign_in_with_your_username_and_password') }}</p></div><button class="button button-outline button-small" @click="user ? signOut() : (authOpen = true)"><AppIcon :name="user ? 'LogOut' : 'LockKeyhole'" :size="16" />{{ user ? t('ui.sign_out') : t('ui.sign_in') }}</button></div></section>
 
-        <footer class="dashboard-footer"><span><BrandLogo />{{ t('ui.good_connections_come_full_circle') }}</span><span>{{ preview ? t('ui.illustrative_plan_preview_sample_figures') : t('ui.loop_account_in_app_usdt_ledger') }}<span class="green-dot"></span></span></footer>
+        <footer class="dashboard-footer"><a v-if="platform?.supportEmail" :href="'mailto:' + platform.supportEmail">{{ t('admin.supportEmail') }}</a><span><BrandLogo />{{ t('ui.good_connections_come_full_circle') }}</span><span>{{ preview ? t('ui.illustrative_plan_preview_sample_figures') : t('ui.loop_account_in_app_usdt_ledger') }}<span class="green-dot"></span></span></footer>
       </main>
     </div>
   </div>

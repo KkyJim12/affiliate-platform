@@ -1,9 +1,11 @@
 import { accountFor, assertSameOrigin, createSession, hashPassword, randomUUID, rateLimit, type UserRow } from "../../utils/auth";
 import { db, transaction } from "../../utils/database";
+import { platformSettings } from "../../utils/admin";
 
 export default defineEventHandler(async (event) => {
   assertSameOrigin(event);
   rateLimit(event, "register", 10);
+  if (!platformSettings().registrationOpen) throw createError({ statusCode: 403, statusMessage: "New registrations are temporarily paused." });
   const body = await readBody(event);
   const username = typeof body?.username === "string" ? body.username.trim().toLowerCase() : "";
   const password = typeof body?.password === "string" ? body.password : "";

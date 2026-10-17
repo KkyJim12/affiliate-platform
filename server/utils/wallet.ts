@@ -24,10 +24,10 @@ export function parseRequestKey(value: unknown) {
 
 export function walletFor(userId: string): WalletSummary {
   const wallet = walletRow(userId);
-  const rows = db().prepare("SELECT * FROM wallet_transactions WHERE wallet_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 200").all(wallet.id) as { id: string; type: WalletTransaction["type"]; amount: number; status: WalletTransaction["status"]; description: string; created_at: string }[];
+  const rows = db().prepare(`SELECT t.*, CASE WHEN r.decision = 'rejected' THEN 'rejected' ELSE t.status END AS display_status FROM wallet_transactions t LEFT JOIN payment_reviews r ON r.transaction_id = t.id WHERE t.wallet_id = ? ORDER BY t.created_at DESC, t.rowid DESC LIMIT 200`).all(wallet.id) as { id: string; type: WalletTransaction["type"]; amount: number; display_status: WalletTransaction["status"]; description: string; created_at: string }[];
   const earned = db().prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM wallet_transactions WHERE wallet_id = ? AND type = 'commission' AND status = 'completed'").get(wallet.id) as { total: number };
   return {
     id: wallet.id, currency: "USDT", available: wallet.available / moneyScale, reserved: wallet.reserved / moneyScale, earned: earned.total / moneyScale,
-    transactions: rows.map((row) => ({ id: row.id, type: row.type, amount: row.amount / moneyScale, status: row.status, description: row.description, createdAt: row.created_at })),
+    transactions: rows.map((row) => ({ id: row.id, type: row.type, amount: row.amount / moneyScale, status: row.display_status, description: row.description, createdAt: row.created_at })),
   };
 }

@@ -1,6 +1,6 @@
 <template>
   <NuxtRouteAnnouncer />
-  <NuxtPage />
+  <NuxtLayout><NuxtPage /></NuxtLayout>
   <AuthModal />
   <Transition name="toast">
     <div v-if="toast" class="app-toast" role="status">

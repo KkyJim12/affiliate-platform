@@ -1,4 +1,4 @@
-import { assertSameOrigin, randomUUID, rateLimit, requireUser, verifyPassword, type UserRow } from "../../utils/auth";
+import { assertSameOrigin, findUser, randomUUID, rateLimit, requireUser, verifyPassword } from "../../utils/auth";
 import { db, transaction } from "../../utils/database";
 import { parseAmount, parseRequestKey, walletFor, walletRow } from "../../utils/wallet";
 
@@ -12,8 +12,8 @@ export default defineEventHandler(async (event) => {
   const recipientName = typeof body?.recipient === "string" ? body.recipient.trim().toLowerCase() : "";
   const password = typeof body?.password === "string" ? body.password : "";
   if (password.length > 128 || !await verifyPassword(password, user.password_hash)) throw createError({ statusCode: 401, statusMessage: "Your password is incorrect." });
-  const recipient = db().prepare("SELECT * FROM users WHERE username = ?").get(recipientName) as UserRow | undefined;
-  if (!recipient) throw createError({ statusCode: 400, statusMessage: "That username was not found." });
+  const recipient = findUser(recipientName);
+  if (!recipient || recipient.status !== "active") throw createError({ statusCode: 400, statusMessage: "That username was not found." });
   if (recipient.id === user.id) throw createError({ statusCode: 400, statusMessage: "Choose another member to receive this transfer." });
   transaction(() => {
     const senderWallet = walletRow(user.id);

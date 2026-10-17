@@ -31,13 +31,13 @@ onMounted(() => {
   previousFocus = document.activeElement as HTMLElement;
   previousOverflow = document.body.style.overflow;
   document.body.style.overflow = "hidden";
-  dialog.value?.focus();
+  dialog.value?.focus({ preventScroll: true });
   document.addEventListener("keydown", onKeydown);
 });
 onBeforeUnmount(() => {
   document.body.style.overflow = previousOverflow;
   document.removeEventListener("keydown", onKeydown);
-  previousFocus?.focus();
+  previousFocus?.focus({ preventScroll: true });
 });
 </script>
 <template>

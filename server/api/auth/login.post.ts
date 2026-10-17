@@ -1,5 +1,4 @@
-import { accountFor, assertSameOrigin, createSession, rateLimit, verifyPassword, type UserRow } from "../../utils/auth";
-import { db } from "../../utils/database";
+import { accountFor, assertSameOrigin, createSession, findUser, rateLimit, verifyPassword } from "../../utils/auth";
 
 export default defineEventHandler(async (event) => {
   assertSameOrigin(event);
@@ -8,9 +7,9 @@ export default defineEventHandler(async (event) => {
   const username = typeof body?.username === "string" ? body.username.trim().toLowerCase() : "";
   const password = typeof body?.password === "string" ? body.password : "";
   if (username.length > 24 || password.length > 128 || !password) throw createError({ statusCode: 401, statusMessage: "Username or password is incorrect." });
-  const user = db().prepare("SELECT * FROM users WHERE username = ?").get(username) as UserRow | undefined;
+  const user = findUser(username);
   const valid = await verifyPassword(password, user?.password_hash);
-  if (!user || !valid) throw createError({ statusCode: 401, statusMessage: "Username or password is incorrect." });
+  if (!user || !valid || user.status === "suspended") throw createError({ statusCode: 401, statusMessage: "Username or password is incorrect." });
   createSession(event, user.id);
   return { user: accountFor(user) };
 });

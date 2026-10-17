@@ -7,6 +7,7 @@ const revealTargets = [
   ".wallet-detail", ".wallet-history", ".distribution-panel", ".invite-share-panel", ".member-panel",
   ".rank-intro", ".rank-card", ".rank-detail-grid > .panel", ".unilevel-table",
   ".account-settings", ".dashboard-footer",
+  ".admin-page-heading", ".admin-stat", ".admin-panel", ".admin-info-strip",
 ].join(",");
 
 // Enhance visible content after hydration; server-rendered pages never start hidden.
