@@ -42,10 +42,11 @@ export function rateLimit(event: H3Event, scope: string, limit = 12) {
 }
 
 export function accountFor(user: UserRow): Account {
+  const activation = db().prepare("SELECT user_id FROM referral_activations WHERE user_id = ?").get(user.id);
   const sponsor = user.sponsor_id
     ? db().prepare("SELECT referral_code FROM users WHERE id = ?").get(user.sponsor_id) as { referral_code: string } | undefined
     : undefined;
-  return { id: user.id, username: user.username, referralCode: user.referral_code, sponsorCode: sponsor?.referral_code || null, createdAt: user.created_at, role: user.role || "member" };
+  return { id: user.id, username: user.username, referralCode: activation ? user.referral_code : null, sponsorCode: sponsor?.referral_code || null, createdAt: user.created_at, role: user.role || "member" };
 }
 
 export function currentUser(event: H3Event): UserRow | undefined {

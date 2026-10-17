@@ -28,6 +28,7 @@ async function submit() {
   }
   loading.value = true;
   try {
+    const incomingReferral = sessionStorage.getItem("loop-incoming-referral");
     if (mode.value === "register") {
       await register(username.value, password.value, sponsorCode.value);
       sessionStorage.removeItem("loop-incoming-referral");
@@ -36,7 +37,7 @@ async function submit() {
     confirmation.value = "";
     authOpen.value = false;
     notify(mode.value === "register" ? "Your account and in-app wallet are ready." : "Welcome back to your loop.");
-    await navigateTo("/dashboard");
+    await navigateTo(incomingReferral ? "/referrals" : "/dashboard");
   } catch (err) {
     const failure = err as { data?: { statusMessage?: string } };
     error.value = failure.data?.statusMessage || "We could not sign you in. Please try again.";

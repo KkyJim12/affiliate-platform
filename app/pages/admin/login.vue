@@ -9,7 +9,7 @@ const password = ref("");
 const showPassword = ref(false);
 const busy = ref(false);
 const error = ref("");
-const destination = computed(() => typeof route.query.redirect === "string" && /^\/admin\/(dashboard|users|payments|settings)(?:\?|$)/.test(route.query.redirect) ? route.query.redirect : "/admin/dashboard");
+const destination = computed(() => typeof route.query.redirect === "string" && /^\/admin\/(dashboard|users|explorer|payments|settings)(?:\?|$)/.test(route.query.redirect) ? route.query.redirect : "/admin/dashboard");
 if (user.value?.role === "admin") await navigateTo(destination.value, { replace: true });
 useHead({ title: computed(() => `${t('admin.login')} · UNXO`) });
 async function submit() {

@@ -10,6 +10,8 @@ export default defineNuxtConfig({
     "~/assets/css/matrix.css",
     "~/assets/css/theme.css",
     "~/assets/css/admin.css",
+    "~/assets/css/explorer.css",
+    "~/assets/css/referral.css",
     "~/assets/css/motion.css",
   ],
   colorMode: {

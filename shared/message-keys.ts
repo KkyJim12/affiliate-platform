@@ -1,5 +1,6 @@
 // Source-message aliases for statuses, API errors, and activity records.
 export const messageKeys: Record<string, string> = {
+  "Explorer": "explorer.title",
   "Administrator access is required.": "admin.errors.access",
   "Administrator credentials are incorrect.": "admin.errors.credentials",
   "Choose a valid account status.": "admin.errors.status",
@@ -434,5 +435,11 @@ export const messageKeys: Record<string, string> = {
   "your_username": "ui.your_username_d0777",
   "their_username": "ui.their_username_04b6f",
   "Your network, connected.": "ui.your_network_connected_f4564",
-  "Your three-layer binary matrix, 15 referral levels, and in-app USDT wallet. Sign in with your username and password.": "ui.your_three_layer_binary_matrix_15_referral_levels_and_in_app_usdt_wallet_sign_in_a4950"
+  "Your three-layer binary matrix, 15 referral levels, and in-app USDT wallet. Sign in with your username and password.": "ui.your_three_layer_binary_matrix_15_referral_levels_and_in_app_usdt_wallet_sign_in_a4950",
+  "You need 10 USDT in your available wallet balance to activate referrals.": "referral.insufficient",
+  "That referral code is unavailable. Check the code with your sponsor.": "referral.unavailableCode",
+  "You cannot use your own referral code.": "referral.ownCode",
+  "Your account is already linked to a sponsor.": "referral.alreadyLinked",
+  "This referral would create a circular network. Choose another sponsor.": "referral.circular",
+  "Referral activation": "referral.transactionDescription"
 };

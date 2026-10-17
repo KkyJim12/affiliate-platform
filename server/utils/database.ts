@@ -49,6 +49,11 @@ export function db() {
       count INTEGER NOT NULL,
       resets_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS referral_activations (
+      user_id TEXT PRIMARY KEY REFERENCES users(id),
+      transaction_id TEXT NOT NULL UNIQUE REFERENCES wallet_transactions(id),
+      created_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS user_access (
       user_id TEXT PRIMARY KEY REFERENCES users(id),
       role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('member', 'admin')),

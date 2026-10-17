@@ -8,6 +8,8 @@ const revealTargets = [
   ".rank-intro", ".rank-card", ".rank-detail-grid > .panel", ".unilevel-table",
   ".account-settings", ".dashboard-footer",
   ".admin-page-heading", ".admin-stat", ".admin-panel", ".admin-info-strip",
+  ".explorer-metrics > article", ".explorer-panel", ".explorer-root-search", ".explorer-ledger-note",
+  ".referral-code-card", ".referral-sponsor-card",
 ].join(",");
 
 // Enhance visible content after hydration; server-rendered pages never start hidden.

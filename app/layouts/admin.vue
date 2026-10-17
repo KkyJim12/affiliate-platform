@@ -9,6 +9,7 @@ const error = ref("");
 const links = [
   { path: "/admin/dashboard", key: "dashboard", icon: "LayoutDashboard" },
   { path: "/admin/users", key: "users", icon: "Users" },
+  { path: "/admin/explorer", key: "explorer", icon: "Globe" },
   { path: "/admin/payments", key: "payments", icon: "Wallet" },
   { path: "/admin/settings", key: "settings", icon: "Settings" },
 ] as const;

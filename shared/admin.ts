@@ -9,7 +9,7 @@ export interface AdminMember {
   username: string;
   role: "member" | "admin";
   status: "active" | "suspended";
-  referralCode: string;
+  referralCode: string | null;
   sponsor: string | null;
   createdAt: string;
   balance: number;

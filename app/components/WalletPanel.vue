@@ -61,6 +61,7 @@ function transactionDescription(item: WalletTransaction) {
   if (username && item.type === 'transfer_in') return tr('Transfer from {username}', { username: '@' + username });
   return tr(item.description);
 }
+const outgoing = (item: WalletTransaction) => ['transfer_out', 'withdrawal', 'referral_purchase'].includes(item.type);
 function closeAction() { action.value = null; password.value = ""; }
 </script>
 
@@ -83,9 +84,9 @@ function closeAction() { action.value = null; password.value = ""; }
       <div v-if="!compact" class="wallet-history-tools"><AppDropdown v-model="filter" :label="t('ui.filter_transactions')" :options="[{ value: 'all', label: t('ui.all_transactions') }, { value: 'completed', label: t('ui.completed') }, { value: 'pending', label: t('ui.pending') }, { value: 'rejected', label: t('ui.rejected') }]" /><button class="text-action" :disabled="preview" @click="refreshWallet"><AppIcon name="RefreshCw" :size="14" />{{ t('ui.refresh_balance') }}</button></div>
       <div v-if="!transactions.length" class="wallet-empty"><span class="empty-icon"><AppIcon name="Wallet" :size="26" /></span><h3>{{ filter === 'all' ? t('ui.a_fresh_start_for_your_wallet') : t('ui.no_matching_transactions') }}</h3><p>{{ filter === 'all' ? t('ui.settled_funds_transfers_and_commissions_will_appear_here') : t('ui.choose_another_filter_to_see_more_activity') }}</p></div>
       <div v-for="(item, index) in compact ? transactions.slice(0, 3) : transactions" :key="item.id" class="wallet-transaction" :style="{ '--row-index': Math.min(index, 5) }">
-        <span class="transaction-icon" :class="{ outgoing: item.type === 'transfer_out' || item.type === 'withdrawal', pending: item.status === 'pending', rejected: item.status === 'rejected' }"><AppIcon :name="item.status === 'rejected' ? 'X' : item.status === 'pending' ? 'LoaderCircle' : item.type === 'transfer_out' ? 'ArrowUpRight' : 'ArrowDownLeft'" :size="18" /></span>
+        <span class="transaction-icon" :class="{ outgoing: outgoing(item), pending: item.status === 'pending', rejected: item.status === 'rejected' }"><AppIcon :name="item.status === 'rejected' ? 'X' : item.status === 'pending' ? 'LoaderCircle' : outgoing(item) ? 'ArrowUpRight' : 'ArrowDownLeft'" :size="18" /></span>
         <div class="transaction-info"><strong>{{ transactionDescription(item) }}</strong><span>{{ formatDate(item.createdAt, { month: 'short', day: 'numeric' }) }} · {{ item.status === 'pending' ? t('ui.pending_settlement') : t(`ui.${item.status}`) }}</span></div>
-        <strong class="transaction-amount" :class="{ pending: item.status === 'pending', rejected: item.status === 'rejected', outgoing: item.type === 'transfer_out' }">{{ item.status !== 'completed' ? '' : item.type === 'transfer_out' ? '−' : '+' }}{{ money(item.amount) }}<small>USDT</small></strong>
+        <strong class="transaction-amount" :class="{ pending: item.status === 'pending', rejected: item.status === 'rejected', outgoing: outgoing(item) }">{{ item.status !== 'completed' ? '' : outgoing(item) ? '−' : '+' }}{{ money(item.amount) }}<small>USDT</small></strong>
       </div>
       <p v-if="!compact" class="wallet-history-note">{{ preview ? t('ui.sample_amounts_illustrate_the_plan_they_are_not_account_funds') : t('ui.your_wallet_is_an_internal_usdt_ledger_funding_requests_stay_pending_until_settled_on') }}</p>
     </div>

@@ -1,0 +1,122 @@
+.platform-explorer { min-width: 0; }
+.explorer-section-bar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 25px; }
+.explorer-tabs { display: inline-flex; padding: 5px; gap: 5px; border: 1px solid var(--border); background: var(--surface); border-radius: 12px; box-shadow: var(--shadow); }
+.explorer-tabs > button { display: inline-flex; align-items: center; justify-content: center; gap: 9px; padding: 11px 18px; color: var(--text-secondary); background: transparent; font-size: 12px; font-weight: 600; border: 1px solid transparent; border-radius: 8px; transition: background .2s, color .2s, border-color .2s; }
+.explorer-tabs > button.selected { background: var(--gold-soft); color: var(--gold-text); border-color: var(--gold-border); }
+.explorer-tabs > button:hover { color: var(--gold-text); }
+.explorer-scope { display: flex; align-items: center; gap: 7px; font-size: 10px; color: var(--text-tertiary); }
+.explorer-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 15px; min-width: 0; box-shadow: var(--shadow); }
+.explorer-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px; }
+.explorer-panel-heading h2 { font-size: 18px; font-weight: 700; letter-spacing: -.5px; overflow-wrap: anywhere; }
+.explorer-panel-heading p { font-size: 11px; line-height: 1.8; color: var(--text-secondary); margin-top: 7px; }
+.explorer-eyebrow { display: block; text-transform: uppercase; font-size: 9px; letter-spacing: 1.2px; font-weight: 650; color: var(--gold-text); margin-bottom: 8px; }
+.explorer-root-search { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 18px; padding: 21px 24px; border: 1px solid var(--gold-border); border-radius: 13px; background: linear-gradient(120deg, var(--gold-soft), var(--surface)); margin-bottom: 22px; }
+.explorer-root-search > div > label { font-size: 12px; font-weight: 600; }
+.explorer-root-search p { color: var(--text-secondary); margin-top: 6px; font-size: 10px; line-height: 1.8; }
+.explorer-root-input { display: flex; gap: 9px; align-items: stretch; }
+.platform-explorer .search-field { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface-alt); color: var(--text-tertiary); min-width: 0; }
+.platform-explorer .search-field > input { background: transparent; border: 0; width: 100%; min-width: 0; outline: none; color: var(--text-primary); font-size: 11px; }
+.platform-explorer .search-field > input::placeholder { color: var(--text-tertiary); }
+.explorer-root-input .search-field { min-width: 190px; }
+.explorer-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 17px; margin-bottom: 24px; }
+.explorer-metrics > article { min-width: 0; border: 1px solid var(--border); background: var(--surface); border-radius: 13px; padding: 22px 24px; }
+.explorer-metrics article > span { color: var(--text-secondary); font-size: 11px; }
+.explorer-metrics strong { display: flex; align-items: baseline; flex-wrap: wrap; gap: 7px; margin-top: 13px; color: var(--text-primary); font-weight: 750; font-size: 29px; letter-spacing: -.9px; overflow-wrap: anywhere; }
+.explorer-metrics strong > small { font-size: 10px; letter-spacing: 0; font-weight: 500; color: var(--text-tertiary); }
+.explorer-metrics p { color: var(--text-tertiary); font-size: 10px; margin-top: 7px; }
+.explorer-network-grid { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 22px; align-items: start; }
+.explorer-network-search { display: flex; align-items: center; gap: 14px; padding: 0 24px 20px; }
+.explorer-network-search .search-field { flex: 1; max-width: 400px; }
+.explorer-network-search > span { font-size: 10px; color: var(--text-tertiary); white-space: nowrap; }
+.explorer-tree-panel > .referral-tree-view { padding: 0 24px; }
+.explorer-tree-panel .referral-tree-toolbar { flex-wrap: wrap; }
+.explorer-tree-panel .referral-tree-viewport { min-height: 350px; max-height: 640px; overscroll-behavior: contain; }
+.explorer-tree-panel .referral-tree-note { margin-inline: -24px; padding: 16px 24px; border-radius: 0 0 15px 15px; }
+.explorer-tree-node { cursor: pointer; }
+.explorer-tree-node > rect { transition: stroke .15s; }
+.explorer-tree-node:hover > rect, .explorer-tree-selected > rect { stroke: var(--gold); stroke-width: 2.5px; }
+.explorer-tree-node:focus { outline: none; }
+.explorer-tree-node:focus-visible > rect { stroke: var(--gold); stroke-width: 3px; stroke-dasharray: 5 3; }
+.explorer-member-detail { padding: 25px; position: sticky; top: 100px; }
+.explorer-detail-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; border: 1px solid var(--gold-border); color: var(--gold-text); background: var(--gold-soft); margin-bottom: 24px; }
+.explorer-member-detail > h2 { font-size: 17px; font-weight: 700; letter-spacing: -.3px; overflow-wrap: anywhere; }
+.explorer-pill { display: inline-block; margin-top: 12px; padding: 5px 8px; font-size: 9px; background: var(--gold-soft); color: var(--gold-text); border-radius: 6px; }
+.explorer-member-detail dl { margin: 20px 0; }
+.explorer-member-detail dl > div { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); font-size: 10px; }
+.explorer-member-detail dt { color: var(--text-secondary); }
+.explorer-member-detail dd { margin: 0; text-align: right; color: var(--text-primary); overflow-wrap: anywhere; min-width: 0; }
+.explorer-member-detail .button { justify-content: center; width: 100%; font-size: 11px; padding-inline: 10px; }
+.explorer-member-detail > p { margin-top: 18px; color: var(--text-tertiary); font-size: 10px; line-height: 1.9; }
+.explorer-limit-note { padding: 0 24px 18px; font-size: 10px; color: var(--gold-text); line-height: 1.8; }
+.explorer-loading { display: flex; align-items: center; justify-content: center; min-height: 320px; gap: 12px; color: var(--text-secondary); font-size: 13px; }
+.explorer-error { display: flex; align-items: flex-start; gap: 12px; padding: 23px; background: var(--danger-soft); color: var(--danger); border-radius: 12px; }
+.explorer-error strong { font-size: 13px; }
+.explorer-error p { font-size: 11px; line-height: 1.8; margin-top: 8px; }
+.explorer-error .admin-text-button { display: inline-flex; margin: 13px 18px 0 0; }
+.explorer-ledger-note { display: flex; align-items: flex-start; gap: 10px; padding: 14px 18px; border: 1px solid var(--gold-border); color: var(--gold-text); border-radius: 10px; background: var(--gold-soft); margin-bottom: 22px; }
+.explorer-ledger-note p { font-size: 11px; line-height: 1.8; }
+.explorer-transaction-controls { display: grid; gap: 15px; padding: 0 24px 23px; }
+.explorer-record-search { display: flex; align-items: stretch; gap: 10px; max-width: 600px; }
+.explorer-record-search .search-field { flex: 1; }
+.explorer-transaction-filters { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.explorer-transaction-filters > .app-dropdown { flex: 1; min-width: 130px; max-width: 230px; }
+.explorer-transaction-filters > button { margin-left: auto; }
+.explorer-table-scroll { position: relative; width: 100%; max-width: 100%; overflow-x: auto; overscroll-behavior: contain; }
+.explorer-table { width: 100%; min-width: 740px; text-align: left; border-collapse: collapse; white-space: nowrap; }
+.explorer-table th { padding: 13px 22px; font-size: 9px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; background: var(--surface-alt); color: var(--text-tertiary); border-block: 1px solid var(--border); }
+.explorer-table td { padding: 18px 22px; font-size: 11px; color: var(--text-secondary); border-bottom: 1px solid var(--border); }
+.explorer-table tbody tr:last-child td { border-bottom: 0; }
+.explorer-table tbody tr:hover { background: var(--gold-glow); }
+.explorer-transaction-identity { display: flex; align-items: center; gap: 11px; }
+.explorer-transaction-icon { width: 36px; height: 36px; display: grid; place-items: center; flex-shrink: 0; border-radius: 11px; color: var(--success); background: var(--success-soft); }
+.explorer-transaction-icon.pending { color: var(--gold-text); background: var(--gold-soft); }
+.explorer-transaction-icon.rejected { color: var(--danger); background: var(--danger-soft); }
+.explorer-transaction-identity strong { display: block; font-size: 11px; color: var(--text-primary); font-weight: 550; }
+.explorer-transaction-identity small { display: block; margin-top: 5px; font-size: 9px; color: var(--text-tertiary); }
+.explorer-table .explorer-amount { font-variant-numeric: tabular-nums; color: var(--success); font-weight: 650; }
+.explorer-table .explorer-amount.outgoing { color: var(--gold-text); }
+.explorer-table .explorer-amount.rejected { color: var(--danger); }
+.explorer-amount > small { color: var(--text-tertiary); font-size: 8px; font-weight: 500; }
+.explorer-empty { display: grid; justify-items: center; gap: 13px; padding: 40px 20px; color: var(--text-secondary); }
+.explorer-empty p { font-size: 11px; color: var(--text-tertiary); white-space: normal; text-align: center; }
+.explorer-copy { color: var(--gold-text); background: transparent; padding: 5px; margin-left: 5px; vertical-align: middle; }
+.explorer-sign-in { display: flex; align-items: center; flex-direction: column; justify-content: center; text-align: center; padding: 60px 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 15px; }
+.explorer-sign-in h2 { font-size: 23px; font-weight: 700; }
+.explorer-sign-in p { font-size: 12px; color: var(--text-secondary); margin: 14px 0 25px; line-height: 1.9; max-width: 380px; }
+.matrix-dashboard .dashboard-sidebar { height: 100dvh; bottom: auto; overflow-y: auto; overscroll-behavior: contain; }
+.matrix-dashboard .dashboard-sidebar > * { flex-shrink: 0; }
+:lang(th) .explorer-eyebrow, :lang(th) .explorer-table th { letter-spacing: 0; }
+@media (max-width: 1250px) { .explorer-network-grid { grid-template-columns: minmax(0, 1fr); } .explorer-member-detail { position: static; display: grid; grid-template-columns: auto 1fr; gap: 0 24px; } .explorer-member-detail > .explorer-detail-icon { grid-row: span 3; } .explorer-member-detail dl, .explorer-member-detail > p, .explorer-member-detail > .button { grid-column: 1 / -1; } .explorer-member-detail dl { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; } .explorer-member-detail > .button { width: auto; justify-self: start; } .explorer-member-detail .explorer-pill { justify-self: start; } }
+@media (max-width: 640px) {
+  .explorer-section-bar { gap: 12px; }
+  .explorer-tabs { width: 100%; }
+  .explorer-tabs > button { flex: 1; font-size: 11px; padding-inline: 12px; }
+  .explorer-scope { font-size: 9px; }
+  .explorer-root-search { padding: 19px; gap: 15px; }
+  .explorer-root-input { flex-wrap: wrap; width: 100%; }
+  .explorer-root-input .search-field { flex: 1; min-width: 130px; }
+  .explorer-root-input .button { font-size: 10px; }
+  .explorer-metrics { gap: 10px; }
+  .explorer-metrics > article { padding: 17px 13px; }
+  .explorer-metrics article > span { font-size: 9px; }
+  .explorer-metrics strong { font-size: 23px; }
+  .explorer-metrics p { font-size: 8px; line-height: 1.7; }
+  .explorer-activity .explorer-metrics { grid-template-columns: 1fr; }
+  .explorer-activity .explorer-metrics article { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 18px; }
+  .explorer-activity .explorer-metrics strong { font-size: 25px; margin-top: 0; }
+  .explorer-activity .explorer-metrics p { width: 100%; margin-top: 0; }
+  .explorer-panel-heading { padding: 20px 18px; flex-wrap: wrap; }
+  .explorer-panel-heading h2 { font-size: 17px; }
+  .explorer-network-search { padding-inline: 18px; gap: 8px; }
+  .explorer-network-search > span { font-size: 8px; }
+  .explorer-tree-panel > .referral-tree-view { padding-inline: 18px; }
+  .explorer-tree-panel .referral-tree-note { margin-inline: -18px; padding-inline: 18px; }
+  .explorer-member-detail { padding: 22px; }
+  .explorer-member-detail dl { display: block; }
+  .explorer-transaction-controls { padding-inline: 18px; }
+  .explorer-transaction-filters { gap: 10px; }
+  .explorer-transaction-filters > .app-dropdown { flex-basis: 100%; max-width: none; }
+  .explorer-ledger-note { padding: 13px 15px; }
+  .explorer-ledger-note p { font-size: 10px; }
+  .explorer-sign-in h2 { font-size: 20px; }
+}
