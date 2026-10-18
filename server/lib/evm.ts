@@ -29,7 +29,7 @@ function positiveInteger(value: string | number, name: string) {
 
 // An entirely empty configuration keeps blockchain integration optional.
 export function resolveEvmConfig(input: EvmConfigInput): EvmConfig | null {
-  if (Object.values(input).every(value => value === "")) return null;
+  if ([input.rpcUrl, input.chainId, input.tokenAddress, input.treasuryAddress, input.minConfirmations].every(value => value === "")) return null;
   let url: URL;
   try { url = new URL(input.rpcUrl); }
   catch { throw new Error("Set a valid EVM RPC URL."); }

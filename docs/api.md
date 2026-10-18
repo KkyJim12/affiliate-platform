@@ -17,8 +17,10 @@ rate limited.
 | GET | `/api/auth/session` | Current account or `null` |
 | POST | `/api/auth/logout` | Revoke the current session |
 | GET | `/api/dashboard` | Own completed commissions, pending funding, transfer count and referral totals |
-| GET | `/api/wallet` | Own wallet balance and recent transactions |
+| GET | `/api/wallet` | Historic ledger balance and recent transactions (compatibility) |
 | GET | `/api/wallet/evm` | Own Polygon Amoy address, public key and network metadata; no secrets |
+| GET | `/api/wallet/evm/balance` | Own native POL and optionally configured ERC-20 on-chain balances |
+| GET | `/api/wallet/evm/transactions` | Own latest indexed Amoy transactions and ERC-20 transfers |
 | POST | `/api/wallet/evm` | Password-confirmed, idempotent wallet creation for an existing account |
 | POST | `/api/wallet/evm/reveal` | Password-confirmed private key reveal for the session owner |
 | POST | `/api/wallet/deposit` | Submit a funding request; does not credit the balance |
@@ -59,6 +61,15 @@ that has not yet been provisioned. Public details include `address`, `publicKey`
 The private key and encrypted keystore are excluded from normal account/wallet
 responses and SSR data.
 
+`GET /api/wallet/evm/balance` returns `{ address, chainId, blockNumber, native,
+token }` for the session owner's address. Assets include `symbol`, `decimals`,
+`balanceUnits` and `balance`; blockchain integers and decimal balances are strings.
+`token` is `null` without an Amoy token contract configured. It accepts no owner
+address from the browser. Reads check chain ID `80002` and pin one block. Missing
+wallets return 404; RPC/configuration/token-read failures return 503 without
+provider details. Reads are limited to 60 requests per account/IP per 15 minutes.
+The member UI uses this endpoint exclusively for the displayed wallet balance.
+
 Both POST endpoints accept `{ "password": "your-account-password" }`, require
 the session owner and a matching Origin, and allow five attempts per account/IP
 per 15 minutes independently for creation and reveal. Reveal returns
@@ -71,6 +82,35 @@ on closing, navigation, account changes, hidden tabs and after 30 seconds.
 See [wallet encryption and lifecycle](smart-contracts.md#polygon-amoy-account-wallets)
 for storage and recovery details. Amoy test assets are separate from the USDT
 ledger; these endpoints do not transfer or fund tokens.
+
+The old deposit/transfer APIs remain for historical integrations and operator
+settlement. The member wallet no longer exposes internal funding, transfers,
+ledger IDs or ledger balances. The referrals page can spend existing referral
+credits and labels them separately; EVM-funded activation is not connected.
+
+## EVM wallet transaction history
+
+`GET /api/wallet/evm/transactions` resolves the wallet from the authenticated
+session; client-supplied addresses/user IDs are ignored. It returns
+`{ address, chainId, transactions, limit }` with at most 50 recent records.
+Records contain a display ID, hash, from/to, direction (`sent`, `received`, `self`),
+kind (`native`, `erc20`), action (`transfer`, `contractCall`, `contractCreation`),
+status (`confirmed`, `failed`), exact decimal amount, symbol, token address,
+ISO timestamp, block number, transaction index and a fixed Amoy explorer link.
+
+Configure `NUXT_EVM_EXPLORER_API_KEY` with an Etherscan V2 key that can query
+Amoy (`80002`). Optional `NUXT_EVM_TOKEN_ADDRESS` filters ERC-20 history; leaving
+it blank includes all ERC-20 tokens. Native history uses `txlist` and token
+history uses `tokentx`; each source supplies its latest 50 records, merged and
+capped at 50. Native contract calls and token transfer events can share a hash.
+Display IDs identify rows, not durable blockchain event IDs or settlement proof.
+Internal native contract transfers and NFT activity are outside this panel's scope.
+
+The endpoint never selects encrypted key columns or signs transactions. Missing
+wallets return 404; missing credentials, invalid explorer records and provider
+failures return a generic 503 instead of an empty list. Responses are not cached.
+Reads are limited to 30 per account/IP per 15 minutes. History is an indexer view
+and may lag the chain; it neither changes balances nor settles ledger payments.
 
 ## Referral activation and sponsor linking
 

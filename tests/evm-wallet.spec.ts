@@ -37,6 +37,7 @@ test("registration provisions an encrypted Amoy wallet; only its owner can unloc
     expect(decrypted.address).toBe(details.address);
     expect(stored!.encrypted_keystore.includes(decrypted.privateKey)).toBe(false);
     expect((await guest.get("/api/wallet/evm")).status()).toBe(401);
+    expect((await guest.get("/api/wallet/evm/balance")).status()).toBe(401);
     expect((await post(guest, "/api/wallet/evm/reveal", { password })).status()).toBe(401);
     expect((await owner.post("/api/wallet/evm/reveal", { data: { password } })).status()).toBe(403);
     expect((await owner.post("/api/wallet/evm/reveal", { headers: { Origin: "https://unrelated.example" }, data: { password } })).status()).toBe(403);
@@ -79,10 +80,73 @@ test("concurrent first logins provision exactly one wallet for a legacy account"
   } finally { await Promise.all([db.close(), first.dispose(), second.dispose()]); }
 });
 
+test("one EVM card replaces the ledger wallet and reads balances without mixing referral credits", async ({ page }) => {
+  const registration = await post(page.request, "/api/auth/register", { username: `single_${randomUUID().slice(0, 8)}`, password });
+  expect(registration.status()).toBe(201);
+  const { user } = await registration.json();
+  const { wallet } = await (await page.request.get("/api/wallet/evm")).json();
+  const db = openTestDatabase();
+  try { await db.execute("UPDATE wallets SET available = 25000000 WHERE user_id = $1", user.id); }
+  finally { await db.close(); }
+  let failed = false;
+  await page.route("**/api/wallet/evm/balance", route => failed
+    ? route.fulfill({ status: 503, json: {} })
+    : route.fulfill({ json: { address: wallet.address, chainId: 80002, blockNumber: "123",
+      native: { symbol: "POL", decimals: 18, balance: "0.5", balanceUnits: "500000000000000000" },
+      token: { address: "0x1111111111111111111111111111111111111111", symbol: "USDT", decimals: 6, balance: "12.345678", balanceUnits: "12345678" } } }));
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/dashboard?view=wallet");
+  const card = page.getByTestId("evm-wallet");
+  await expect(card).toHaveCount(1);
+  await expect(card.getByTestId("evm-address")).toHaveText(wallet.address);
+  await expect(card.getByTestId("wallet-balance")).toHaveText("12.345678USDT");
+  await expect(card).toContainText("0.50 POL");
+  await expect(card).not.toContainText("25.00");
+  await expect(page.getByRole("button", { name: "Request funds", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Transfer", exact: true })).toHaveCount(0);
+  await expect(page.locator(".wallet-history, .evm-wallet-card")).toHaveCount(0);
+  await card.getByRole("button", { name: "Receive", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText(wallet.address);
+  await expect(page.getByRole("dialog")).toContainText("Polygon Amoy");
+  await page.keyboard.press("Escape");
+  failed = true;
+  await card.getByRole("button", { name: "Refresh on-chain balance", exact: true }).click();
+  await expect(card).toContainText("Balance unavailable");
+  await expect(card.getByTestId("wallet-balance")).toContainText("—");
+  failed = false;
+  await card.getByRole("button", { name: "Refresh on-chain balance", exact: true }).click();
+  await expect(card.getByTestId("wallet-balance")).toContainText("12.345678");
+  for (const width of [320, 390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await card.getByRole("button", { name: "Refresh on-chain balance", exact: true }).click();
+    await expect(card.getByTestId("wallet-balance")).toContainText("12.345678");
+    // A clipped decorative ring must not scroll the card's contents out of view.
+    await expect.poll(() => card.locator(".balance-card").evaluate(element => {
+      const bounds = element.getBoundingClientRect();
+      const content = element.querySelector(".balance-top")!.getBoundingClientRect();
+      return element.scrollLeft === 0 && content.left >= bounds.left + 20 && content.right <= bounds.right - 20;
+    })).toBe(true);
+  }
+  await page.screenshot({ path: "test-results/evm-single-wallet-desktop.png", fullPage: true });
+  await page.getByRole("button", { name: "Use dark theme", exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("combobox", { name: "Language", exact: true }).click();
+  await page.getByRole("listbox").locator('[data-value="th"]').click();
+  await expect(card).toContainText("กระเป๋า EVM");
+  await expect(card.getByRole("button", { name: "รับเงิน", exact: true })).toBeVisible();
+  await page.screenshot({ path: "test-results/evm-single-wallet-mobile-thai.png", fullPage: true });
+  expect(errors).toEqual([]);
+  expect((await (await page.request.get("/api/wallet/evm")).json()).wallet.address).toBe(wallet.address);
+});
+
 test("wallet UI reveals keys after a password check and clears them on close, timeout and navigation", async ({ page }) => {
   test.setTimeout(90_000);
   const registration = await post(page.request, "/api/auth/register", { username: `evui_${randomUUID().slice(0, 8)}`, password });
   expect(registration.status()).toBe(201);
+  await page.route("**/api/wallet/evm/balance", route => route.fulfill({ status: 503, json: {} }));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/dashboard?view=wallet");
   const card = page.getByTestId("evm-wallet");
@@ -90,10 +154,11 @@ test("wallet UI reveals keys after a password check and clears them on close, ti
   await expect(card).toContainText("80002");
   await expect(card.getByTestId("evm-address")).toHaveText(/^0x[0-9a-fA-F]{40}$/);
   await expect(page.getByTestId("evm-private-key")).toHaveCount(0);
+  await card.getByRole("button", { name: "Wallet details", exact: true }).click();
   await card.getByRole("button", { name: "Reveal private key" }).click();
   await page.getByLabel("Confirm with your password", { exact: true }).fill("Incorrect password!");
   await page.getByRole("dialog").getByRole("button", { name: "Reveal private key", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Your password is incorrect.");
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("Your password is incorrect.");
   await page.getByLabel("Confirm with your password", { exact: true }).fill(password);
   await page.getByRole("dialog").getByRole("button", { name: "Reveal private key", exact: true }).click();
   await expect(page.getByTestId("evm-private-key")).toHaveValue(/^0x[a-f0-9]{64}$/i);

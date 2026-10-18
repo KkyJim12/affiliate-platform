@@ -6,7 +6,7 @@
     "typecheck": "nuxt typecheck",
     "admin:create": "node --env-file-if-exists=.env scripts/create-admin.mjs",
     "test:ui": "node scripts/test-postgres.mjs ui",
-    "test:contracts": "node --test tests/evm.test.mjs tests/evm-wallet.test.mjs",
+    "test:contracts": "node --test tests/evm.test.mjs tests/evm-wallet.test.mjs tests/evm-balance.test.mjs tests/evm-transactions.test.mjs",
     "build": "nuxt build",
     "dev": "nuxt dev",
     "generate": "nuxt generate",

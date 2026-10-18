@@ -22,9 +22,9 @@ USDT deployment uses the ledger's six decimal places. `symbol()` is optional;
 missing `decimals()` fails the read rather than guessing precision.
 ERC-20 defines these metadata methods as optional. [ERC-20 standard](https://eips.ethereum.org/EIPS/eip-20)
 
-These settings live in private Nuxt runtime configuration. Leave all five blank
-to continue using the application without a blockchain connection. The reader
-is created only when called and does not require a signing key. Production
+These settings live in private Nuxt runtime configuration. Leaving all five blank
+disables the transfer-evidence reader; wallet balance reads use the public Amoy
+RPC described below. The reader is created only when called and does not require a signing key. Production
 Node deployments must supply environment variables to the running server.
 Nitro targets ES2022 to preserve BigInt amount arithmetic on the project's
 required Node.js 24 or later runtime.
@@ -55,6 +55,67 @@ These contract-reading helpers are internal. Account-wallet endpoints and their
 UI are described below; funding still requires the existing manual settlement review.
 Results use strings for blockchain integers, so they can be serialized to JSON.
 The optional transport parameter on `createEvmReader` supports offline RPC tests.
+
+## Single EVM wallet view
+
+`WalletPanel.vue` is the single member wallet card. The overview, wallet page,
+navbar and account settings use the account's existing EVM address. The former
+separate Polygon card and the internal balance/funding/username-transfer/history
+controls have been removed from the wallet UI. No wallet keys or ledger history
+are deleted or converted. The configured account network remains Polygon Amoy.
+
+The navbar combines the profile trigger and USDT amount. Its balance uses the
+same client-side snapshot as the wallet card, deduplicates concurrent reads and
+reuses successful reads for 30 seconds. Manual wallet refreshes update the profile
+amount too. Logout/account changes invalidate pending reads and clear the snapshot.
+The profile shows an unavailable USDT amount if there is no configured USDT token
+or the read fails; native POL and other token balances are never relabeled as USDT.
+
+The authenticated, uncached `GET /api/wallet/evm/balance` resolves the owner from
+the session and reads only their public wallet record. It accepts no client
+address or user ID. `createWalletBalanceReader` checks the RPC chain, pins native
+and ERC-20 reads to one block, and returns exact decimal strings. It defaults to
+Amoy's public RPC and native POL. Set `NUXT_EVM_RPC_URL` for a private provider,
+and optionally `NUXT_EVM_TOKEN_ADDRESS` for the token on Amoy. If supplied,
+`NUXT_EVM_CHAIN_ID` must be `80002`. Treasury and confirmation settings are used
+by the separate transfer-evidence helper, and are not required for balance reads.
+An RPC or token precision failure produces HTTP 503 and an unavailable balance;
+provider errors and credentials are never returned to the browser.
+
+Receive displays the same EVM address and network. Wallet details contain the
+public key, explorer link and password-protected key reveal. Sending on-chain
+transactions is not implemented. The historic ledger APIs and admin settlement
+records remain for compatibility. Referral activation can still spend existing
+referral credits; its page labels them explicitly and no longer directs members
+to fund an internal wallet. On-chain assets do not activate referrals until an
+on-chain payment workflow is implemented.
+
+## Indexed wallet transactions
+
+The wallet page places `WalletTransactions.vue` below `WalletPanel.vue`.
+`GET /api/wallet/evm/transactions` uses the session owner's public address and
+Etherscan V2's [normal transaction](https://docs.etherscan.io/api-reference/endpoint/txlist)
+and [ERC-20 transfer](https://docs.etherscan.io/api-reference/endpoint/tokentx)
+endpoints on Amoy (`80002`, listed in the [supported chain feed](https://api.etherscan.io/v2/chainlist)).
+Set `NUXT_EVM_EXPLORER_API_KEY` to a server-side key with Amoy access.
+History does not require a signing key, RPC URL, treasury or confirmation policy.
+The contract-reader settings remain independently optional.
+
+Each source supplies up to 50 recent records; their combined result is sorted by
+block and transaction index and capped at 50. A configured token address filters
+ERC-20 transfers. With no token address, all ERC-20 transfers are included.
+Mint/burn zero addresses are allowed in records, while the owner is always a
+valid nonzero address. Amounts preserve token precision as strings; native values
+use POL with 18 decimals. Multiple events may share a hash and are separate rows.
+Contract calls/creation and failed native transactions receive distinct labels.
+Internal native transfers and NFTs are not included.
+
+Missing configuration, provider errors, malformed records and partial source
+failures return an unavailable state, rather than pretending the wallet is empty.
+The component supports search, direction filters, refresh, incremental display,
+English/Thai and light/dark layouts. Timestamps display in Bangkok time (UTC+7).
+Display-only row IDs are not durable event identifiers. Indexed history may lag
+the chain and is not evidence for settlement or authorization to change balances.
 
 ## Polygon Amoy account wallets
 

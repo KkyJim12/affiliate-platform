@@ -1,6 +1,6 @@
 # UNXO — matrix and referral workspace
 
-Nuxt 4 app with a three-layer binary matrix UI, 15-rank explorer, 15-level unilevel projections, username/password accounts, and persistent in-app USDT ledger wallets. The UNXO interface uses a modern gold palette with light and dark themes.
+Nuxt 4 app with a three-layer binary matrix UI, 15-rank explorer, 15-level unilevel projections, username/password accounts, and encrypted EVM wallets. The UNXO interface uses a modern gold palette with light and dark themes.
 
 Branding uses the supplied UNXO artwork from `public/logo.jpg`. The horizontal, transparent version is in `public/unxo-horizontal.webp`, with its full-resolution PNG master alongside it. `BrandLogo.vue` shares responsive sizing across navigation, account dialogs, footers, and compact decorative emblems. The original image also supplies the browser icon. See `design/unxo-logo-prompt.md` for generation details.
 
@@ -11,7 +11,11 @@ English and Thai use `@nuxtjs/i18n` (Vue I18n). Switch languages in either heade
 All selection controls use the shared `AppDropdown` component, with themed listbox menus, selected-item indicators, keyboard navigation and typeahead, Escape cancellation, and outside-click dismissal. Menus render above card boundaries and adjust their position to fit the viewport on desktop and mobile.
 
 Signed-in navbar profiles open a shared menu on public, member and admin pages.
-It shows the account's Polygon Amoy address with a copy action, wallet/settings
+The profile button includes the on-chain USDT balance; the member navbar no longer
+has a separate EVM wallet button. The profile and wallet card share a balance
+snapshot for 30 seconds, and a manual wallet refresh updates both. Missing USDT
+configuration, another token, or failed reads display an unavailable USDT amount.
+It shows the account's EVM address with a copy action, wallet/settings
 links and sign out. Menus support keyboard navigation, Escape and outside-click
 dismissal, and remain visible within narrow mobile viewports.
 
@@ -40,7 +44,7 @@ Run `npm run admin:create` (`npm.cmd run admin:create` in PowerShell) and choose
 
 The protected `/admin/dashboard`, `/admin/users`, `/admin/payments`, and `/admin/settings` pages use live PostgreSQL data, with English/Thai, light/dark mode, responsive navigation, custom dropdowns, and reduced-motion support. The dashboard shows account growth, funding totals, wallet balances, recent payments, and an admin activity log. Users can be searched, filtered, paginated, inspected, suspended, and reactivated. Suspension revokes sessions and blocks sign-in and transfers to the suspended recipient; administrator accounts are protected from suspension.
 
-Payments lists wallet funding requests. After independently verifying receipt, an administrator can approve a request using a unique settlement reference; the wallet credit, completion record, review, and audit entry commit atomically. Repeated identical approvals never credit twice. Rejection requires a reason, adds no funds, and appears as rejected in the member wallet. This records operator-confirmed settlement; it does not verify blockchain transactions automatically or implement withdrawals.
+Payments lists historical wallet funding requests. After independently verifying receipt, an administrator can approve a request using a unique settlement reference; the ledger credit, completion record, review, and audit entry commit atomically. Repeated identical approvals never credit twice. Rejection requires a reason, adds no funds, and remains visible in the transaction explorer. This records operator-confirmed settlement; it does not verify blockchain transactions automatically or implement withdrawals.
 
 Settings persist registration/funding availability and a support email shown in the member workspace. The API enforces these switches. Admin routes and every management API require an active admin session; writes require a matching Origin and are rate limited. Access roles, reviews, settings, and the audit trail use additive tables, preserving existing accounts and ledger records.
 
@@ -57,6 +61,31 @@ Member overview totals come from `/api/dashboard`, including completed ledger co
 - Password recovery, password changes, and multi-factor authentication are not implemented.
 
 ## Smart contract library
+
+The member wallet is one EVM balance card on both the overview and wallet page.
+It shows the existing address, network, live balances, Receive and wallet details.
+The old internal balance, LW ID, funding requests, member transfers and ledger
+history have been removed from this card. Settings and navigation also use the
+EVM wallet. Existing addresses, encrypted keys and historical ledger records are
+preserved. Existing referral credits remain usable on the referrals page; EVM
+payment for referral activation and on-chain sending are not implemented.
+
+`GET /api/wallet/evm/balance` reads the signed-in owner's native POL balance on
+Amoy. It uses `NUXT_EVM_RPC_URL` or the public Amoy RPC, and rejects another
+configured or actual network. Set `NUXT_EVM_TOKEN_ADDRESS` to show that Amoy
+ERC-20 balance as the main amount, alongside POL for gas. The contract's metadata
+supplies its symbol and decimals; no USDT address or balance is invented.
+An unavailable RPC shows an unavailable balance with a retry action.
+
+The wallet page has a separate `WalletTransactions.vue` panel below its wallet
+card. It displays up to 50 recent indexed Amoy records with POL transactions,
+ERC-20 transfers, direction/search filters, status, Bangkok dates and explorer
+links. Set the private `NUXT_EVM_EXPLORER_API_KEY` to an Etherscan V2 key with
+Amoy access to enable live history. `NUXT_EVM_TOKEN_ADDRESS` optionally limits
+token transfers to the configured contract; otherwise ERC-20 transfers for all
+tokens are included. Missing credentials/provider failures show an unavailable
+state, while an actual empty history has its own message. No ledger records or
+sample transactions are presented as on-chain activity.
 
 Ethers generates an account wallet on Polygon Amoy testnet (chain ID 80002).
 PostgreSQL stores its address, public key and V3 keystore encrypted with the
@@ -83,7 +112,7 @@ Run `npm run test:contracts` for offline helper tests without a database or wall
 
 Unilevel projections use 1% per ancestor across 15 depths, totaling a 15% pool. Together with the 80% matrix allocation and 5% system allocation, this accounts for 100% of a qualifying payment. These corrected formulas replace inconsistent poster cells.
 
-The unsigned dashboard is explicitly a plan preview with sample matrix positions and wallet activity. Signed-in accounts show their own zero/settled wallet balances and actual registrations. Matrix positions, paid ranks, automatic commissions, recycling, and upgrades are not activated by registration or by funding requests. The rank explorer remains a labeled projection, separate from account funds.
+The unsigned dashboard is explicitly a plan preview with sample matrix positions. Its EVM wallet prompts sign-in without displaying a sample balance. Signed-in accounts show on-chain balances and actual registrations. Matrix positions, paid ranks, automatic commissions, recycling, and upgrades are not activated by registration or by funding requests. The rank explorer remains a labeled projection, separate from account funds.
 
 The referrals page at `/referrals` (also `/referral` or `/dashboard?view=referrals`) includes a one-time 10 USDT activation, a code/link sharing panel, and a form for connecting an existing account to a sponsor. Activation verifies the account password and atomically debits the wallet, records a `referral_purchase`, and creates the code. Retries return the same activation without another charge. Accounts with no sponsor can enter an activated code for free; an established sponsor cannot be changed, and self-referrals, suspended sponsors, and cycles at any depth are rejected. Existing sponsor relationships are preserved; older unpaid codes require activation before they can accept new referrals. Referral activation does not trigger rank placement or automatic commission payouts.
 

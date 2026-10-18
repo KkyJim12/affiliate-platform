@@ -21,6 +21,14 @@ async function navigate(page: Page, label: string) {
   await page.getByRole("navigation", { name: "Dashboard navigation" }).getByRole("link", { name: label }).click();
 }
 
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/wallet/evm/balance", async route => {
+    const { wallet } = await (await page.request.get("/api/wallet/evm")).json();
+    await route.fulfill({ json: { address: wallet.address, chainId: 80002, blockNumber: "100",
+      native: { symbol: "POL", decimals: 18, balance: "0", balanceUnits: "0" }, token: null } });
+  });
+});
+
 test("landing plan calculator, FAQ, and username/password dialog", async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -106,18 +114,16 @@ test("matrix, corrected ranks, referrals, and wallet preview on desktop and mobi
   await page.getByLabel("Search referrals").fill("nobody_matches_this");
   await expect(page.getByRole("heading", { name: "No matching referrals" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Download image", exact: true })).toBeDisabled();
-  await navigate(page, "In-app wallet");
-  await expect(page.getByTestId("wallet-balance")).toContainText("152.80");
-  await chooseDropdown(page, page.getByLabel("Filter transactions"), "pending");
-  await expect(page.getByRole("heading", { name: "No matching transactions." })).toBeVisible();
-  await page.getByRole("button", { name: "Request funds", exact: true }).click();
+  await navigate(page, "EVM wallet");
+  await expect(page.getByTestId("wallet-balance")).toContainText("—");
+  await page.getByRole("button", { name: "Receive", exact: true }).click();
   await expect(page.getByRole("dialog")).toContainText("Sign in");
   await page.keyboard.press("Escape");
   await noOverflow(page);
   expect(errors).toEqual([]);
 });
 
-test("create account and wallet, request funding, restore session, and sign back in", async ({ page }, testInfo) => {
+test("create account and EVM wallet, restore session, and sign back in", async ({ page }, testInfo) => {
   const username = `ui_${testInfo.project.name}_${Date.now().toString(36)}`;
   const password = "A good local password 42!";
   await gotoReady(page, "/dashboard");
@@ -132,28 +138,21 @@ test("create account and wallet, request funding, restore session, and sign back
   await page.getByRole("button", { name: "Create account & wallet" }).click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
   await expect(page.locator(".dashboard-greeting")).toContainText(username.toUpperCase());
+  await expect(page.getByTestId("wallet-balance")).toContainText("0.00");
   await navigate(page, "My referrals");
   await page.getByRole("button", { name: "Tree view", exact: true }).click();
   await expect(page.locator("[data-tree-node]")).toHaveCount(1);
   await expect(page.locator(".referral-network-image")).toContainText("Your next connection starts this tree.");
-  await navigate(page, "In-app wallet");
+  await navigate(page, "EVM wallet");
   await expect(page.getByTestId("wallet-balance")).toContainText("0.00");
-  await page.getByRole("button", { name: "Request funds", exact: true }).click();
-  await page.getByLabel("Amount in USDT").fill("25.50");
-  await page.getByRole("button", { name: "Save funding request" }).click();
-  await expect(page.getByRole("dialog")).not.toBeVisible();
-  await expect(page.locator(".wallet-transaction")).toContainText("Pending settlement");
-  await expect(page.getByTestId("wallet-balance")).toContainText("0.00");
-  await page.getByRole("button", { name: "Transfer", exact: true }).click();
-  await page.getByLabel("Recipient username").fill(username);
-  await page.getByLabel("Amount in USDT").fill("1");
-  await page.getByLabel("Confirm with your password").fill(password);
-  await page.getByRole("button", { name: "Confirm transfer", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Choose another member");
+  const address = (await page.getByTestId("evm-address").textContent())!;
+  expect(address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+  await page.getByRole("button", { name: "Receive", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText(address);
   await page.keyboard.press("Escape");
   await page.reload();
+  await expect(page.getByTestId("evm-address")).toHaveText(address);
   await expect(page.getByTestId("wallet-balance")).toContainText("0.00");
-  await expect(page.locator(".wallet-transaction")).toContainText("25.50");
   await navigate(page, "Account settings");
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(page.getByRole("button", { name: "Sign in", exact: true }).first()).toBeVisible();
@@ -167,8 +166,8 @@ test("create account and wallet, request funding, restore session, and sign back
   await page.getByRole("button", { name: "Sign in to UNXO", exact: true }).click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
   await expect(page.locator(".dashboard-greeting")).toContainText(username.toUpperCase());
-  await navigate(page, "In-app wallet");
-  await expect(page.locator(".wallet-transaction")).toContainText("25.50");
+  await navigate(page, "EVM wallet");
+  await expect(page.getByTestId("evm-address")).toHaveText(address);
   await page.screenshot({ path: `test-results/wallet-${testInfo.project.name}.png`, fullPage: true });
   await noOverflow(page);
 });
@@ -202,7 +201,7 @@ test("single theme icon toggles light/dark, persists, and exports themed trees",
   await page.screenshot({ path: `test-results/gold-landing-dark-${testInfo.project.name}.png`, fullPage: true });
   await gotoReady(page, "/dashboard?view=wallet");
   await expect(page.locator("html")).toHaveClass(/dark/);
-  await expect(page.getByTestId("wallet-balance")).toContainText("152.80");
+  await expect(page.getByTestId("wallet-balance")).toContainText("—");
   await noOverflow(page);
   await page.screenshot({ path: `test-results/gold-wallet-dark-${testInfo.project.name}.png`, fullPage: true });
   await gotoReady(page, "/dashboard?view=referrals&layout=tree");
@@ -280,16 +279,9 @@ test("Thai switching persists across pages, localizes forms and tree exports, an
   await page.screenshot({ path: `test-results/thai-tree-dark-${testInfo.project.name}.png`, fullPage: true });
 
   await gotoReady(page, "/dashboard?view=wallet");
-  await expect(page.locator(".wallet-transaction").first()).toContainText(th.matrix_layer_3_rank_3);
-  const csvEvent = page.waitForEvent("download");
-  await page.getByRole("button", { name: th.export, exact: true }).click();
-  const csv = await readFile((await (await csvEvent).path())!, "utf8");
-  expect(csv.charCodeAt(0)).toBe(0xfeff);
-  expect(csv).toContain(th.date_description_type_amount_usdt_status);
-  expect(csv).toContain(th.transaction_commission);
-  expect(csv).toContain(th.completed);
-  await chooseDropdown(page, page.getByLabel(th.filter_transactions), "pending");
-  await expect(page.getByRole("heading", { name: th.no_matching_transactions })).toBeVisible();
+  await expect(page.getByTestId("evm-wallet")).toContainText(th.in_app_wallet);
+  await expect(page.locator(".wallet-transaction")).toHaveCount(0);
+  await expect(page.getByTestId("wallet-balance")).toContainText("—");
   await noOverflow(page);
   await gotoReady(page, "/dashboard?view=settings");
   await expect(page.getByLabel(th.language, { exact: true })).toHaveCount(2);
@@ -449,8 +441,8 @@ test("page motion reveals content, preserves keyboard access, and respects reduc
   await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
 
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  await navigate(page, "In-app wallet");
-  await expect(page.getByTestId("wallet-balance")).toContainText("152.80");
+  await navigate(page, "EVM wallet");
+  await expect(page.getByTestId("wallet-balance")).toContainText("—");
   await expect(page.locator(".balance-card")).toHaveCSS("opacity", "1");
   const language = page.getByRole("combobox", { name: "Language", exact: true });
   await language.focus();

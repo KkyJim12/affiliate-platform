@@ -17,3 +17,18 @@ export interface EvmWalletDetails {
   explorerUrl: string;
   createdAt: string;
 }
+
+export interface EvmAssetBalance {
+  symbol: string;
+  decimals: number;
+  balanceUnits: string;
+  balance: string;
+}
+
+export interface EvmWalletBalances {
+  address: string;
+  chainId: number;
+  blockNumber: string;
+  native: EvmAssetBalance;
+  token: (EvmAssetBalance & { address: string }) | null;
+}

@@ -40,7 +40,7 @@ export default defineNuxtConfig({
     detectBrowserLanguage: { useCookie: true, cookieKey: "loop_locale", redirectOn: "root", fallbackLocale: "en" },
   },
   runtimeConfig: {
-    evm: { rpcUrl: "", chainId: "", tokenAddress: "", treasuryAddress: "", minConfirmations: "" },
+    evm: { rpcUrl: "", chainId: "", tokenAddress: "", treasuryAddress: "", minConfirmations: "", explorerApiKey: "" },
     public: { appUrl: "" },
   },
   app: {
@@ -51,7 +51,7 @@ export default defineNuxtConfig({
         {
           name: "description",
           content:
-            "Your three-layer binary matrix, 15 referral levels, and in-app USDT wallet. Sign in with your username and password.",
+            "Your three-layer binary matrix, 15 referral levels, and EVM wallet. Sign in with your username and password.",
         },
       ],
       link: [{ rel: "icon", type: "image/jpeg", href: "/logo.jpg" }],

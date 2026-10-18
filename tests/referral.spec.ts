@@ -124,8 +124,12 @@ test("members buy a referral code, connect a sponsor, and retain access in Thai 
     await page.reload();
     await expect(page.getByTestId("referral-code")).toHaveText(code);
     await page.goto("/dashboard?view=wallet");
-    await expect(page.getByTestId("wallet-balance")).toContainText("15.00");
-    await expect(page.locator(".wallet-transaction").filter({ hasText: "Referral activation" })).toContainText("−10.00");
+    await expect(page.getByTestId("evm-address")).toHaveText(/^0x[0-9a-fA-F]{40}$/);
+    await expect(page.locator(".wallet-transaction")).toHaveCount(0);
+    // Historic referral credits remain accounting records, never EVM balances.
+    const credits = await (await page.request.get("/api/wallet")).json();
+    expect(credits.available).toBe(15);
+    expect(credits.transactions.some((item: { type: string; amount: number }) => item.type === "referral_purchase" && item.amount === 10)).toBe(true);
     await post(page.request, "/api/auth/logout", {});
     await post(page.request, "/api/auth/login", { username: data.other.username, password });
     await page.goto(`/referrals?ref=${code}`);

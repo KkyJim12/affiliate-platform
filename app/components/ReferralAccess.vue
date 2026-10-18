@@ -6,7 +6,7 @@ const props = defineProps<{ preview?: boolean }>();
 const emit = defineEmits<{ updated: [] }>();
 const { t, tr, formatDate } = useLoopI18n();
 const { user } = useAccount();
-const { wallet } = useWallet();
+const { wallet, refreshWallet } = useWallet();
 const { authOpen, copy, notify } = useAppUI();
 const config = useRuntimeConfig();
 const route = useRoute();
@@ -22,6 +22,7 @@ const { data: program, error, status, refresh } = await useFetch<ReferralProgram
 const price = computed(() => program.value?.price ?? referralPrice);
 const available = computed(() => wallet.value?.available ?? 0);
 const canAfford = computed(() => !!wallet.value && available.value >= price.value);
+if (!props.preview) await refreshWallet();
 const inviteLink = computed(() => program.value?.code ? `${String(config.public.appUrl || origin).replace(/\/$/, "")}/referrals?ref=${program.value.code}` : "");
 
 onMounted(() => {
@@ -94,9 +95,9 @@ async function connectSponsor() {
           <h2>{{ t('referral.unlockTitle') }}</h2>
           <p>{{ t('referral.unlockHint') }}</p>
           <div class="referral-price"><strong>{{ formatUsdt(price) }}</strong><span>USDT<small>{{ t('referral.oneTime') }}</small></span></div>
-          <div v-if="!preview" class="referral-balance"><span>{{ t('ui.available_balance') }}</span><strong>{{ formatUsdt(available) }} USDT</strong></div>
+          <div v-if="!preview" class="referral-balance"><span>{{ t('referral.legacyCredits') }}</span><strong>{{ formatUsdt(available) }} USDT</strong></div>
           <button class="button button-orange referral-unlock-button" :disabled="!preview && (!canAfford || busy || status === 'pending')" @click="openPurchase">{{ preview ? t('ui.sign_in') : t('referral.buy', { amount: formatUsdt(price) }) }}<AppIcon name="ArrowRight" :size="16" /></button>
-          <p v-if="!preview && !canAfford" class="referral-funding-hint">{{ t('referral.fundingHint') }} <NuxtLink to="/dashboard?view=wallet">{{ t('referral.addFunds') }}<AppIcon name="ArrowUpRight" :size="13" /></NuxtLink></p>
+          <p v-if="!preview && !canAfford" class="referral-funding-hint">{{ t('referral.evmPaymentPending') }}</p>
           <span class="referral-card-note"><AppIcon name="ShieldCheck" :size="14" />{{ t('referral.purchaseNote') }}</span>
         </template>
       </section>

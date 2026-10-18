@@ -431,6 +431,12 @@ body { background: var(--canvas); color: var(--text-primary); }
   .landing-nav .nav-connect { display: none; }
   .matrix-dashboard .breadcrumbs strong { max-width: 70px; }
 }
+@media (max-width: 480px) {
+  .landing-nav:has(.profile-menu) { gap: 8px; }
+  .landing-nav:has(.profile-menu) .brand-logo { --brand-height: 32px; width: var(--brand-height); }
+  .landing-nav:has(.profile-menu) .nav-actions { gap: 6px; }
+  .landing-nav:has(.profile-menu) .language-switcher .dropdown-trigger > svg:first-child { display: none; }
+}
 @media (max-width: 360px) {
   .landing-nav:has(.profile-menu) { gap: 8px; }
   .landing-nav:has(.profile-menu) .brand-logo { --brand-height: 28px; }
