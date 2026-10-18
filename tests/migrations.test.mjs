@@ -42,10 +42,33 @@ test("PostgreSQL migrations are idempotent and enforce exact money, ownership an
   await assert.rejects(db.execute("INSERT INTO users VALUES ('duplicate', 'MEMBER', 'hash', 'UNASSIGNED-duplicate', NULL, '2026-10-18')"), { code: "23505" });
 }));
 
+test("Amoy wallet schema enforces owner, address, key encryption and network constraints", () => isolated(async db => {
+  await migrate(db.pool, sources);
+  await db.execute("INSERT INTO users VALUES ('u', 'member', 'hash', 'UNASSIGNED-u', NULL, '2026-10-18'), ('v', 'other', 'hash', 'UNASSIGNED-v', NULL, '2026-10-18')");
+  const address = `0x${"ab".repeat(20)}`;
+  const publicKey = `0x04${"1".repeat(128)}`;
+  const encrypted = JSON.stringify({ version: 3, Crypto: { ciphertext: "2".repeat(64) } });
+  const insert = (user, walletAddress, network, keystore = encrypted) => db.execute(
+    "INSERT INTO evm_wallets VALUES ($1, $2, $3, $4, $5, '2026-10-18')", user, walletAddress, publicKey, keystore, network);
+  await insert('u', address, 80002);
+  assert.equal((await db.one("SELECT chain_id FROM evm_wallets WHERE user_id = 'u'")).chain_id, 80002);
+  await assert.rejects(insert('missing', `0x${"3".repeat(40)}`, 80002), { code: "23503" });
+  await assert.rejects(insert('u', `0x${"3".repeat(40)}`, 80002), { code: "23505" });
+  await assert.rejects(insert('v', address.toUpperCase().replace('0X', '0x'), 80002), { code: "23505" });
+  await assert.rejects(insert('v', `0x${"3".repeat(40)}`, 137), { code: "23514" });
+  await assert.rejects(insert('v', 'LW-internal-wallet', 80002), { code: "23514" });
+  await assert.rejects(insert('v', `0x${"3".repeat(40)}`, 80002, '{}'), { code: "23514" });
+  await assert.rejects(db.transaction(async () => {
+    await db.execute("INSERT INTO users VALUES ('rollback', 'rollback', 'hash', 'UNASSIGNED-rollback', NULL, '2026-10-18')");
+    await insert('rollback', address, 80002);
+  }), { code: "23505" });
+  assert.equal(await db.one("SELECT id FROM users WHERE id = 'rollback'"), undefined);
+}));
+
 test("failed PostgreSQL migration batches roll back both schema and history", () => isolated(async db => {
   await migrate(db.pool, sources);
-  const broken = prepareMigrations([{ name: "0005_failure.sql", sql: "CREATE TABLE should_rollback (id TEXT); INSERT INTO nonexistent VALUES (1);" }]);
-  await assert.rejects(migrate(db.pool, [...sources, ...broken]), /0005_failure.sql/);
+  const broken = prepareMigrations([{ name: "0006_failure.sql", sql: "CREATE TABLE should_rollback (id TEXT); INSERT INTO nonexistent VALUES (1);" }]);
+  await assert.rejects(migrate(db.pool, [...sources, ...broken]), /0006_failure.sql/);
   assert.equal((await db.one("SELECT to_regclass('should_rollback') AS name")).name, null);
   assert.equal((await db.one("SELECT COUNT(*) AS count FROM schema_migrations")).count, sources.length);
   assert.deepEqual(await migrate(db.pool, sources), []);

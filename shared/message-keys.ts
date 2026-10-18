@@ -1,5 +1,7 @@
 // Source-message aliases for statuses, API errors, and activity records.
 export const messageKeys: Record<string, string> = {
+  "Create your Polygon testnet wallet first.": "evmWallet.createFirst",
+  "Your private key could not be unlocked. Please contact support.": "evmWallet.unlockFailed",
   "Explorer": "explorer.title",
   "Administrator access is required.": "admin.errors.access",
   "Administrator credentials are incorrect.": "admin.errors.credentials",

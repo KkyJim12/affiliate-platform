@@ -1,4 +1,5 @@
 import { accountFor, assertSameOrigin, createSession, findUser, rateLimit, verifyPassword } from "../../utils/auth";
+import { ensureEvmWallet } from "../../utils/evm-wallet";
 export default defineEventHandler(async (event) => {
     assertSameOrigin(event);
     await rateLimit(event, "login", 30);
@@ -11,6 +12,7 @@ export default defineEventHandler(async (event) => {
     const valid = await verifyPassword(password, user?.password_hash);
     if (!user || !valid || user.status === "suspended")
         throw createError({ statusCode: 401, statusMessage: "Username or password is incorrect." });
+    await ensureEvmWallet(user.id, password);
     await createSession(event, user.id);
     return { user: await accountFor(user) };
 });

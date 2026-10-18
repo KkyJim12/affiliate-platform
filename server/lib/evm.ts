@@ -1,9 +1,9 @@
 import { createPublicClient, erc20Abi, formatUnits, http, parseEventLogs } from "viem";
 import type { Address, Hash, Transport } from "viem";
-import { bsc, mainnet, polygon, sepolia } from "viem/chains";
+import { bsc, mainnet, polygon, polygonAmoy, sepolia } from "viem/chains";
 import { evmAddress, ledgerDecimals, ledgerUnitsToToken, parseTokenAmount, tokenUnitsToLedger } from "../../shared/evm.ts";
 
-export const supportedEvmChains = [mainnet, bsc, polygon, sepolia] as const;
+export const supportedEvmChains = [mainnet, bsc, polygon, polygonAmoy, sepolia] as const;
 
 export interface EvmConfigInput {
   rpcUrl: string;

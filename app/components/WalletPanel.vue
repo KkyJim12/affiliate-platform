@@ -78,6 +78,7 @@ function closeAction() { action.value = null; password.value = ""; }
     </div>
     <p v-if="walletError && !preview" class="form-error" role="alert">{{ tr(walletError) }}</p>
     <p v-if="dashboardError && !preview" class="form-error" role="alert">{{ tr(dashboardError) }}</p>
+    <EvmWalletCard v-if="!preview && !compact" />
     <div v-if="!compact" class="wallet-details-row">
       <article class="panel wallet-detail"><span>{{ t('ui.pending_funding_requests') }}</span><strong>{{ money(pendingFunding) }} <small>USDT</small></strong><p>{{ t('ui.awaiting_verification_and_settlement') }}</p></article>
       <article class="panel wallet-detail"><span>{{ t('ui.total_commissions_credited') }}</span><strong>{{ formatUsdt(preview ? 152.8 : wallet?.earned || 0) }} <small>USDT</small></strong><p>{{ t('ui.completed_credits_to_your_wallet') }}</p></article>

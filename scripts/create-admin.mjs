@@ -4,6 +4,7 @@ import { Writable } from "node:stream";
 import { db, transaction } from "../server/utils/database.ts";
 import { hashPassword } from "../server/lib/password.ts";
 import { migrate, readMigrations } from "../server/lib/migrations.ts";
+import { generateEncryptedEvmWallet } from "../server/lib/evm-wallet.ts";
 let database;
 try {
     let username = process.env.LOOP_ADMIN_USERNAME || "";
@@ -38,9 +39,11 @@ try {
         throw new Error("That username already exists. Choose a new administrator username.");
     const id = randomUUID();
     const passwordHash = await hashPassword(password);
+    const evmWallet = await generateEncryptedEvmWallet(password);
     await transaction(async () => {
         await database.execute("INSERT INTO users (id, username, password_hash, referral_code, sponsor_id, created_at) VALUES ($1, $2, $3, $4, NULL, $5)", id, username, passwordHash, `LOOP-${randomUUID().slice(0, 8).toUpperCase()}`, new Date().toISOString());
         await database.execute("INSERT INTO wallets (id, user_id) VALUES ($1, $2)", `LW-${randomUUID()}`, id);
+        await database.execute("INSERT INTO evm_wallets (user_id, address, public_key, encrypted_keystore, chain_id, created_at) VALUES ($1, $2, $3, $4, $5, $6)", id, evmWallet.address, evmWallet.public_key, evmWallet.encrypted_keystore, evmWallet.chain_id, evmWallet.created_at);
         await database.execute("INSERT INTO user_access (user_id, role) VALUES ($1, 'admin')", id);
         await database.execute("INSERT INTO admin_audit VALUES ($1, $2, 'admin_created', $3, $4)", randomUUID(), id, username, new Date().toISOString());
     });

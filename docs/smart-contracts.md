@@ -1,6 +1,7 @@
 # EVM smart contract integration and function analysis
 
-Viem is the project's TypeScript EVM library. It fits Nuxt's ESM setup and
+Viem handles contract reads; Ethers generates and encrypts account wallets.
+Viem fits Nuxt's ESM setup and
 provides typed ERC-20 calls, ABI encoding/decoding and transaction inspection.
 The initial integration supplies server-side read helpers. No contract address
 or ABI for a deployed UNXO contract was provided, and the repository has no
@@ -12,7 +13,7 @@ Copy the five `NUXT_EVM_*` entries from [`.env.example`](../.env.example) into
 your local environment and supply an RPC URL, chain ID, token contract, treasury
 address and positive minimum confirmation count. All five are required when
 using the reader. Supported chain definitions are Ethereum (1), BNB Chain (56),
-Polygon (137) and Sepolia (11155111). Extend `supportedEvmChains` in
+Polygon (137), Polygon Amoy (80002) and Sepolia (11155111). Extend `supportedEvmChains` in
 [`server/lib/evm.ts`](../server/lib/evm.ts) for another EVM network.
 
 Choose the actual token contract for that chain; an asset symbol does not
@@ -50,10 +51,50 @@ const evidence = await reader.inspectTransfer({
 // evidence.settlementReference === "evm:<chainId>:<hash>:<logIndex>"
 ```
 
-These are internal helpers, with no new HTTP endpoint or member UI. The funding
-and administrator APIs still require the existing manual settlement review.
+These contract-reading helpers are internal. Account-wallet endpoints and their
+UI are described below; funding still requires the existing manual settlement review.
 Results use strings for blockchain integers, so they can be serialized to JSON.
 The optional transport parameter on `createEvmReader` supports offline RPC tests.
+
+## Polygon Amoy account wallets
+
+Every new member account and CLI-created administrator receives a random Ethers
+wallet in the same PostgreSQL transaction as its account and ledger wallet.
+Wallet generation is offline, so registration does not depend on an RPC server.
+Existing accounts receive a wallet after a successful password sign-in, or by
+confirming their password on the wallet page. Concurrent provisioning keeps one
+wallet; successful logins and retries preserve its address and encrypted key.
+
+The network is fixed to [Polygon Amoy](https://docs.polygon.technology/tools/dApp-development/common-tools/remix/):
+chain ID `80002`, test `POL`, RPC `https://rpc-amoy.polygon.technology/` and
+explorer `https://amoy.polygonscan.com`. EVM keys themselves work across EVM
+networks; the account record and UI designate this wallet for Amoy test assets.
+Creating an address does not deploy a contract or allocate test tokens.
+
+`evm_wallets` stores the owning user ID, unique checksummed address, uncompressed
+public key, encrypted JSON keystore, fixed chain ID and creation time. It stores
+no plaintext private key or mnemonic. The Ethers V3 keystore uses random salt/IV,
+scrypt (`N=131072`, `r=8`, `p=1`), AES-128-CTR and its standard integrity MAC.
+The encryption password is the member's account password; password hashing for
+authentication remains separate. No shared encryption secret is stored in `.env`.
+[Ethers wallet encryption](https://docs.ethers.org/v6/api/wallet/)
+
+The member wallet page shows address/public key and an Amoy explorer link. An
+authenticated, same-origin POST checks the current password before decrypting
+the owner's key. A normal GET never reads the encrypted keystore column. Key
+reveal is rate limited, not cached, never sent through SSR, and cleared from the
+component on dismissal, account changes, navigation, hidden tabs or after
+30 seconds. Strings cannot be securely erased from JavaScript memory; clearing
+the references and UI bounds the exposure rather than guaranteeing memory erasure.
+The Copy action explicitly places the revealed key on the user's clipboard.
+
+Back up PostgreSQL, including `evm_wallets`, to preserve the encrypted keys.
+There is no recovery mechanism for a forgotten encryption password. Any future
+password-change feature must decrypt with the old password and re-encrypt with
+the new password atomically; changing only `password_hash` would orphan the key.
+The server handles plaintext passwords and keys briefly during these operations;
+use HTTPS for deployment. This implements testnet key storage/reveal, with
+signing, transfers and automated funding still requiring their own workflows.
 
 ## Functions available now
 
@@ -80,9 +121,9 @@ must serve state at those blocks.
 | --- | --- | --- |
 | `server/api/wallet/deposit.post.ts` | Bind a pending funding request to an external payment | Best first integration; request creation must still leave funds pending |
 | `server/api/admin/payments/[id].post.ts` | Use inspected receipt evidence during approval | Existing row locks, atomic credit, review and audit are useful; automatic credit needs durable event ownership and consumption records first |
-| `server/api/wallet/transfer.post.ts` | Optional future token withdrawal or external transfer | Current transfers are between internal accounts. A token transaction has a separate pending/confirmed lifecycle and needs a signer and wallet-address ownership model |
+| `server/api/wallet/transfer.post.ts` | Optional future token withdrawal or external transfer | Current transfers are between internal accounts. External token transfers need password-unlocked signing, ledger reservations and a pending/confirmed lifecycle |
 | `server/api/referrals/activate.post.ts` | Possible `activateReferral` contract operation | Currently debits 10 USDT from the ledger once. Decide which system collects the fee before introducing an on-chain payment, so one activation cannot charge twice |
-| `server/api/referrals/sponsor.post.ts` | Possible immutable sponsor registration | Preserve the existing sponsor, self-referral and cycle rules. Wallet addresses need authenticated account links before becoming sponsor identities |
+| `server/api/referrals/sponsor.post.ts` | Possible immutable sponsor registration | Preserve the existing sponsor, self-referral and cycle rules. Resolve generated wallet ownership from the account record before using addresses as on-chain identities |
 | `shared/plan.ts` | Possible future rank and commission contract math | Projection code only. Binary placement, qualification, missing-upline allocation, rounding, recycling and upgrade rules need a complete specification before any payout implementation |
 | `server/utils/explorer.ts` | Include confirmed on-chain receipts in transaction details | Persist chain ID, token, hash, event index and block hash separately from internal ledger IDs |
 
@@ -126,7 +167,9 @@ A public transaction hash can be copied by another account. Before automated
 funding, establish who owns the payment through a verified account/wallet link,
 an account-specific deposit address, or a contract event containing a validated
 deposit intent. The caller-supplied `senderAddress` in this helper is only an
-expectation; it does not authenticate the requesting member.
+expectation; it does not authenticate the requesting member. For generated
+account wallets, resolve the expected sender from the session owner's
+`evm_wallets` row instead of accepting an arbitrary address from the browser.
 
 Store and atomically consume `(chain_id, transaction_hash, log_index)` with the
 funding request, block hash, token, amount and audit record in a new additive

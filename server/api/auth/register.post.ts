@@ -2,6 +2,8 @@ import { accountFor, assertSameOrigin, createSession, hashPassword, randomUUID, 
 import { db, transaction } from "../../utils/database";
 import { platformSettings } from "../../utils/admin";
 import { activeSponsor } from "../../utils/referral";
+import { generateEncryptedEvmWallet } from "../../lib/evm-wallet";
+import { insertEvmWallet } from "../../utils/evm-wallet";
 export default defineEventHandler(async (event) => {
     assertSameOrigin(event);
     await rateLimit(event, "register", 10);
@@ -21,12 +23,14 @@ export default defineEventHandler(async (event) => {
     if (sponsorCode && !sponsor)
         throw createError({ statusCode: 400, statusMessage: "That invite code was not found. Check it or leave it blank." });
     const user: UserRow = { id: randomUUID(), username, password_hash: await hashPassword(password), referral_code: `UNASSIGNED-${randomUUID()}`, sponsor_id: sponsor?.id || null, created_at: new Date().toISOString() };
+    const evmWallet = await generateEncryptedEvmWallet(password);
     try {
         await transaction(async () => {
             if (sponsorCode && (await activeSponsor(sponsorCode))?.id !== sponsor?.id)
                 throw createError({ statusCode: 400, statusMessage: "That invite code was not found. Check it or leave it blank." });
             await db().execute("INSERT INTO users VALUES ($1, $2, $3, $4, $5, $6)", user.id, user.username, user.password_hash, user.referral_code, user.sponsor_id, user.created_at);
             await db().execute("INSERT INTO wallets (id, user_id) VALUES ($1, $2)", `LW-${randomUUID()}`, user.id);
+            await insertEvmWallet(user.id, evmWallet);
         });
     }
     catch (error) {

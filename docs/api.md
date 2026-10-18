@@ -18,6 +18,9 @@ rate limited.
 | POST | `/api/auth/logout` | Revoke the current session |
 | GET | `/api/dashboard` | Own completed commissions, pending funding, transfer count and referral totals |
 | GET | `/api/wallet` | Own wallet balance and recent transactions |
+| GET | `/api/wallet/evm` | Own Polygon Amoy address, public key and network metadata; no secrets |
+| POST | `/api/wallet/evm` | Password-confirmed, idempotent wallet creation for an existing account |
+| POST | `/api/wallet/evm/reveal` | Password-confirmed private key reveal for the session owner |
 | POST | `/api/wallet/deposit` | Submit a funding request; does not credit the balance |
 | POST | `/api/wallet/transfer` | Password-confirmed transfer to another active member |
 | GET | `/api/referrals` | Own direct members and referral tree |
@@ -41,6 +44,33 @@ Ownership always comes from the session, never a client-provided account or wall
 ID. Admin endpoints require an active administrator session. Anonymous requests
 to protected endpoints return 401; member access to admin endpoints returns 403.
 Validation and state conflicts use 400/409, and throttled requests use 429.
+
+## Polygon Amoy account wallet
+
+Registration atomically creates the user, internal ledger wallet and a random
+Ethers wallet pinned to Polygon Amoy (chain ID `80002`). Existing members and
+administrators get a wallet on their next successful password sign-in. An older
+active session can provision one with `POST /api/wallet/evm`. Existing keys are
+never replaced by login or provisioning retries.
+
+`GET /api/wallet/evm` returns `{ wallet }`; the value is `null` for an account
+that has not yet been provisioned. Public details include `address`, `publicKey`,
+`chainId`, `network`, `currency`, `testnet`, `explorerUrl` and `createdAt`.
+The private key and encrypted keystore are excluded from normal account/wallet
+responses and SSR data.
+
+Both POST endpoints accept `{ "password": "your-account-password" }`, require
+the session owner and a matching Origin, and allow five attempts per account/IP
+per 15 minutes independently for creation and reveal. Reveal returns
+`{ privateKey }` only after checking the current account password and decrypting
+the stored keystore. All API responses use `Cache-Control: no-store`; submitted
+account IDs and wallet IDs never select the owner. Suspension/logout removes
+access. The UI keeps the revealed key in local component memory and clears it
+on closing, navigation, account changes, hidden tabs and after 30 seconds.
+
+See [wallet encryption and lifecycle](smart-contracts.md#polygon-amoy-account-wallets)
+for storage and recovery details. Amoy test assets are separate from the USDT
+ledger; these endpoints do not transfer or fund tokens.
 
 ## Referral activation and sponsor linking
 

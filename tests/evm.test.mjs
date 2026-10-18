@@ -16,6 +16,7 @@ const expectation = { hash, logIndex: 2, senderAddress, amount: "12.345678" };
 test("optional configuration rejects partial values, unknown chains, bad addresses and weak confirmation input", () => {
   assert.equal(resolveEvmConfig({ rpcUrl: "", chainId: "", tokenAddress: "", treasuryAddress: "", minConfirmations: "" }), null);
   assert.equal(resolveEvmConfig(config).chainId, 137);
+  assert.equal(resolveEvmConfig({ ...config, chainId: "80002" }).chainId, 80002);
   for (const changes of [{ rpcUrl: "" }, { rpcUrl: "file:///test" }, { chainId: "999" }, { chainId: "1.0" },
     { tokenAddress: zeroAddress }, { treasuryAddress: "LW-internal-id" }, { treasuryAddress: tokenAddress },
     { minConfirmations: "" }, { minConfirmations: "0" }, { minConfirmations: "1e2" }, { minConfirmations: "9007199254740992" }]) {

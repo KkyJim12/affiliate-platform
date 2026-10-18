@@ -1,4 +1,5 @@
 import { accountFor, assertSameOrigin, createSession, findUser, rateLimit, verifyPassword } from "../../utils/auth";
+import { ensureEvmWallet } from "../../utils/evm-wallet";
 export default defineEventHandler(async (event) => {
     assertSameOrigin(event);
     await rateLimit(event, "admin-login", 15);
@@ -11,6 +12,7 @@ export default defineEventHandler(async (event) => {
     const valid = await verifyPassword(password, user?.password_hash);
     if (!user || !valid || user.role !== "admin" || user.status !== "active")
         throw createError({ statusCode: 401, statusMessage: "Administrator credentials are incorrect." });
+    await ensureEvmWallet(user.id, password);
     await createSession(event, user.id);
     return { user: await accountFor(user) };
 });

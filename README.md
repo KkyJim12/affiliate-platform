@@ -45,17 +45,26 @@ Member overview totals come from `/api/dashboard`, including completed ledger co
 
 - Usernames are case-insensitive, 3–24 characters, beginning with a letter. Passwords are 12–128 characters, salted and hashed with scrypt on the server.
 - Sessions use random tokens in HttpOnly, SameSite=Strict cookies with a seven-day expiry. Only token hashes are stored. HTTPS requests receive Secure cookies. Mutating requests require a matching Origin; authentication and wallet writes are rate limited.
-- Each registration atomically creates a user and zero-balance wallet. Personal referral codes are generated only after a one-time 10 USDT activation from the available wallet balance. Only activated codes from active accounts can establish a sponsor, at registration or later on the referral page. Account, referral, and wallet APIs resolve ownership from the session.
+- Each registration atomically creates a user, zero-balance ledger wallet and password-encrypted Polygon Amoy wallet. Personal referral codes are generated only after a one-time 10 USDT activation from the available wallet balance. Only activated codes from active accounts can establish a sponsor, at registration or later on the referral page. Account, referral, and wallet APIs resolve ownership from the session.
 - PostgreSQL persists accounts, hashed credentials, sessions, wallet balances, and transaction records. Set `DATABASE_URL`; there is no SQLite fallback. Use the Node server build with a reachable PostgreSQL database; static generation cannot serve the account APIs.
 - Money is stored as BIGINT integer millionths of USDT with nonnegative, safe-integer balance constraints. Internal transfers verify the sender's password and atomically debit/credit the two wallets with matching ledger entries. Wallet row locks use consistent ordering to protect concurrent transfers. Request keys prevent duplicate transfers; insufficient balances and self-transfers are rejected. Referral activation locks the wallet before checking eligibility; payment review locks both request and wallet before settlement.
-- Funding requests create pending records and never increase the available balance. Only an authenticated administrator can credit a request after confirming receipt and recording a unique settlement reference. Automatic blockchain verification, withdrawals, custody, and reconciliation still require integration. Do not send funds to an internal wallet ID; it is not a blockchain address.
+- Funding requests create pending records and never increase the available balance. Only an authenticated administrator can credit a request after confirming receipt and recording a unique settlement reference. Automatic blockchain verification, withdrawals, signing and reconciliation still require integration. Do not send funds to an internal wallet ID; it is not a blockchain address.
 - Password recovery, password changes, and multi-factor authentication are not implemented.
 
 ## Smart contract library
 
+Ethers generates an account wallet on Polygon Amoy testnet (chain ID 80002).
+PostgreSQL stores its address, public key and V3 keystore encrypted with the
+account password. The wallet page displays public details; revealing the private
+key requires that password and hides it after 30 seconds. Existing accounts get
+a wallet on their next sign-in or through password confirmation on the wallet
+page. Generation needs no RPC or `.env` encryption key. Back up the database and
+retain the password; lost passwords cannot recover encrypted keys. See
+[wallet encryption and lifecycle](docs/smart-contracts.md#polygon-amoy-account-wallets).
+
 Viem supplies optional EVM token reads, allowance checks, exact token/ledger amount
-conversion, and transfer receipt inspection for Ethereum, BNB Chain, Polygon and
-Sepolia. Configure the private `NUXT_EVM_*` entries in `.env.example` when using
+conversion, and transfer receipt inspection for Ethereum, BNB Chain, Polygon,
+Amoy and Sepolia. Configure the private `NUXT_EVM_*` entries in `.env.example` when using
 the server helpers. See [smart contract functions and integration analysis](docs/smart-contracts.md)
 for usage, the mapping to funding/referral flows, and proposed future contract
 functions. Funding approval remains manual; automatic settlement and withdrawals
