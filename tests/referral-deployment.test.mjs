@@ -29,8 +29,8 @@ test('Amoy deployment command deploys both contracts, preserves env settings and
     await fs.writeFile(path.join(directory, '.env'), Object.entries(values).map(([key, value]) => `${key}=${value}`).join('\n') + '\n');
     const environment = { ...process.env };
     for (const key of Object.keys(values)) delete environment[key];
-    const run = () => new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, ['--env-file=.env', path.join(root, 'scripts/deploy-referral.mjs'), '--broadcast'], { cwd: directory, env: environment });
+    const run = (script = 'scripts/deploy-referral.mjs', flags = ['--broadcast']) => new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, ['--env-file=.env', path.join(root, script), ...flags], { cwd: directory, env: environment });
       let output = '';
       child.stdout.on('data', data => { output += data; });
       child.stderr.on('data', data => { output += data; });
@@ -60,6 +60,28 @@ test('Amoy deployment command deploys both contracts, preserves env settings and
     assert.ok(saved.includes(`NUXT_REFERRAL_CONTRACT_ADDRESS=${distributorAddress}`));
     assert.ok(saved.includes(`NUXT_EVM_TOKEN_ADDRESS=${tokenAddress}`));
     assert.ok(saved.includes('DATABASE_URL=postgresql://unused/untouched'));
+    // Verification needs the original constructors even after env changes. It
+    // can prepare both contracts without any wallet keys or explorer API key.
+    const changed = saved.replace(`REFERRAL_OWNER_ADDRESS=${owner.address}`, `REFERRAL_OWNER_ADDRESS=${fee.address}`)
+      .replace(`REFERRAL_FEE_RECIPIENT_ADDRESS=${fee.address}`, `REFERRAL_FEE_RECIPIENT_ADDRESS=${owner.address}`)
+      .replace(`REFERRAL_DEPLOYER_PRIVATE_KEY=${deployer.privateKey}`, 'REFERRAL_DEPLOYER_PRIVATE_KEY=')
+      .replace(`NUXT_REFERRAL_AUTHORITY_PRIVATE_KEY=${authority.privateKey}`, 'NUXT_REFERRAL_AUTHORITY_PRIVATE_KEY=');
+    await fs.writeFile(path.join(directory, '.env'), changed);
+    const verification = await run('scripts/verify-referral.mjs', ['--dry-run']);
+    assert.equal(verification.code, 0, 'Keyless verification dry run must succeed using the saved deployment.');
+    assert.match(verification.output, /Dry run complete/);
+    const info = JSON.parse(await fs.readFile(path.join(directory, '.data/contracts/verification/ReferralDistributor.settings.json'), 'utf8'));
+    assert.equal(info.constructorSource, 'saved deployment');
+    const { AbiCoder } = await import('ethers');
+    assert.equal(info.constructorArguments, AbiCoder.defaultAbiCoder().encode(['address', 'address', 'address', 'address'], [tokenAddress, owner.address, fee.address, authority.address]).slice(2));
+    const source = path.join(directory, 'contracts/AmoyTestUSDT.sol');
+    const originalSource = await fs.readFile(source, 'utf8');
+    await fs.appendFile(source, '\n// changed after deployment\n');
+    const modified = await run('scripts/verify-referral.mjs', ['--dry-run']);
+    assert.equal(modified.code, 1);
+    assert.match(modified.output, /Source changed since compilation/);
+    await fs.writeFile(source, originalSource);
+    await fs.writeFile(path.join(directory, '.env'), saved);
     assert.equal((await run()).code, 1, 'A configured distributor must prevent duplicate deployment.');
     assert.equal(await provider.getTransactionCount(deployer.address), 2);
   } finally {

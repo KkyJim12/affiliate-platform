@@ -72,6 +72,10 @@ recipient and funded deployer fields in `.env`, inspect
 `AmoyTestUSDT` token and saves both confirmed contract addresses. See
 [deployment, authorization and recovery](docs/referral-contract.md).
 
+Verify both deployed contracts with `npm run contracts:verify` using
+`ETHERSCAN_API_KEY` in `.env`. Preview the exact source and constructor inputs
+with `npm run contracts:verify -- --dry-run`.
+
 The member wallet is one EVM balance card on both the overview and wallet page.
 It shows the existing address, network, live balances, Receive and wallet details.
 The old internal balance, LW ID, funding requests, member transfers and ledger

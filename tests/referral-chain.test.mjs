@@ -1,22 +1,22 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { network } from 'hardhat';
-import { BrowserProvider, ContractFactory, Transaction, Wallet, ZeroAddress, id, parseEther, toBeHex } from 'ethers';
+import { BrowserProvider, ContractFactory, FeeData, Transaction, Wallet, ZeroAddress, id, parseEther, parseUnits, toBeHex } from 'ethers';
 import { ReferralChainClient, uplineHash } from '../server/lib/referral-chain.ts';
 import { compileContracts } from '../scripts/lib/compile-contracts.mjs';
 
 const artifacts = compileContracts({ includeTests: true });
-async function fixture({ confirmations = 1, funds = 100n } = {}) {
+async function fixture({ confirmations = 1, funds = 100n, decimals = 6 } = {}) {
   const connection = await network.create();
   const provider = new BrowserProvider(connection.provider, undefined, { cacheTimeout: -1 }); provider.pollingInterval = 10;
   const deployer = await provider.getSigner(0), buyer = Wallet.createRandom(), authority = Wallet.createRandom(), fee = Wallet.createRandom();
-  const token = await new ContractFactory(artifacts.TestPaymentToken.abi, artifacts.TestPaymentToken.bytecode, deployer).deploy(6);
+  const token = await new ContractFactory(artifacts.TestPaymentToken.abi, artifacts.TestPaymentToken.bytecode, deployer).deploy(decimals);
   await token.waitForDeployment();
   const contract = await new ContractFactory(artifacts.ReferralDistributor.abi, artifacts.ReferralDistributor.bytecode, deployer)
     .deploy(await token.getAddress(), await deployer.getAddress(), fee.address, authority.address);
   await contract.waitForDeployment();
   await provider.send('hardhat_setBalance', [buyer.address, toBeHex(parseEther('100'))]);
-  if (funds) await (await token.mint(buyer.address, funds * 1_000_000n)).wait();
+  if (funds) await (await token.mint(buyer.address, funds * 10n ** BigInt(decimals))).wait();
   const config = { rpcUrl: 'http://127.0.0.1:8545', contractAddress: await contract.getAddress(), tokenAddress: await token.getAddress(), authorityPrivateKey: authority.privateKey, minConfirmations: confirmations };
   const client = new ReferralChainClient(config, provider);
   const uplines = Array(15).fill(ZeroAddress);
@@ -47,6 +47,49 @@ test('signed purchase batches bind chain, spender, exact allowance, nonce order 
     await f.client.broadcast(batch[1].raw);
     assert.equal(await f.token.balanceOf(f.fee.address), 10_000_000n);
     await assert.rejects(f.client.verifyPurchase(batch[1].hash, { ...f.payload, quote: { ...f.payload.quote, level: 2 } }), /authorization/);
+  } finally { await f.close(); }
+});
+
+for (const decimals of [6, 18]) test(`exactly 0.003 POL funds approvals and all 15 cold payout recipients at 3 gwei for a ${decimals}-decimal token`, async () => {
+  const f = await fixture({ decimals });
+  try {
+    const fee = parseUnits('3', 'gwei');
+    f.provider.getFeeData = async () => new FeeData(fee, fee, fee);
+    const uplines = Array.from({ length: 15 }, () => Wallet.createRandom().address);
+    f.payload.uplines = uplines;
+    f.payload.quote.uplinesHash = uplineHash(uplines);
+    f.payload.recipients = uplines.map(() => ({ userId: null, reason: 'upline' }));
+    f.payload.signature = await f.client.sign(f.payload.quote);
+    assert.equal((await f.client.inspect(f.buyer.address)).gasBudget, '0.003');
+    await f.provider.send('hardhat_setBalance', [f.buyer.address, toBeHex(parseEther('0.003') - 1n)]);
+    await assert.rejects(f.client.preparePurchase(f.buyer, f.payload, decimals, parseEther('0.003')), /INSUFFICIENT_GAS/);
+    await f.provider.send('hardhat_setBalance', [f.buyer.address, toBeHex(parseEther('0.003'))]);
+    const batch = await f.client.preparePurchase(f.buyer, f.payload, decimals, parseEther('0.003'));
+    const decoded = batch.map(item => Transaction.from(item.raw));
+    assert.deepEqual(decoded.map(tx => tx.gasLimit), [60_000n, 800_000n]);
+    assert.ok(decoded.reduce((total, tx) => total + tx.gasLimit * tx.maxFeePerGas, 0n) <= parseEther('0.003'));
+    for (const item of batch) await f.client.broadcast(item.raw);
+    const evidence = await f.client.verifyPurchase(batch.at(-1).hash, f.payload);
+    assert.equal(evidence.status, 'confirmed'); assert.equal(evidence.allocations.length, 19);
+    for (const upline of uplines) assert.ok(await f.token.balanceOf(upline) > 0n);
+  } finally { await f.close(); }
+});
+
+test('fee increases and zero-first approvals can raise the live requirement above the configured minimum', async () => {
+  const f = await fixture();
+  try {
+    const fee = parseUnits('30', 'gwei');
+    f.provider.getFeeData = async () => new FeeData(fee, fee, fee);
+    await (await f.token.connect(f.buyer.connect(f.provider)).approve(await f.contract.getAddress(), 15_000_000n)).wait();
+    assert.equal((await f.client.inspect(f.buyer.address, 1)).gasBudget, '0.0276');
+    assert.equal((await f.client.inspect(f.buyer.address, 2)).gasBudget, '0.03174');
+    const higherFee = parseUnits('60', 'gwei');
+    f.provider.getFeeData = async () => new FeeData(higherFee, higherFee, fee);
+    assert.ok(parseEther((await f.client.inspect(f.buyer.address)).gasBudget) > parseEther('0.003'));
+    await assert.rejects(f.client.preparePurchase(f.buyer, f.payload, 6, parseEther('0.003')), /GAS_PRICE_CHANGED/);
+    const configured = new ReferralChainClient({ ...f.config, minGasBalance: '0.05' }, f.provider);
+    assert.equal(configured.minimumGasBalance, parseEther('0.05'));
+    assert.throws(() => new ReferralChainClient({ ...f.config, minGasBalance: 'invalid' }, f.provider), /minimum POL/);
   } finally { await f.close(); }
 });
 

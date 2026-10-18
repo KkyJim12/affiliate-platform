@@ -40,7 +40,7 @@ export default defineNuxtConfig({
     detectBrowserLanguage: { useCookie: true, cookieKey: "loop_locale", redirectOn: "root", fallbackLocale: "en" },
   },
   runtimeConfig: {
-    referral: { paymentMode: "contract", contractAddress: "", authorityPrivateKey: "", minConfirmations: "2" },
+    referral: { paymentMode: "contract", contractAddress: "", authorityPrivateKey: "", minConfirmations: "2", minGasBalance: "0.003" },
     evm: { rpcUrl: "", chainId: "", tokenAddress: "", treasuryAddress: "", minConfirmations: "", explorerApiKey: "" },
     public: { appUrl: "" },
   },

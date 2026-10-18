@@ -31,7 +31,7 @@ async function fixture(decimals = 6) {
   }
   async function buy(signed) {
     await (await token.connect(buyer).approve(await contract.getAddress(), await contract.priceForLevel(signed.value.level))).wait();
-    return (await contract.connect(buyer).purchase(signed.value, signed.uplines, signed.signature)).wait();
+    return (await contract.connect(buyer).purchase(signed.value, signed.uplines, signed.signature, { gasLimit: 800_000n })).wait();
   }
   return { provider, connection, owner, buyer, fee, authority, token, contract, uplines, multiplier, quote, buy,
     close: async () => { provider.destroy(); await connection.close(); } };

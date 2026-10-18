@@ -117,15 +117,34 @@ test('members buy and upgrade on-chain with English/Thai and responsive layouts'
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   const account = await register(page.request); await fund(account.wallet.address);
+  const rpc = provider();
+  try { await rpc.send('hardhat_setBalance', [account.wallet.address, toBeHex(parseEther('0.000001'))]); }
+  finally { rpc.destroy(); }
   await page.goto('/referrals');
   await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as HTMLElement & { __vue_app__?: unknown })?.__vue_app__));
   await expect(page.getByTestId('chain-token-balance')).toContainText('100.00');
+  const purchaseButton = page.getByRole('button', { name: 'Buy level 1 · 10.00 tUSDT', exact: true });
+  await expect(purchaseButton).toBeDisabled();
+  await expect(page.getByTestId('chain-gas-balance')).toHaveText('0.000001 POL');
+  await expect(page.getByTestId('chain-gas-budget')).toContainText('POL');
+  await expect(page.getByTestId('chain-insufficient-gas')).toContainText('Your balance is 0.000001 POL');
+  await expect(page.getByTestId('chain-insufficient-token')).toHaveCount(0);
+  await fund(account.wallet.address, 0n);
+  const minimumGasRpc = provider();
+  try { await minimumGasRpc.send('hardhat_setBalance', [account.wallet.address, toBeHex(parseEther('0.003'))]); }
+  finally { minimumGasRpc.destroy(); }
+  await page.getByRole('button', { name: 'Refresh blockchain status', exact: true }).click();
+  await expect(page.getByTestId('chain-gas-budget')).toHaveText('0.003 POL');
+  await expect(purchaseButton).toBeEnabled();
+  await expect(page.getByTestId('chain-insufficient-gas')).toHaveCount(0);
   await page.getByRole('button', { name: 'Buy level 1 · 10.00 tUSDT', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('Maximum gas budget');
   await page.getByLabel('Confirm with your password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Pay 10.00 tUSDT on-chain', exact: true }).click();
   await expect(page.getByTestId('referral-code')).toHaveText(/^LOOP-/, { timeout: 30000 });
   await expect(page.getByTestId('referral-level')).toHaveText('Level 1 / 15');
+  await fund(account.wallet.address, 0n);
+  await page.getByRole('button', { name: 'Refresh blockchain status', exact: true }).click();
   await page.getByRole('button', { name: 'Buy level 2 · 20.00 tUSDT', exact: true }).click();
   await page.getByLabel('Confirm with your password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Pay 20.00 tUSDT on-chain', exact: true }).click();

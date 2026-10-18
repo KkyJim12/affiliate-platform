@@ -11,6 +11,8 @@
     "contracts:compile": "node scripts/compile-contracts.mjs",
     "contracts:prepare": "node --env-file-if-exists=.env scripts/prepare-referral.mjs",
     "contracts:deploy": "node --env-file-if-exists=.env scripts/deploy-referral.mjs",
+    "contracts:verify": "node --env-file-if-exists=.env scripts/verify-referral.mjs",
+    "test:verification": "node --test tests/referral-verification.test.mjs",
     "test:distributor": "node --test tests/referral-contract.test.mjs tests/referral-chain.test.mjs tests/referral-deployment.test.mjs",
     "test:onchain": "node scripts/test-onchain.mjs",
     "build": "nuxt build",

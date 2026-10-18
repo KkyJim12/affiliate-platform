@@ -28,7 +28,7 @@ export function referralChainClient() {
   if (config.evm.chainId && Number(config.evm.chainId) !== polygonTestnet.chainId) throw new Error("Referral purchases require Polygon Amoy.");
   return client ??= new ReferralChainClient({ rpcUrl: config.evm.rpcUrl || polygonTestnet.rpcUrl,
     contractAddress: config.referral.contractAddress, tokenAddress: config.evm.tokenAddress,
-    authorityPrivateKey: config.referral.authorityPrivateKey, minConfirmations: Number(config.referral.minConfirmations) });
+    authorityPrivateKey: config.referral.authorityPrivateKey, minConfirmations: Number(config.referral.minConfirmations), minGasBalance: config.referral.minGasBalance });
 }
 function requireChainClient() {
   const result = referralChainClient();
@@ -51,7 +51,8 @@ export async function referralChainStatus(userId: string): Promise<ReferralChain
     const reader = referralChainClient();
     if (!reader) return base;
     const wallet = await db().one("SELECT address FROM evm_wallets WHERE user_id = $1", userId);
-    const status = await reader.inspect(wallet?.address);
+    const program = wallet ? await referralProgram(userId) : null;
+    const status = await reader.inspect(wallet?.address, program?.nextLevel);
     return { ...base, configured: true, ready: !status.paused && !!wallet, contractAddress: getAddress(reader.config.contractAddress),
       tokenAddress: getAddress(reader.config.tokenAddress), feeRecipient: status.feeRecipient, owner: status.owner,
       balance: status.balance, gasBalance: status.gasBalance, gasBudget: status.gasBudget, tokenSymbol: status.tokenSymbol, currentLevel: status.currentLevel };

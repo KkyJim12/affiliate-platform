@@ -29,6 +29,44 @@ the server-only quote authority must match the deployed `quoteSigner`.
 Changing owner/fee deployment fields after deployment does not change on-chain
 permissions. The owner must sign updates. Ownership transfer uses two steps.
 
+## Verify source on PolygonScan using .env
+
+Set `ETHERSCAN_API_KEY` in `.env` to an Etherscan V2 API key. The script also
+accepts the existing `NUXT_EVM_EXPLORER_API_KEY` when the former is blank. The
+contract addresses come from `NUXT_EVM_TOKEN_ADDRESS` and
+`NUXT_REFERRAL_CONTRACT_ADDRESS`.
+
+```sh
+npm run contracts:verify -- --dry-run
+npm run contracts:verify
+```
+
+The dry run regenerates `.data/contracts/verification/` with Standard JSON
+inputs, encoded constructor arguments and public settings. It checks source
+hashes and recompiles to match the saved deployment bytecode, without making
+network requests. Keep the original Solidity sources, dependencies and build
+artifacts. If artifacts are missing, `npm run contracts:compile` recreates them
+from the current sources; these must match the deployed version.
+
+The normal command checks that the RPC is on Amoy and both configured addresses
+have code, then verifies both contracts through Etherscan V2. It uses the saved
+compiler, optimizer, `viaIR` and EVM settings, skips already verified contracts,
+polls until verified, and saves accepted request IDs in `verification/status.json`
+for retry after a timeout. A rejected or unfinished verification exits nonzero.
+It sends no blockchain transactions and does not use the deployer private key.
+
+Matching `.data/contracts/deployment-progress.json` records provide the original
+constructor arguments, including after ownership, fee or signer changes. Without
+a matching record, verification uses the **original deployment values** from
+`REFERRAL_OWNER_ADDRESS`, `REFERRAL_FEE_RECIPIENT_ADDRESS` and the optional public
+`REFERRAL_QUOTE_SIGNER_ADDRESS`. If that signer address is omitted, the existing
+`NUXT_REFERRAL_AUTHORITY_PRIVATE_KEY` supplies its public address locally. Current
+on-chain owner/fee values may differ from the original constructors.
+
+The API implementation follows Etherscan's [source submission](https://docs.etherscan.io/api-reference/endpoint/verifysourcecode)
+and [verification status](https://docs.etherscan.io/api-reference/endpoint/checkverifystatus)
+endpoints. No private keys or API keys are written to verification artifacts.
+
 ## Mock token and distribution
 
 `AmoyTestUSDT` is **UNXO Test USDT (tUSDT)**, a valueless six-decimal test token,
@@ -66,6 +104,13 @@ The complete nonce-ordered signed batch is persisted before any broadcast. Gas
 cannot exceed the maximum POL budget confirmed by the client. No private key is
 returned to the browser.
 
+Referral purchases require at least `NUXT_REFERRAL_MIN_GAS_BALANCE=0.003` native
+POL by default. The displayed budget includes the required approval transactions
+and a 15% gas-price buffer. Higher network fees or zero-first allowance resets
+can require more than the minimum. The same balance checks apply on the server.
+Gas limits are 800,000 for the distribution and 60,000 per token approval; these
+limits are tested with all fifteen payout recipients and both token precisions.
+
 Wallet locks, request keys, one-pending-purchase constraints, contract levels and
 signed IDs prevent duplicate purchases. Retrying broadcasts identical bytes.
 The UI polls status, and a worker resumes pending operations every 15 seconds,
@@ -100,9 +145,9 @@ return 202 with a transaction hash. Ownership comes from the session. Explicit
 `NUXT_REFERRAL_PAYMENT_MODE=ledger` restores compatibility with the older credit
 flow; its activation/upgrade routes reject writes in contract mode.
 
-## Verification
+## Tests
 
-Run `npm run test:distributor`, `npm run test:db`, `npm run typecheck`,
+Run `npm run test:verification`, `npm run test:distributor`, `npm run test:db`, `npm run typecheck`,
 `npm run build`, then `npm run test:onchain`. Browser tests use disposable
 PostgreSQL and a fresh local Hardhat EVM, never public Amoy.
 

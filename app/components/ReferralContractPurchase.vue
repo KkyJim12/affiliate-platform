@@ -74,12 +74,16 @@ onBeforeUnmount(() => { mounted = false; password.value = ""; if (timer) clearIn
     <p class="referral-contract-note">{{ t('onchain.networkHint') }}</p>
     <template v-if="chain?.configured">
       <div class="referral-balance"><span>{{ t('onchain.tokenBalance') }}</span><strong data-testid="chain-token-balance">{{ formatUsdt(Number(chain.balance || 0)) }} {{ symbol }}</strong></div>
-      <div class="referral-balance"><span>{{ t('onchain.gasBalance') }}</span><strong>{{ formatUsdt(Number(chain.gasBalance || 0)) }} POL</strong></div>
+      <div class="referral-balance"><span>{{ t('onchain.gasBalance') }}</span><strong data-testid="chain-gas-balance">{{ chain.gasBalance ?? '—' }} POL</strong></div>
+      <div class="referral-balance"><span>{{ t('onchain.maxGas') }}</span><strong data-testid="chain-gas-budget">{{ chain.gasBudget ?? '—' }} POL</strong></div>
       <a :href="`https://amoy.polygonscan.com/address/${chain.contractAddress}`" target="_blank" rel="noopener noreferrer" class="inline-link">{{ t('onchain.viewContract') }}<AppIcon name="ArrowUpRight" :size="14" /></a>
       <template v-if="program?.nextLevel">
         <p class="referral-contract-note">{{ t('referral.nextLevel', { level: program.nextLevel, amount: formatUsdt(price) }) }}</p>
         <button class="button button-orange referral-unlock-button" :disabled="busy || !!pending || !chain.ready || !canAfford || !hasGas" @click="openConfirmation">{{ t('onchain.buy', { level: program.nextLevel, amount: formatUsdt(price), symbol }) }}</button>
-        <p v-if="!canAfford || !hasGas" class="referral-funding-hint">{{ t('onchain.fundingHint') }} <NuxtLink to="/dashboard?view=wallet">{{ t('ui.open_wallet') }}</NuxtLink></p>
+        <p v-if="!canAfford && chain.balance !== null" class="referral-funding-hint" data-testid="chain-insufficient-token" role="status">{{ t('onchain.tokenRequired', { required: formatUsdt(price), available: formatUsdt(Number(chain.balance)), symbol }) }}</p>
+        <p v-if="!hasGas && chain.gasBudget && chain.gasBalance !== null" class="referral-funding-hint" data-testid="chain-insufficient-gas" role="status">{{ t('onchain.gasRequired', { required: chain.gasBudget, available: chain.gasBalance }) }}</p>
+        <p v-else-if="!chain.gasBudget || chain.gasBalance === null" class="referral-funding-hint" role="status">{{ t('onchain.gasUnavailable') }}</p>
+        <p v-if="!canAfford || !hasGas" class="referral-funding-hint"><NuxtLink to="/dashboard?view=wallet">{{ t('ui.open_wallet') }}</NuxtLink></p>
         <p v-if="!chain.ready" class="referral-funding-hint">{{ t('onchain.pausedOrUnavailable') }}</p>
       </template>
       <p v-else class="referral-contract-note">{{ t('referral.maximumLevel') }}</p>

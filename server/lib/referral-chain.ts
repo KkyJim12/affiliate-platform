@@ -1,4 +1,4 @@
-import { AbiCoder, Contract, FetchRequest, Interface, JsonRpcProvider, Transaction, Wallet, ZeroAddress, formatUnits, getAddress, keccak256 } from "ethers";
+import { AbiCoder, Contract, FetchRequest, Interface, JsonRpcProvider, Transaction, Wallet, ZeroAddress, formatUnits, getAddress, keccak256, parseUnits } from "ethers";
 import type { Provider, TransactionReceipt } from "ethers";
 import { purchaseTypes, referralContractAbi, type ChainPurchaseQuote } from "../../shared/referral-contract.ts";
 import { purchaseShares } from "../../shared/compensation.ts";
@@ -8,7 +8,13 @@ export const tokenAbi = ["function decimals() view returns (uint8)", "function s
   "function approve(address,uint256) returns (bool)"];
 export interface ReferralChainConfig {
   rpcUrl: string; contractAddress: string; tokenAddress: string; authorityPrivateKey: string; minConfirmations: number;
+  minGasBalance?: string;
 }
+// Covers all 19 payouts, including fifteen recipients with empty token balances.
+// The fee cap has a separate 15% buffer above the RPC's current price.
+const purchaseGasLimit = 800_000n;
+const approvalGasLimit = 60_000n;
+const bufferedGasPrice = (price: bigint) => (price * 115n + 99n) / 100n;
 export interface PurchasePayload {
   createdBlock: number;
   quote: ChainPurchaseQuote;
@@ -29,8 +35,12 @@ export class ReferralChainClient {
   readonly token: Contract;
   readonly authority: Wallet;
   readonly config: ReferralChainConfig;
+  readonly minimumGasBalance: bigint;
   constructor(config: ReferralChainConfig, provider?: Provider) {
     this.config = config;
+    const minimum = String(config.minGasBalance ?? "0.003");
+    if (!/^\d{1,9}(\.\d{1,18})?$/.test(minimum)) throw new Error("Invalid minimum POL balance configuration.");
+    this.minimumGasBalance = parseUnits(minimum, 18);
     if (!/^https?:$/.test(new URL(config.rpcUrl).protocol)) throw new Error("Invalid referral RPC configuration.");
     if (!Number.isSafeInteger(config.minConfirmations) || config.minConfirmations < 1 || config.minConfirmations > 100)
       throw new Error("Invalid referral confirmation policy.");
@@ -43,7 +53,7 @@ export class ReferralChainClient {
     this.authority = new Wallet(config.authorityPrivateKey);
   }
 
-  async inspect(buyer?: string) {
+  async inspect(buyer?: string, nextLevel?: number | null) {
     if ((await this.provider.getNetwork()).chainId !== 80002n) throw new Error("Referral purchases require Polygon Amoy.");
     if (await this.provider.getCode(this.config.contractAddress) === "0x") throw new Error("Referral contract is not deployed.");
     const [token, decimals, actualDecimals, feeRecipient, owner, quoteSigner, nonce, paused, symbol, gasFees] = await Promise.all([
@@ -53,13 +63,19 @@ export class ReferralChainClient {
     ]);
     if (getAddress(token) !== getAddress(this.config.tokenAddress) || decimals !== actualDecimals || decimals < 6n || decimals > 18n
       || getAddress(quoteSigner) !== this.authority.address) throw new Error("Referral deployment configuration does not match the contract.");
-    const [balance, gasBalance, currentLevel] = buyer ? await Promise.all([
+    const [balance, gasBalance, currentLevel, allowance] = buyer ? await Promise.all([
       this.token.getFunction("balanceOf")(buyer), this.provider.getBalance(buyer), this.contract.getFunction("levelOf")(buyer),
-    ]) : [null, null, null];
+      this.token.getFunction("allowance")(buyer, this.config.contractAddress),
+    ]) : [null, null, null, null];
     const gasPrice = gasFees.maxFeePerGas ?? gasFees.gasPrice;
     if (!gasPrice) throw new Error("Gas estimate is unavailable.");
+    const level = nextLevel ?? Math.min(Number(currentLevel || 0) + 1, 15);
+    const price = BigInt(purchaseShares(level).reduce((sum, share) => sum + share.units, 0)) * 10n ** BigInt(Number(decimals) - 6);
+    const approvals = allowance === null ? 2n : allowance >= price ? 0n : allowance > 0n ? 2n : 1n;
+    const estimatedBudget = (purchaseGasLimit + approvals * approvalGasLimit) * bufferedGasPrice(gasPrice);
+    const gasBudget = estimatedBudget > this.minimumGasBalance ? estimatedBudget : this.minimumGasBalance;
     return { feeRecipient: getAddress(feeRecipient), owner: getAddress(owner), decimals: Number(decimals), tokenSymbol: String(symbol).slice(0, 24),
-      gasBudget: formatUnits(2_200_000n * gasPrice * 125n / 100n, 18),
+      gasBudget: formatUnits(gasBudget, 18),
       configNonce: nonce.toString(), paused: Boolean(paused), balance: balance === null ? null : formatUnits(balance, decimals),
       gasBalance: gasBalance === null ? null : formatUnits(gasBalance, 18), currentLevel: currentLevel === null ? null : Number(currentLevel) };
   }
@@ -78,11 +94,11 @@ export class ReferralChainClient {
     const calls: { stage: string; to: string; data: string; gasLimit: bigint }[] = [];
     const tokenInterface = new Interface(tokenAbi);
     if (allowance < price) {
-      if (allowance > 0n) calls.push({ stage: "approval_reset", to: this.config.tokenAddress, data: tokenInterface.encodeFunctionData("approve", [this.config.contractAddress, 0]), gasLimit: 100_000n });
-      calls.push({ stage: "approval", to: this.config.tokenAddress, data: tokenInterface.encodeFunctionData("approve", [this.config.contractAddress, price]), gasLimit: 100_000n });
+      if (allowance > 0n) calls.push({ stage: "approval_reset", to: this.config.tokenAddress, data: tokenInterface.encodeFunctionData("approve", [this.config.contractAddress, 0]), gasLimit: approvalGasLimit });
+      calls.push({ stage: "approval", to: this.config.tokenAddress, data: tokenInterface.encodeFunctionData("approve", [this.config.contractAddress, price]), gasLimit: approvalGasLimit });
     }
-    calls.push({ stage: "purchase", to: this.config.contractAddress, data: distributorInterface.encodeFunctionData("purchase", [payload.quote, payload.uplines, payload.signature]), gasLimit: 2_000_000n });
-    return this.prepareBatch(buyer, calls, maxGasFee);
+    calls.push({ stage: "purchase", to: this.config.contractAddress, data: distributorInterface.encodeFunctionData("purchase", [payload.quote, payload.uplines, payload.signature]), gasLimit: purchaseGasLimit });
+    return this.prepareBatch(buyer, calls, maxGasFee, this.minimumGasBalance);
   }
 
   async prepareFeeUpdate(owner: Wallet, recipient: string, maxGasFee: bigint) {
@@ -90,17 +106,17 @@ export class ReferralChainClient {
       data: distributorInterface.encodeFunctionData("setFeeRecipient", [getAddress(recipient)]), gasLimit: 100_000n }], maxGasFee);
   }
 
-  private async prepareBatch(wallet: Wallet, calls: { stage: string; to: string; data: string; gasLimit: bigint }[], maxGasFee: bigint) {
+  private async prepareBatch(wallet: Wallet, calls: { stage: string; to: string; data: string; gasLimit: bigint }[], maxGasFee: bigint, minimumBalance = 0n) {
     if ((await this.provider.getNetwork()).chainId !== 80002n) throw new Error("Referral purchases require Polygon Amoy.");
     const [nonce, fees, balance] = await Promise.all([
       this.provider.getTransactionCount(wallet.address, "pending"), this.provider.getFeeData(), this.provider.getBalance(wallet.address),
     ]);
     const fee = fees.maxFeePerGas ?? fees.gasPrice;
     if (!fee) throw new Error("Gas pricing is unavailable.");
-    const feeLimit = fee * 125n / 100n;
+    const feeLimit = bufferedGasPrice(fee);
     const gasBudget = calls.reduce((sum, call) => sum + call.gasLimit, 0n) * feeLimit;
     if (gasBudget > maxGasFee) throw new Error("GAS_PRICE_CHANGED");
-    if (balance < gasBudget) throw new Error("INSUFFICIENT_GAS");
+    if (balance < gasBudget || balance < minimumBalance) throw new Error("INSUFFICIENT_GAS");
     const result: PreparedChainTransaction[] = [];
     for (const [index, call] of calls.entries()) {
       const transaction = { to: call.to, data: call.data, gasLimit: call.gasLimit, nonce: nonce + index, chainId: 80002, value: 0n,
