@@ -67,8 +67,8 @@ test("Amoy wallet schema enforces owner, address, key encryption and network con
 
 test("failed PostgreSQL migration batches roll back both schema and history", () => isolated(async db => {
   await migrate(db.pool, sources);
-  const broken = prepareMigrations([{ name: "0006_failure.sql", sql: "CREATE TABLE should_rollback (id TEXT); INSERT INTO nonexistent VALUES (1);" }]);
-  await assert.rejects(migrate(db.pool, [...sources, ...broken]), /0006_failure.sql/);
+  const broken = prepareMigrations([{ name: "9999_failure.sql", sql: "CREATE TABLE should_rollback (id TEXT); INSERT INTO nonexistent VALUES (1);" }]);
+  await assert.rejects(migrate(db.pool, [...sources, ...broken]), /9999_failure.sql/);
   assert.equal((await db.one("SELECT to_regclass('should_rollback') AS name")).name, null);
   assert.equal((await db.one("SELECT COUNT(*) AS count FROM schema_migrations")).count, sources.length);
   assert.deepEqual(await migrate(db.pool, sources), []);
@@ -137,7 +137,7 @@ test("SQLite import preserves accounts, sponsors, balances, sessions, ledger, se
       INSERT INTO sessions VALUES ('original-token-hash', 'member', 9999999999999);
       INSERT INTO wallet_transactions VALUES ('t', 'w', 'referral_purchase', 10000000, 'completed', 'Referral activation', 'original-request-key', '2026-10-18');
       INSERT INTO user_access VALUES ('admin', 'admin', 'active');
-      INSERT INTO referral_activations VALUES ('admin', 't', '2026-10-18');
+      INSERT INTO referral_activations (user_id, transaction_id, created_at) VALUES ('admin', 't', '2026-10-18');
       INSERT INTO payment_reviews VALUES ('t', 'approved', 'Original-Reference', 'Preserved note', 'admin', '2026-10-18');
       INSERT INTO platform_settings VALUES (1, 0, 0, 'existing@example.com');
     `);

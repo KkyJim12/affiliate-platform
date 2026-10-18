@@ -54,21 +54,32 @@ Member overview totals come from `/api/dashboard`, including completed ledger co
 
 - Usernames are case-insensitive, 3–24 characters, beginning with a letter. Passwords are 12–128 characters, salted and hashed with scrypt on the server.
 - Sessions use random tokens in HttpOnly, SameSite=Strict cookies with a seven-day expiry. Only token hashes are stored. HTTPS requests receive Secure cookies. Mutating requests require a matching Origin; authentication and wallet writes are rate limited.
-- Each registration atomically creates a user, zero-balance ledger wallet and password-encrypted Polygon Amoy wallet. Personal referral codes are generated only after a one-time 10 USDT activation from the available wallet balance. Only activated codes from active accounts can establish a sponsor, at registration or later on the referral page. Account, referral, and wallet APIs resolve ownership from the session.
+- Each registration atomically creates a user, zero-balance ledger wallet and password-encrypted Polygon Amoy wallet. Personal referral codes are generated after a confirmed level 1 contract purchase using the configured Amoy token. Only activated codes from active accounts can establish a sponsor, at registration or later on the referral page. Account, referral, and wallet APIs resolve ownership from the session.
 - PostgreSQL persists accounts, hashed credentials, sessions, wallet balances, and transaction records. Set `DATABASE_URL`; there is no SQLite fallback. Use the Node server build with a reachable PostgreSQL database; static generation cannot serve the account APIs.
-- Money is stored as BIGINT integer millionths of USDT with nonnegative, safe-integer balance constraints. Internal transfers verify the sender's password and atomically debit/credit the two wallets with matching ledger entries. Wallet row locks use consistent ordering to protect concurrent transfers. Request keys prevent duplicate transfers; insufficient balances and self-transfers are rejected. Referral activation locks the wallet before checking eligibility; payment review locks both request and wallet before settlement.
-- Funding requests create pending records and never increase the available balance. Only an authenticated administrator can credit a request after confirming receipt and recording a unique settlement reference. Automatic blockchain verification, withdrawals, signing and reconciliation still require integration. Do not send funds to an internal wallet ID; it is not a blockchain address.
+- Money is stored as BIGINT integer millionths of USDT with nonnegative, safe-integer balance constraints. Historical internal transfers verify the sender's password and atomically debit/credit the two wallets with matching ledger entries. Wallet row locks use consistent ordering to protect concurrent transfers. Request keys prevent duplicate transfers; insufficient balances and self-transfers are rejected. Contract purchases use signed transactions, receipt verification and a durable transaction outbox.
+- Historical funding requests create pending records and never increase the available balance. Only an authenticated administrator can credit a request after confirming receipt and recording a unique settlement reference. General funding settlement and withdrawals remain separate from automatic referral contract payments. Do not send funds to an internal wallet ID; it is not a blockchain address.
 - Password recovery, password changes, and multi-factor authentication are not implemented.
 
 ## Smart contract library
+
+Referral purchases now use `contracts/ReferralDistributor.sol` to collect and
+automatically distribute ERC-20 tokens on Polygon Amoy. Contract mode is the
+default; missing blockchain configuration disables purchases rather than spending
+internal credits. Run `npm run contracts:prepare`, set the owner, initial fee
+recipient and funded deployer fields in `.env`, inspect
+`npm run contracts:deploy`, then deploy with
+`npm run contracts:deploy -- --broadcast`. This deploys a separate, valueless
+`AmoyTestUSDT` token and saves both confirmed contract addresses. See
+[deployment, authorization and recovery](docs/referral-contract.md).
 
 The member wallet is one EVM balance card on both the overview and wallet page.
 It shows the existing address, network, live balances, Receive and wallet details.
 The old internal balance, LW ID, funding requests, member transfers and ledger
 history have been removed from this card. Settings and navigation also use the
 EVM wallet. Existing addresses, encrypted keys and historical ledger records are
-preserved. Existing referral credits remain usable on the referrals page; EVM
-payment for referral activation and on-chain sending are not implemented.
+preserved. Referrals now pay through the smart contract using the configured
+Amoy token. Historical credits remain available only in explicit legacy ledger
+mode. General wallet sends are separate from referral purchases.
 
 `GET /api/wallet/evm/balance` reads the signed-in owner's native POL balance on
 Amoy. It uses `NUXT_EVM_RPC_URL` or the public Amoy RPC, and rejects another
@@ -108,13 +119,13 @@ Run `npm run test:contracts` for offline helper tests without a database or wall
 
 ## Compensation plan
 
-`shared/plan.ts` is the source for UI calculations. Rank prices follow `10 × 2^(rank − 1)` USDT. Binary rates are 10%, 20%, and 50% across 2, 4, and 8 qualifying positions. Full matrix gross is five times the rank price. The poster's first-cycle illustration retains twice the price and allocates the remaining three times; exact recycling and upgrade rules remain unconfirmed.
+`shared/compensation.ts` is the source for purchase prices and exact allocations. Level 1 activates a personal referral code for 10 USDT. Each sequential upgrade costs twice the previous level: 20, 40, 80 USDT, through level 15 at 163,840 USDT. Each upgrade charges its full price and retains the same code. Existing paid activations remain level 1, without retroactive commissions.
 
-Unilevel projections use 1% per ancestor across 15 depths, totaling a 15% pool. Together with the 80% matrix allocation and 5% system allocation, this accounts for 100% of a qualifying payment. These corrected formulas replace inconsistent poster cells.
+Every contract activation and upgrade collects and distributes 100% in one on-chain transaction; verified receipts are then mirrored into PostgreSQL. Sponsor ancestors 1–3 receive 50%, 20%, 10% of the whole purchase (80% total). An additional 15% is shared across ancestors 1–15 with normalized halving weights, `2^(15 − depth) / 32767`; the first three receive both kinds of commission. Largest-remainder rounding conserves the exact 15% pool in integer micro-USDT. The platform gets 5%. Missing, suspended, unactivated, or wallet-less upline shares are sent to the platform address by the contract. No ancestor is moved into another position. Binary illustrations in `shared/plan.ts` use the same direct rates; actual payouts follow the sponsor genealogy.
 
-The unsigned dashboard is explicitly a plan preview with sample matrix positions. Its EVM wallet prompts sign-in without displaying a sample balance. Signed-in accounts show on-chain balances and actual registrations. Matrix positions, paid ranks, automatic commissions, recycling, and upgrades are not activated by registration or by funding requests. The rank explorer remains a labeled projection, separate from account funds.
+Set the owner and initial fee recipient in `.env` before deployment. Admin Settings reads the current on-chain recipient and lets its owner submit a signed update. Purchases require configured token/contract addresses and token plus POL balances. New distributions are actual ERC-20 transfers; historical internal-ledger payables remain separate. The default contract mode never silently spends or credits internal balances.
 
-The referrals page at `/referrals` (also `/referral` or `/dashboard?view=referrals`) includes a one-time 10 USDT activation, a code/link sharing panel, and a form for connecting an existing account to a sponsor. Activation verifies the account password and atomically debits the wallet, records a `referral_purchase`, and creates the code. Retries return the same activation without another charge. Accounts with no sponsor can enter an activated code for free; an established sponsor cannot be changed, and self-referrals, suspended sponsors, and cycles at any depth are rejected. Existing sponsor relationships are preserved; older unpaid codes require activation before they can accept new referrals. Referral activation does not trigger rank placement or automatic commission payouts.
+The referrals page at `/referrals` (also `/referral` or `/dashboard?view=referrals`) includes activation, current level, sequential upgrades, code/link sharing, a distribution summary, and sponsor linking. Purchases verify the password, debit the wallet, record the purchase and all allocations, and credit eligible uplines atomically. Consistent wallet lock ordering prevents transfer deadlocks. Request keys and unique user/level records prevent duplicate charges and commissions. Accounts with no sponsor can enter an activated code for free; an established sponsor cannot be changed, and self-referrals, suspended sponsors, and cycles at any depth are rejected. Existing sponsor relationships are preserved; older unpaid codes require activation before they can accept new referrals. Registration and funding alone do not purchase a level or place binary matrix positions. The rank explorer remains a projection, separate from paid account levels.
 
 The referral network switches between list and tree views. The tree follows actual sponsor relationships across up to 15 levels (first 500 members), with zoom, level controls, and a self-contained SVG image download. Search and status filters preserve ancestor branches for context; matching descendants beyond the selected level limit are revealed automatically. The `layout=tree` query parameter preserves the selected view on refresh. Referral genealogy and binary matrix placement remain separate.
 
@@ -154,9 +165,12 @@ The importer reads SQLite in a snapshot without modifying it. It copies accounts
 ```sh
 npm run typecheck
 npm run test:contracts
+npm run test:compensation
+npm run test:distributor
 npm run test:db
 npm run build
 npm run test:ui
+npm run test:onchain
 ```
 
 Build first, then run Playwright. Both test commands start a disposable PostgreSQL server on a random localhost port, without reading the application's `DATABASE_URL`, and remove their own test files after shutdown. The development dependency `embedded-postgres` supplies real PostgreSQL binaries; its package installation scripts must be enabled. To use an existing test server instead, explicitly set `TEST_DATABASE_URL` to a disposable database whose name ends in `_test`. Test setup resets operational controls and throttles only in that test database.

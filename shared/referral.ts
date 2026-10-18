@@ -1,12 +1,19 @@
 import type { Account, WalletSummary } from "./types";
+import { baseReferralPrice } from "./compensation";
 
-export const referralPrice = 10;
+export const referralPrice = baseReferralPrice;
 
 export interface ReferralProgram {
   price: number;
   code: string | null;
   activatedAt: string | null;
   transactionId: string | null;
+  currentLevel: number;
+  maxLevel: number;
+  nextLevel: number | null;
+  nextPrice: number | null;
+  feeConfigured: boolean;
+  latestPurchase: { level: number; amount: number; commissions: number; platformPayable: number } | null;
   sponsor: { username: string; code: string } | null;
 }
 

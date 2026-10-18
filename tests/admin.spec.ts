@@ -91,7 +91,7 @@ test("admin authorization, settlement idempotency, rejection, suspension, and pe
     expect((await member.put("/api/admin/settings", { headers: { Origin: origin }, data: controls })).status()).toBe(403);
     expect((await admin.put("/api/admin/settings", { headers: { Origin: origin }, data: { ...controls, supportEmail: "not-an-email" } })).status()).toBe(400);
     expect((await admin.put("/api/admin/settings", { headers: { Origin: origin }, data: controls })).status()).toBe(200);
-    expect(await (await guest.get("/api/platform-settings")).json()).toEqual(controls);
+    expect(await (await guest.get("/api/platform-settings")).json()).toEqual({ ...controls, feeRecipientAddress: original!.feeRecipientAddress });
     expect((await post(guest, "/api/auth/register", { username: `closed_${suffix}`, password })).status()).toBe(403);
     expect((await post(member, "/api/wallet/deposit", { amount: "1", requestKey: randomUUID() })).status()).toBe(403);
     const overview = await (await admin.get("/api/admin/overview")).json();
@@ -157,6 +157,7 @@ test("admin login and all management pages work in English, Thai, light and dark
     expect((await (await member.get("/api/wallet")).json()).available).toBe(42.123456);
     await navigate(page, "Settings");
     await page.getByLabel("Support email", { exact: true }).fill(supportEmail);
+    await page.getByLabel("Platform fee address", { exact: true }).fill("0x3434343434343434343434343434343434343434");
     await page.getByRole("button", { name: "Save changes", exact: true }).click();
     await expect(page.getByRole("button", { name: "Save changes", exact: true })).toBeDisabled();
     await page.getByRole("button", { name: "Use dark theme", exact: true }).click();
@@ -167,6 +168,7 @@ test("admin login and all management pages work in English, Thai, light and dark
     await page.reload();
     await page.waitForFunction(() => Boolean((document.querySelector("#__nuxt") as HTMLElement & { __vue_app__?: unknown })?.__vue_app__));
     await expect(page.getByLabel(thai.admin.supportEmail, { exact: true })).toHaveValue(supportEmail);
+    await expect(page.getByLabel(thai.admin.feeRecipientAddress, { exact: true })).toHaveValue("0x3434343434343434343434343434343434343434");
     await expect(page.locator("html")).toHaveClass(/dark/);
     await expect(page.locator("select, option")).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

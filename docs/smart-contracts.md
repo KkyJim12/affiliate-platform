@@ -3,9 +3,11 @@
 Viem handles contract reads; Ethers generates and encrypts account wallets.
 Viem fits Nuxt's ESM setup and
 provides typed ERC-20 calls, ABI encoding/decoding and transaction inspection.
-The initial integration supplies server-side read helpers. No contract address
-or ABI for a deployed UNXO contract was provided, and the repository has no
-Solidity contracts. The custom functions below are design proposals.
+The referral system now includes Solidity contracts, an Amoy mock tUSDT token,
+deployment scripts and automatic token distribution. See the
+[referral contract setup](referral-contract.md). The original read helpers below
+remain available; custom function proposals later in this document describe the
+earlier design rather than the new contract API.
 
 ## Configuration and use
 
@@ -83,12 +85,11 @@ An RPC or token precision failure produces HTTP 503 and an unavailable balance;
 provider errors and credentials are never returned to the browser.
 
 Receive displays the same EVM address and network. Wallet details contain the
-public key, explorer link and password-protected key reveal. Sending on-chain
-transactions is not implemented. The historic ledger APIs and admin settlement
-records remain for compatibility. Referral activation can still spend existing
-referral credits; its page labels them explicitly and no longer directs members
-to fund an internal wallet. On-chain assets do not activate referrals until an
-on-chain payment workflow is implemented.
+public key, explorer link and password-protected key reveal. General wallet sends are separate from
+referral purchases. The new referral contract workflow signs token approvals and
+purchases from the encrypted account wallet, verifies receipts and distributes
+automatically. Historical ledger APIs remain for compatibility; credit-based
+referral activation requires explicit ledger mode. See [the contract setup](referral-contract.md).
 
 ## Indexed wallet transactions
 

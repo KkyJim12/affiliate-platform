@@ -1,8 +1,7 @@
-// Reconstructed from the posters: 80% matrix + 15 x 1% unilevel + 5% system.
-// These functions describe projections, not a payment or eligibility engine.
-export const matrixRates = [0.1, 0.2, 0.5] as const;
-export const unilevelRate = 0.01;
-export const rankPrice = (rank: number) => 10 * 2 ** (rank - 1);
+import { bonusRate, directRates, ledgerScale, levelPrice, purchaseShares } from "./compensation";
+// Binary examples use the same depth rates as actual sponsor commissions.
+export const matrixRates = directRates;
+export const rankPrice = levelPrice;
 export const ranks = Array.from({ length: 15 }, (_, index) => {
   const rank = index + 1;
   const price = rankPrice(rank);
@@ -15,18 +14,19 @@ export const ranks = Array.from({ length: 15 }, (_, index) => {
       rate,
       gross: 2 ** (depth + 1) * price * rate,
     })),
-    gross: price * 5,
-    firstCycle: price * 2,
-    allocated: price * 3,
+    gross: matrixRates.reduce((sum, rate, index) => sum + 2 ** (index + 1) * price * rate, 0),
+    firstCycle: price * 0.8,
+    allocated: price * 0.2,
   };
 });
 
 export function unilevelProjection(rank: number) {
+  const shares = purchaseShares(rank).filter(share => share.kind === "bonus");
   return Array.from({ length: 15 }, (_, index) => ({
     depth: index + 1,
-    positions: 2 ** (index + 1),
-    rate: unilevelRate,
-    gross: Math.round(2 ** (index + 1) * rankPrice(rank) * unilevelRate * 100) / 100,
+    positions: 1,
+    rate: bonusRate(index + 1),
+    gross: shares[index]!.units / ledgerScale,
   }));
 }
 

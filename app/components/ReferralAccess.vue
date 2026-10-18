@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { formatUsdt } from "#shared/plan";
 import { referralPrice, type ReferralProgram, type ReferralUpdate } from "#shared/referral";
+import type { ReferralChainStatus } from "#shared/referral-contract";
 
 const props = defineProps<{ preview?: boolean }>();
 const emit = defineEmits<{ updated: [] }>();
 const { t, tr, formatDate } = useLoopI18n();
-const { user } = useAccount();
+const { user, restoreSession } = useAccount();
 const { wallet, refreshWallet } = useWallet();
 const { authOpen, copy, notify } = useAppUI();
 const config = useRuntimeConfig();
@@ -19,10 +20,20 @@ const busy = ref(false);
 const actionError = ref("");
 const purchaseError = ref("");
 const { data: program, error, status, refresh } = await useFetch<ReferralProgram>("/api/referrals/program", { key: `referral-program-${user.value?.id || 'guest'}`, immediate: !props.preview });
-const price = computed(() => program.value?.price ?? referralPrice);
+const { data: chainState } = await useFetch<ReferralChainStatus>("/api/referrals/chain/status", { key: `referral-chain-${user.value?.id || 'guest'}`, immediate: !props.preview });
+const paymentMode = computed(() => props.preview ? "ledger" : chainState.value?.mode || "contract");
+async function onChainUpdated() {
+  await Promise.all([refresh(), restoreSession(), useEvmWallet().refreshBalances(true)]);
+  emit("updated");
+}
+const price = computed(() => program.value?.nextPrice ?? program.value?.price ?? referralPrice);
+const upgrading = ref(false);
+const targetLevel = ref(1);
+const purchaseTitle = computed(() => upgrading.value ? t('referral.upgradeTitle', { level: targetLevel.value }) : t('referral.confirmTitle'));
+const feeReady = computed(() => props.preview || !!program.value?.feeConfigured);
 const available = computed(() => wallet.value?.available ?? 0);
 const canAfford = computed(() => !!wallet.value && available.value >= price.value);
-if (!props.preview) await refreshWallet();
+if (!props.preview && paymentMode.value === "ledger") await refreshWallet();
 const inviteLink = computed(() => program.value?.code ? `${String(config.public.appUrl || origin).replace(/\/$/, "")}/referrals?ref=${program.value.code}` : "");
 
 onMounted(() => {
@@ -34,6 +45,8 @@ function openPurchase() {
   password.value = "";
   purchaseError.value = "";
   requestKey.value = crypto.randomUUID();
+  upgrading.value = !!program.value?.code;
+  targetLevel.value = program.value?.nextLevel ?? 1;
   purchaseOpen.value = true;
 }
 function closePurchase() { if (!busy.value) { purchaseOpen.value = false; password.value = ""; } }
@@ -48,10 +61,10 @@ async function activate() {
   busy.value = true;
   purchaseError.value = "";
   try {
-    applyResult(await $fetch<ReferralUpdate>("/api/referrals/activate", { method: "POST", body: { password: password.value, requestKey: requestKey.value } }));
+    applyResult(await $fetch<ReferralUpdate>(upgrading.value ? "/api/referrals/upgrade" : "/api/referrals/activate", { method: "POST", body: { password: password.value, requestKey: requestKey.value, level: targetLevel.value } }));
     purchaseOpen.value = false;
     password.value = "";
-    notify(t("referral.activated"));
+    notify(t(upgrading.value ? "referral.upgraded" : "referral.activated"));
   } catch (failure) {
     purchaseError.value = (failure as { data?: { statusMessage?: string } }).data?.statusMessage || t("referral.actionFailed");
   } finally { busy.value = false; }
@@ -89,15 +102,31 @@ async function connectSponsor() {
           <div class="referral-code-actions"><button class="button button-orange" @click="copy(program.code, t('referral.codeCopied'))"><AppIcon name="Copy" :size="15" />{{ t('referral.copyCode') }}</button><button class="button button-outline" @click="copy(inviteLink, t('referral.linkCopied'))"><AppIcon name="Link" :size="15" />{{ t('ui.copy_link') }}</button></div>
           <div class="referral-link-preview"><AppIcon name="Link" :size="14" /><span>{{ inviteLink }}</span></div>
           <span v-if="program.activatedAt" class="referral-card-note">{{ t('referral.activatedOn', { date: formatDate(program.activatedAt) }) }}</span>
+          <ReferralContractPurchase v-if="paymentMode === 'contract'" :program="program || null" :chain="chainState || null" @updated="onChainUpdated" @refreshed="chainState = $event" />
+          <div v-else class="referral-level-panel">
+            <strong data-testid="referral-level">{{ t('referral.currentLevel', { level: program.currentLevel, max: program.maxLevel }) }}</strong>
+            <template v-if="program.nextLevel">
+              <p>{{ t('referral.nextLevel', { level: program.nextLevel, amount: formatUsdt(price) }) }}</p>
+              <div class="referral-balance"><span>{{ t('referral.legacyCredits') }}</span><strong>{{ formatUsdt(available) }} USDT</strong></div>
+              <button class="button button-orange referral-unlock-button" :disabled="busy || !canAfford || !feeReady" @click="openPurchase">{{ t('referral.upgrade', { level: program.nextLevel, amount: formatUsdt(price) }) }}</button>
+              <p v-if="!canAfford" class="referral-funding-hint">{{ t('referral.evmPaymentPending') }}</p>
+            </template>
+            <p v-else>{{ t('referral.maximumLevel') }}</p>
+            <p v-if="!feeReady" class="referral-funding-hint">{{ t('referral.feeNotConfigured') }}</p>
+          </div>
         </template>
         <template v-else>
           <span class="eyebrow">{{ t('referral.unlockEyebrow') }}</span>
           <h2>{{ t('referral.unlockTitle') }}</h2>
-          <p>{{ t('referral.unlockHint') }}</p>
-          <div class="referral-price"><strong>{{ formatUsdt(price) }}</strong><span>USDT<small>{{ t('referral.oneTime') }}</small></span></div>
-          <div v-if="!preview" class="referral-balance"><span>{{ t('referral.legacyCredits') }}</span><strong>{{ formatUsdt(available) }} USDT</strong></div>
-          <button class="button button-orange referral-unlock-button" :disabled="!preview && (!canAfford || busy || status === 'pending')" @click="openPurchase">{{ preview ? t('ui.sign_in') : t('referral.buy', { amount: formatUsdt(price) }) }}<AppIcon name="ArrowRight" :size="16" /></button>
-          <p v-if="!preview && !canAfford" class="referral-funding-hint">{{ t('referral.evmPaymentPending') }}</p>
+          <p>{{ t(paymentMode === 'contract' ? 'onchain.unlockHint' : 'referral.unlockHint') }}</p>
+          <ReferralContractPurchase v-if="paymentMode === 'contract'" :program="program || null" :chain="chainState || null" @updated="onChainUpdated" @refreshed="chainState = $event" />
+          <template v-else>
+            <div class="referral-price"><strong>{{ formatUsdt(price) }}</strong><span>USDT<small>{{ t('referral.oneTime') }}</small></span></div>
+            <div v-if="!preview" class="referral-balance"><span>{{ t('referral.legacyCredits') }}</span><strong>{{ formatUsdt(available) }} USDT</strong></div>
+            <button class="button button-orange referral-unlock-button" :disabled="!preview && (!canAfford || !feeReady || busy || status === 'pending')" @click="openPurchase">{{ preview ? t('ui.sign_in') : t('referral.buy', { amount: formatUsdt(price) }) }}<AppIcon name="ArrowRight" :size="16" /></button>
+            <p v-if="!feeReady" class="referral-funding-hint">{{ t('referral.feeNotConfigured') }}</p>
+            <p v-if="!preview && !canAfford" class="referral-funding-hint">{{ t('referral.evmPaymentPending') }}</p>
+          </template>
           <span class="referral-card-note"><AppIcon name="ShieldCheck" :size="14" />{{ t('referral.purchaseNote') }}</span>
         </template>
       </section>
@@ -125,8 +154,16 @@ async function connectSponsor() {
       </section>
     </template>
 
-    <ModalTransition><AppModal v-if="purchaseOpen" :title="t('referral.confirmTitle')" @close="closePurchase">
-      <div class="admin-dialog referral-purchase-dialog"><span class="admin-dialog-icon"><AppIcon name="LockKeyhole" :size="25" /></span><h2>{{ t('referral.confirmTitle') }}</h2><p>{{ t('referral.confirmHint') }}</p><dl class="admin-details"><div><dt>{{ t('referral.activationFee') }}</dt><dd>{{ formatUsdt(price) }} USDT</dd></div><div><dt>{{ t('ui.available_balance') }}</dt><dd>{{ formatUsdt(available) }} USDT</dd></div><div><dt>{{ t('referral.balanceAfter') }}</dt><dd>{{ formatUsdt(Math.max(0, available - price)) }} USDT</dd></div></dl><form class="account-form" @submit.prevent="activate"><label for="referral-purchase-password">{{ t('ui.confirm_with_your_password') }}</label><input id="referral-purchase-password" v-model="password" class="auth-input" type="password" autocomplete="current-password" required maxlength="128" :disabled="busy" /><p v-if="purchaseError" class="auth-error" role="alert">{{ tr(purchaseError) }}</p><button class="button button-orange" type="submit" :disabled="busy || !canAfford"><AppIcon v-if="busy" name="LoaderCircle" class="auth-loading" :size="16" />{{ busy ? t('ui.please_wait') : t('referral.confirmPay', { amount: formatUsdt(price) }) }}</button></form></div>
+    <section class="panel referral-distribution-card">
+      <h2>{{ t('referral.distributionTitle') }}</h2>
+      <p>{{ t('referral.distributionHint') }}</p>
+      <div class="referral-distribution-grid"><div><strong>80%</strong><span>{{ t('referral.directShare') }}</span><small>50% · 20% · 10%</small></div><div><strong>15%</strong><span>{{ t('referral.bonusShare') }}</span><small>{{ t('referral.halvingHint') }}</small></div><div><strong>5%</strong><span>{{ t('referral.platformShare') }}</span><small>{{ t('referral.missingShareHint') }}</small></div></div>
+      <p>{{ t(paymentMode === 'contract' ? 'onchain.distributionHint' : 'referral.roundingHint') }}</p>
+      <p v-if="paymentMode === 'ledger' && program?.latestPurchase" data-testid="referral-distribution">{{ t('referral.latestDistribution', { amount: formatUsdt(program.latestPurchase.amount), commissions: formatUsdt(program.latestPurchase.commissions), platform: formatUsdt(program.latestPurchase.platformPayable) }) }}</p>
+    </section>
+
+    <ModalTransition><AppModal v-if="purchaseOpen" :title="purchaseTitle" @close="closePurchase">
+      <div class="admin-dialog referral-purchase-dialog"><span class="admin-dialog-icon"><AppIcon name="LockKeyhole" :size="25" /></span><h2>{{ purchaseTitle }}</h2><p>{{ t(upgrading ? 'referral.upgradeHint' : 'referral.confirmHint') }}</p><dl class="admin-details"><div><dt>{{ t(upgrading ? 'referral.levelPrice' : 'referral.activationFee') }}</dt><dd>{{ formatUsdt(price) }} USDT</dd></div><div><dt>{{ t('ui.available_balance') }}</dt><dd>{{ formatUsdt(available) }} USDT</dd></div><div><dt>{{ t('referral.balanceAfter') }}</dt><dd>{{ formatUsdt(Math.max(0, available - price)) }} USDT</dd></div></dl><form class="account-form" @submit.prevent="activate"><label for="referral-purchase-password">{{ t('ui.confirm_with_your_password') }}</label><input id="referral-purchase-password" v-model="password" class="auth-input" type="password" autocomplete="current-password" required maxlength="128" :disabled="busy" /><p v-if="purchaseError" class="auth-error" role="alert">{{ tr(purchaseError) }}</p><button class="button button-orange" type="submit" :disabled="busy || !canAfford || !feeReady"><AppIcon v-if="busy" name="LoaderCircle" class="auth-loading" :size="16" />{{ busy ? t('ui.please_wait') : t(upgrading ? 'referral.confirmUpgrade' : 'referral.confirmPay', { amount: formatUsdt(price) }) }}</button></form></div>
     </AppModal></ModalTransition>
   </div>
 </template>

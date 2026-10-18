@@ -7,6 +7,6 @@ export default async function setup() {
   try {
     await migrate(database.pool, readMigrations());
     await database.execute("DELETE FROM rate_limits");
-    await database.execute("UPDATE platform_settings SET registration_open = 1, funding_open = 1, support_email = '' WHERE id = 1");
+    await database.execute("UPDATE platform_settings SET registration_open = 1, funding_open = 1, support_email = '', fee_recipient_address = '0x1212121212121212121212121212121212121212' WHERE id = 1");
   } finally { await database.close(); }
 }

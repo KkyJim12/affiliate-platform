@@ -23,6 +23,8 @@ export default defineEventHandler(async (event) => {
             return;
         if (current.sponsor_id)
             throw createError({ statusCode: 409, statusMessage: "Your account is already linked to a sponsor." });
+        if (await db().one("SELECT id FROM referral_chain_purchases WHERE user_id = $1 AND status = 'pending'", user.id))
+            throw createError({ statusCode: 409, statusMessage: "Wait for your pending blockchain purchase to finish." });
         // Traverse every ancestor, including beyond the 15 levels displayed in the UI.
         const cycle = await db().one(`WITH RECURSIVE ancestors(id, sponsor_id) AS (
       SELECT id, sponsor_id FROM users WHERE id = $1

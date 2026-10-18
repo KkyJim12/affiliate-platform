@@ -93,6 +93,35 @@ test("referral activation charges exactly once and sponsor links enforce ownersh
         await Promise.all([owner.dispose(), member.dispose(), other.dispose(), guest.dispose()]);
     }
 });
+
+test("members purchase sequential upgrades and see their paid level in both languages", async ({ page }) => {
+    const data = await fixture();
+    const db = openDb();
+    try { await db.execute("UPDATE wallets SET available = 70000000 WHERE user_id = $1", data.owner.id); }
+    finally { await db.close(); }
+    await post(page.request, "/api/auth/login", { username: data.owner.username, password });
+    await post(page.request, "/api/referrals/activate", { password, requestKey: randomUUID() });
+    await page.goto("/referrals");
+    await page.waitForFunction(() => Boolean((document.querySelector("#__nuxt") as HTMLElement & { __vue_app__?: unknown })?.__vue_app__));
+    await expect(page.getByTestId("referral-level")).toHaveText("Level 1 / 15");
+    await page.getByRole("button", { name: "Upgrade to level 2 · 20.00 USDT", exact: true }).click();
+    await page.getByLabel("Confirm with your password", { exact: true }).fill(password);
+    await page.getByRole("button", { name: "Pay 20.00 USDT & upgrade", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByTestId("referral-level")).toHaveText("Level 2 / 15");
+    await expect(page.getByTestId("referral-distribution")).toContainText("20.00 USDT");
+    await page.getByRole("button", { name: "Upgrade to level 3 · 40.00 USDT", exact: true }).click();
+    await page.getByLabel("Confirm with your password", { exact: true }).fill(password);
+    await page.getByRole("button", { name: "Pay 40.00 USDT & upgrade", exact: true }).click();
+    await expect(page.getByTestId("referral-level")).toHaveText("Level 3 / 15");
+    await expect(page.getByRole("button", { name: "Upgrade to level 4 · 80.00 USDT", exact: true })).toBeDisabled();
+    await page.getByRole("combobox", { name: "Language", exact: true }).click();
+    await page.getByRole("listbox").locator('[data-value="th"]').click();
+    await expect(page.getByTestId("referral-level")).toHaveText(thai.referral.currentLevel.replace('{level}', '3').replace('{max}', '15'));
+    await page.reload();
+    await expect(page.getByTestId("referral-level")).toContainText("3 / 15");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
 test("members buy a referral code, connect a sponsor, and retain access in Thai and both themes", async ({ page }, testInfo) => {
     test.setTimeout(60000);
     const data = await fixture();

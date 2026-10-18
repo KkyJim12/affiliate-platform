@@ -24,6 +24,15 @@ export default defineEventHandler(async (event): Promise<DashboardSummary> => {
     const direct = (await db().one("SELECT COUNT(*) AS total FROM users WHERE sponsor_id = $1", user.id) as {
         total: number;
     }).total;
-    return { commissions: ledger.commissions / moneyScale, pendingFunding: ledger.pending / moneyScale, completedTransfers: ledger.transfers,
+    const breakdown = await db().one(`SELECT
+      COALESCE(SUM(CASE WHEN kind = 'direct' THEN amount ELSE 0 END), 0) AS direct,
+      COALESCE(SUM(CASE WHEN kind = 'bonus' THEN amount ELSE 0 END), 0) AS bonus
+      FROM referral_allocations WHERE recipient_user_id = $1 AND status = 'credited'`, user.id);
+    const onchain = await db().one(`SELECT COALESCE(SUM(amount),0) AS total,
+      COALESCE(SUM(CASE WHEN kind = 'direct' THEN amount ELSE 0 END),0) AS direct,
+      COALESCE(SUM(CASE WHEN kind = 'bonus' THEN amount ELSE 0 END),0) AS bonus
+      FROM referral_chain_allocations WHERE recipient_user_id = $1 AND reason = 'upline'`, user.id);
+    return { commissions: (ledger.commissions + onchain!.total) / moneyScale, directCommissions: (breakdown!.direct + onchain!.direct) / moneyScale,
+        bonusCommissions: (breakdown!.bonus + onchain!.bonus) / moneyScale, pendingFunding: ledger.pending / moneyScale, completedTransfers: ledger.transfers,
         referrals: { direct, total: Math.min(network.total, 500), depth: network.depth, truncated: network.total > 500 } };
 });

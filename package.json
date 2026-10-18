@@ -7,6 +7,12 @@
     "admin:create": "node --env-file-if-exists=.env scripts/create-admin.mjs",
     "test:ui": "node scripts/test-postgres.mjs ui",
     "test:contracts": "node --test tests/evm.test.mjs tests/evm-wallet.test.mjs tests/evm-balance.test.mjs tests/evm-transactions.test.mjs",
+    "test:compensation": "node --test tests/compensation.test.mjs",
+    "contracts:compile": "node scripts/compile-contracts.mjs",
+    "contracts:prepare": "node --env-file-if-exists=.env scripts/prepare-referral.mjs",
+    "contracts:deploy": "node --env-file-if-exists=.env scripts/deploy-referral.mjs",
+    "test:distributor": "node --test tests/referral-contract.test.mjs tests/referral-chain.test.mjs tests/referral-deployment.test.mjs",
+    "test:onchain": "node scripts/test-onchain.mjs",
     "build": "nuxt build",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
@@ -36,10 +42,13 @@
     "vue-router": "^5.4.0"
   },
   "devDependencies": {
+    "@openzeppelin/contracts": "5.6.1",
     "@playwright/test": "^1.64.1",
     "@types/node": "^24.19.2",
     "@types/pg": "^8.23.1",
     "embedded-postgres": "17.10.0-beta.17",
+    "hardhat": "3.20.0",
+    "solc": "0.8.37",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.9.3",
     "vue-tsc": "^3.3.13"

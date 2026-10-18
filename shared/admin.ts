@@ -2,6 +2,12 @@ export interface PlatformSettings {
   registrationOpen: boolean;
   fundingOpen: boolean;
   supportEmail: string;
+  feeRecipientAddress: string;
+}
+
+export interface ReferralAccounting {
+  credited: number;
+  payables: { address: string; platformFees: number; redirectedShares: number; total: number }[];
 }
 
 export interface AdminMember {

@@ -8,8 +8,9 @@ export async function platformSettings(): Promise<PlatformSettings> {
         registration_open: number;
         funding_open: number;
         support_email: string;
+        fee_recipient_address: string;
     };
-    return { registrationOpen: !!row.registration_open, fundingOpen: !!row.funding_open, supportEmail: row.support_email };
+    return { registrationOpen: !!row.registration_open, fundingOpen: !!row.funding_open, supportEmail: row.support_email, feeRecipientAddress: row.fee_recipient_address };
 }
 export async function audit(adminId: string, action: string, target: string) {
     await db().execute("INSERT INTO admin_audit VALUES ($1, $2, $3, $4, $5)", randomUUID(), adminId, action, target, new Date().toISOString());
