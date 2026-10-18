@@ -51,6 +51,18 @@ Member overview totals come from `/api/dashboard`, including completed ledger co
 - Funding requests create pending records and never increase the available balance. Only an authenticated administrator can credit a request after confirming receipt and recording a unique settlement reference. Automatic blockchain verification, withdrawals, custody, and reconciliation still require integration. Do not send funds to an internal wallet ID; it is not a blockchain address.
 - Password recovery, password changes, and multi-factor authentication are not implemented.
 
+## Smart contract library
+
+Viem supplies optional EVM token reads, allowance checks, exact token/ledger amount
+conversion, and transfer receipt inspection for Ethereum, BNB Chain, Polygon and
+Sepolia. Configure the private `NUXT_EVM_*` entries in `.env.example` when using
+the server helpers. See [smart contract functions and integration analysis](docs/smart-contracts.md)
+for usage, the mapping to funding/referral flows, and proposed future contract
+functions. Funding approval remains manual; automatic settlement and withdrawals
+need account/payment binding and persistent event reconciliation.
+
+Run `npm run test:contracts` for offline helper tests without a database or wallet.
+
 ## Compensation plan
 
 `shared/plan.ts` is the source for UI calculations. Rank prices follow `10 × 2^(rank − 1)` USDT. Binary rates are 10%, 20%, and 50% across 2, 4, and 8 qualifying positions. Full matrix gross is five times the rank price. The poster's first-cycle illustration retains twice the price and allocates the remaining three times; exact recycling and upgrade rules remain unconfirmed.
@@ -98,6 +110,7 @@ The importer reads SQLite in a snapshot without modifying it. It copies accounts
 
 ```sh
 npm run typecheck
+npm run test:contracts
 npm run test:db
 npm run build
 npm run test:ui

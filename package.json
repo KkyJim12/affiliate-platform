@@ -6,6 +6,7 @@
     "typecheck": "nuxt typecheck",
     "admin:create": "node --env-file-if-exists=.env scripts/create-admin.mjs",
     "test:ui": "node scripts/test-postgres.mjs ui",
+    "test:contracts": "node --test tests/evm.test.mjs",
     "build": "nuxt build",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
@@ -29,6 +30,7 @@
     "nuxt": "^4.6.1",
     "nuxt-toast": "^1.4.0",
     "pg": "^8.23.1",
+    "viem": "^2.57.7",
     "vue": "^3.5.43",
     "vue-router": "^5.4.0"
   },

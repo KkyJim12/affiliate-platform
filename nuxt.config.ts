@@ -3,7 +3,10 @@ import { fileURLToPath } from "node:url";
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: ["@nuxtjs/tailwindcss", "nuxt-toast", "@nuxtjs/color-mode", "@nuxtjs/i18n"],
-  nitro: { serverAssets: [{ baseName: "migrations", dir: fileURLToPath(new URL("./database/migrations/", import.meta.url)), pattern: "*.sql" }] },
+  nitro: {
+    esbuild: { options: { target: "es2022" } },
+    serverAssets: [{ baseName: "migrations", dir: fileURLToPath(new URL("./database/migrations/", import.meta.url)), pattern: "*.sql" }],
+  },
   postcss: { plugins: { "tailwindcss/nesting": false } },
   css: [
     "@fontsource-variable/dm-sans",
@@ -36,7 +39,10 @@ export default defineNuxtConfig({
     ],
     detectBrowserLanguage: { useCookie: true, cookieKey: "loop_locale", redirectOn: "root", fallbackLocale: "en" },
   },
-  runtimeConfig: { public: { appUrl: "" } },
+  runtimeConfig: {
+    evm: { rpcUrl: "", chainId: "", tokenAddress: "", treasuryAddress: "", minConfirmations: "" },
+    public: { appUrl: "" },
+  },
   app: {
     pageTransition: { name: "page", mode: "out-in" },
     head: {
