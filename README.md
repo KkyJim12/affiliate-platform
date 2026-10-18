@@ -10,6 +10,11 @@ English and Thai use `@nuxtjs/i18n` (Vue I18n). Switch languages in either heade
 
 All selection controls use the shared `AppDropdown` component, with themed listbox menus, selected-item indicators, keyboard navigation and typeahead, Escape cancellation, and outside-click dismissal. Menus render above card boundaries and adjust their position to fit the viewport on desktop and mobile.
 
+Signed-in navbar profiles open a shared menu on public, member and admin pages.
+It shows the account's Polygon Amoy address with a copy action, wallet/settings
+links and sign out. Menus support keyboard navigation, Escape and outside-click
+dismissal, and remain visible within narrow mobile viewports.
+
 Motion is shared through `app/assets/css/motion.css` and `usePageMotion`: route fades, staggered scroll reveals across all dashboard views, floating brand artwork, card/button feedback, FAQ expansion, modal slide-down entrances and slide-up exits, dropdown entrances, transaction rows, and matrix branches. Server-rendered content stays readable before JavaScript loads. Reduced-motion preferences disable both CSS and browser-driven animation, including live preference changes; keyboard focus reveals controls immediately. View transitions preserve the existing form and filter state. `ModalTransition` wraps every conditional dialog, retains the backdrop and body scroll lock through the exit, makes departing content inactive, and restores focus after closing.
 
 ## Run locally

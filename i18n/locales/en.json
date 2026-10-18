@@ -1,4 +1,10 @@
 {
+  "profileMenu": {
+    "open": "Profile menu for {username}",
+    "account": "Your account",
+    "wallet": "My wallet",
+    "noWallet": "Open your wallet to create your Polygon Amoy address."
+  },
   "evmWallet": {
     "title": "Your Polygon wallet",
     "subtitle": "Created for your account on Polygon Amoy.",

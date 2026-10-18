@@ -40,7 +40,7 @@ async function signOut() {
       </div>
     </aside>
     <div class="admin-main">
-      <header class="admin-topbar"><div class="admin-breadcrumb"><button class="icon-button admin-menu" :aria-label="t('admin.openNavigation')" :aria-expanded="sidebarOpen" @click="sidebarOpen = !sidebarOpen"><AppIcon name="Menu" /></button><span>{{ t('admin.admin') }}</span><AppIcon name="ChevronRight" :size="13" /><strong>{{ t(`admin.${active.key}`) }}</strong></div><div class="admin-header-actions"><LocaleSwitcher /><ThemeToggle /><span class="admin-header-avatar" :title="user?.username">{{ user?.username.slice(0, 2).toUpperCase() }}</span></div></header>
+      <header class="admin-topbar"><div class="admin-breadcrumb"><button class="icon-button admin-menu" :aria-label="t('admin.openNavigation')" :aria-expanded="sidebarOpen" @click="sidebarOpen = !sidebarOpen"><AppIcon name="Menu" /></button><span>{{ t('admin.admin') }}</span><AppIcon name="ChevronRight" :size="13" /><strong>{{ t(`admin.${active.key}`) }}</strong></div><div class="admin-header-actions"><LocaleSwitcher /><ThemeToggle /><ProfileMenu v-if="user" settings-to="/admin/settings" logout-to="/admin/login" /></div></header>
       <div v-if="error" class="admin-shell-error auth-error" role="alert">{{ error }}</div>
       <slot />
       <footer class="admin-footer"><span><span class="green-dot"></span>{{ t('admin.liveData') }}</span><span>UNXO · {{ t('admin.controlCenter') }}</span></footer>

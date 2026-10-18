@@ -431,4 +431,9 @@ body { background: var(--canvas); color: var(--text-primary); }
   .landing-nav .nav-connect { display: none; }
   .matrix-dashboard .breadcrumbs strong { max-width: 70px; }
 }
+@media (max-width: 360px) {
+  .landing-nav:has(.profile-menu) { gap: 8px; }
+  .landing-nav:has(.profile-menu) .brand-logo { --brand-height: 28px; }
+  .landing-nav:has(.profile-menu) .nav-actions { gap: 6px; }
+}
 @media (prefers-reduced-motion: reduce) { .rank-card:hover { transform: none; } }
