@@ -84,8 +84,8 @@ by the separate transfer-evidence helper, and are not required for balance reads
 An RPC or token precision failure produces HTTP 503 and an unavailable balance;
 provider errors and credentials are never returned to the browser.
 
-Receive displays the same EVM address and network. Wallet details contain the
-public key, explorer link and password-protected key reveal. Send supports native POL
+Wallet details opens a modal with the EVM address, network, public key, explorer
+link and password-protected key reveal. Send supports native POL
 and the configured ERC-20 token, using the same encrypted wallet and a reviewed gas
 budget. See [wallet sends](api.md#evm-wallet-sends). The referral contract workflow signs token approvals and
 purchases from the encrypted account wallet, verifies receipts and distributes

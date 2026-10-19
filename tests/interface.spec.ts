@@ -158,8 +158,9 @@ test("create account and EVM wallet, restore session, and sign back in", async (
   await expect(page.getByTestId("wallet-balance")).toContainText("0.00");
   const address = (await page.getByTestId("evm-address").textContent())!;
   expect(address).toMatch(/^0x[0-9a-fA-F]{40}$/);
-  await page.getByRole("button", { name: "Receive", exact: true }).click();
-  await expect(page.getByRole("dialog")).toContainText(address);
+  await expect(page.getByRole("button", { name: "Receive", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Wallet details", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Wallet details", exact: true })).toContainText(address);
   await page.keyboard.press("Escape");
   await page.reload();
   await expect(page.getByTestId("evm-address")).toHaveText(address);

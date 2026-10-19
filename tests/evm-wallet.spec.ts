@@ -107,10 +107,19 @@ test("one EVM card replaces the ledger wallet and reads balances without mixing 
   await expect(page.getByRole("button", { name: "Request funds", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Transfer", exact: true })).toHaveCount(0);
   await expect(page.locator(".wallet-history, .evm-wallet-card")).toHaveCount(0);
-  await card.getByRole("button", { name: "Receive", exact: true }).click();
-  await expect(page.getByRole("dialog")).toContainText(wallet.address);
-  await expect(page.getByRole("dialog")).toContainText("Polygon Amoy");
+  await expect(card.getByRole("button", { name: "Receive", exact: true })).toHaveCount(0);
+  const detailsButton = card.getByRole("button", { name: "Wallet details", exact: true });
+  await expect(detailsButton).toHaveAttribute("aria-haspopup", "dialog");
+  await detailsButton.click();
+  const details = page.getByRole("dialog", { name: "Wallet details", exact: true });
+  await expect(details).toContainText(wallet.address);
+  await expect(details).toContainText("Polygon Amoy");
+  await expect(card.locator(".evm-wallet-details")).toHaveCount(0);
+  await details.locator("summary").click();
+  await expect(details.getByTestId("evm-public-key")).toHaveText(wallet.publicKey);
   await page.keyboard.press("Escape");
+  await expect(details).toHaveCount(0);
+  await expect(detailsButton).toBeFocused();
   failed = true;
   await card.getByRole("button", { name: "Refresh on-chain balance", exact: true }).click();
   await expect(card).toContainText("Balance unavailable");
@@ -129,6 +138,13 @@ test("one EVM card replaces the ledger wallet and reads balances without mixing 
       const content = element.querySelector(".balance-top")!.getBoundingClientRect();
       return element.scrollLeft === 0 && content.left >= bounds.left + 20 && content.right <= bounds.right - 20;
     })).toBe(true);
+    await detailsButton.click();
+    await details.locator("summary").click();
+    await expect(details.getByTestId("evm-public-key")).toBeVisible();
+    await expect.poll(() => details.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    if (width === 1440) await page.screenshot({ path: "test-results/evm-wallet-details-desktop.png", fullPage: true, animations: "disabled" });
+    await page.getByRole("button", { name: "Close dialog", exact: true }).click();
+    await expect(details).toHaveCount(0);
   }
   await page.screenshot({ path: "test-results/evm-single-wallet-desktop.png", fullPage: true });
   await page.getByRole("button", { name: "Use dark theme", exact: true }).click();
@@ -136,8 +152,11 @@ test("one EVM card replaces the ledger wallet and reads balances without mixing 
   await page.getByRole("combobox", { name: "Language", exact: true }).click();
   await page.getByRole("listbox").locator('[data-value="th"]').click();
   await expect(card).toContainText("กระเป๋า EVM");
-  await expect(card.getByRole("button", { name: "รับเงิน", exact: true })).toBeVisible();
-  await page.screenshot({ path: "test-results/evm-single-wallet-mobile-thai.png", fullPage: true });
+  await expect(card.getByRole("button", { name: "รับเงิน", exact: true })).toHaveCount(0);
+  await card.getByRole("button", { name: "รายละเอียดกระเป๋า", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "รายละเอียดกระเป๋า", exact: true })).toContainText(wallet.address);
+  await page.screenshot({ path: "test-results/evm-single-wallet-mobile-thai.png", fullPage: true, animations: "disabled" });
+  await page.keyboard.press("Escape");
   expect(errors).toEqual([]);
   expect((await (await page.request.get("/api/wallet/evm")).json()).wallet.address).toBe(wallet.address);
 });
@@ -154,8 +173,13 @@ test("wallet UI reveals keys after a password check and clears them on close, ti
   await expect(card).toContainText("80002");
   await expect(card.getByTestId("evm-address")).toHaveText(/^0x[0-9a-fA-F]{40}$/);
   await expect(page.getByTestId("evm-private-key")).toHaveCount(0);
-  await card.getByRole("button", { name: "Wallet details", exact: true }).click();
-  await card.getByRole("button", { name: "Reveal private key" }).click();
+  async function openReveal() {
+    await card.getByRole("button", { name: "Wallet details", exact: true }).click();
+    await page.getByRole("dialog", { name: "Wallet details", exact: true }).getByRole("button", { name: "Reveal private key", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
+    await expect(page.getByLabel("Confirm with your password", { exact: true })).toBeFocused();
+  }
+  await openReveal();
   await page.getByLabel("Confirm with your password", { exact: true }).fill("Incorrect password!");
   await page.getByRole("dialog").getByRole("button", { name: "Reveal private key", exact: true }).click();
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText("Your password is incorrect.");
@@ -165,7 +189,7 @@ test("wallet UI reveals keys after a password check and clears them on close, ti
   await page.getByRole("button", { name: "Hide private key", exact: true }).click();
   expect(await page.getByTestId("evm-private-key").evaluateAll(elements => elements.every(element => !(element as HTMLTextAreaElement).value))).toBe(true);
   await expect(page.getByTestId("evm-private-key")).toHaveCount(0);
-  await card.getByRole("button", { name: "Reveal private key" }).click();
+  await openReveal();
   await expect(page.getByTestId("evm-private-key")).toHaveCount(0);
   await page.getByLabel("Confirm with your password", { exact: true }).fill(password);
   await page.clock.install();
@@ -177,7 +201,7 @@ test("wallet UI reveals keys after a password check and clears them on close, ti
   await page.clock.resume();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: "test-results/evm-wallet-mobile.png", fullPage: true });
-  await card.getByRole("button", { name: "Reveal private key" }).click();
+  await openReveal();
   await page.getByLabel("Confirm with your password", { exact: true }).fill(password);
   await page.getByRole("dialog").getByRole("button", { name: "Reveal private key", exact: true }).click();
   await expect(page.getByTestId("evm-private-key")).toBeVisible();

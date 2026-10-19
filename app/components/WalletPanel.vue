@@ -8,8 +8,7 @@ const { copy, authOpen } = useAppUI();
 const { wallet, walletError: loadError, balances, balanceLoading, balanceError, refreshBalances } = useEvmWallet();
 const fetching = ref(true);
 
-const dialog = ref<"create" | "reveal" | "receive" | null>(null);
-const detailsOpen = ref(false);
+const dialog = ref<"create" | "reveal" | "details" | null>(null);
 const sendOpen = ref(false);
 const asset = computed(() => balances.value?.token ?? balances.value?.native);
 function formatBalance(value: string) {
@@ -17,11 +16,8 @@ function formatBalance(value: string) {
   const decimal = new Intl.NumberFormat(localeTag.value).formatToParts(1.1).find(part => part.type === "decimal")?.value ?? ".";
   return new Intl.NumberFormat(localeTag.value).format(BigInt(whole)) + decimal + fraction.slice(0, 6).padEnd(2, "0");
 }
-function showDetails() {
-  if (props.preview) { authOpen.value = true; return; }
-  detailsOpen.value = !detailsOpen.value;
-}
 const password = ref("");
+const passwordInput = ref<HTMLInputElement | null>(null);
 const privateKey = ref("");
 const privateKeyField = ref<HTMLTextAreaElement | null>(null);
 const error = ref("");
@@ -45,10 +41,11 @@ function close() {
   error.value = "";
   busy.value = false;
 }
-function open(action: "create" | "reveal" | "receive") {
+function open(action: "create" | "reveal" | "details") {
   if (props.preview) { authOpen.value = true; return; }
   close();
   dialog.value = action;
+  if (action !== "details") void nextTick(() => { if (dialog.value === action) passwordInput.value?.focus({ preventScroll: true }); });
 }
 function openSend() {
   if (props.preview) { authOpen.value = true; return; }
@@ -74,7 +71,7 @@ async function load() {
   }
 }
 async function submit() {
-  if (busy.value || !dialog.value || dialog.value === "receive" || !user.value) return;
+  if (busy.value || !dialog.value || dialog.value === "details" || !user.value) return;
   const version = ++operationVersion;
   const accountId = user.value.id;
   const action = dialog.value;
@@ -101,7 +98,7 @@ async function submit() {
   }
 }
 function onVisibilityChange() { if (document.hidden) close(); }
-watch(() => user.value?.id, () => { close(); detailsOpen.value = false; void load(); }, { flush: "sync" });
+watch(() => user.value?.id, () => { close(); void load(); }, { flush: "sync" });
 onMounted(() => {
   void load();
   document.addEventListener("visibilitychange", onVisibilityChange);
@@ -127,24 +124,21 @@ onBeforeUnmount(() => {
       <p v-if="balanceLoading" class="evm-balance-status" role="status">{{ t('evmWallet.balanceLoading') }}</p>
       <p v-else-if="balanceError" class="evm-balance-status" role="status">{{ t('evmWallet.balanceUnavailable') }}</p>
       <p v-if="loadError && !preview" class="evm-balance-status" role="alert">{{ t('evmWallet.loadFailed') }} <button class="evm-retry" @click="load">{{ t('evmWallet.retry') }}</button></p>
-      <div v-if="wallet || preview" class="wallet-actions"><button @click="openSend"><AppIcon name="ArrowUpRight" :size="17" />{{ t('evmSend.title') }}</button><button @click="open('receive')"><AppIcon name="ArrowDownLeft" :size="17" />{{ t('evmWallet.receive') }}</button><button :aria-expanded="detailsOpen" @click="showDetails"><AppIcon name="Settings" :size="16" />{{ t('evmWallet.details') }}</button></div>
+      <div v-if="wallet || preview" class="wallet-actions"><button @click="openSend"><AppIcon name="ArrowUpRight" :size="17" />{{ t('evmSend.title') }}</button><button aria-haspopup="dialog" @click="open('details')"><AppIcon name="Settings" :size="16" />{{ t('evmWallet.details') }}</button></div>
       <div v-else-if="!fetching && !loadError" class="wallet-actions"><button @click="open('create')">{{ t('evmWallet.create') }}</button></div>
     </div>
-    <div v-if="detailsOpen && wallet && !preview" class="panel evm-wallet-details">
-      <div class="section-card-header"><div><h2>{{ t('evmWallet.details') }}</h2><p>{{ t('evmWallet.keyInfo') }}</p></div><AppIcon name="ShieldCheck" :size="24" /></div>
-      <details class="evm-public-key"><summary>{{ t('evmWallet.publicKey') }}</summary><code data-testid="evm-public-key">{{ wallet.publicKey }}</code><button class="text-action" @click="copy(wallet.publicKey)"><AppIcon name="Copy" :size="14" />{{ t('evmWallet.copyPublicKey') }}</button></details>
-      <div class="evm-wallet-actions"><a class="button button-outline button-small" :href="wallet.explorerUrl" target="_blank" rel="noopener noreferrer">{{ t('evmWallet.explorer') }}<AppIcon name="ExternalLink" :size="15" /></a><button class="button button-outline button-small" @click="open('reveal')"><AppIcon name="LockKeyhole" :size="15" />{{ t('evmWallet.reveal') }}</button></div>
-    </div>
-    <ModalTransition><AppModal v-if="dialog" :title="dialog === 'receive' ? t('evmWallet.receive') : dialog === 'reveal' ? t('evmWallet.reveal') : t('evmWallet.create')" @close="close">
-      <div v-if="dialog === 'receive' && wallet" class="wallet-action-modal evm-receive-dialog">
-        <span class="modal-feature-icon"><AppIcon name="ArrowDownLeft" :size="26" /></span>
-        <h2>{{ t('evmWallet.receive') }}</h2><p>{{ t('evmWallet.receiveHint', { network: wallet.network }) }}</p>
-        <div class="evm-address-box"><span>{{ t('evmWallet.address') }}</span><code>{{ wallet.address }}</code></div>
-        <button class="button button-orange" @click="copy(wallet.address)"><AppIcon name="Copy" :size="16" />{{ t('evmWallet.copyAddress') }}</button>
+    <ModalTransition><AppModal v-if="dialog" :title="dialog === 'details' ? t('evmWallet.details') : dialog === 'reveal' ? t('evmWallet.reveal') : t('evmWallet.create')" @close="close">
+      <div v-if="dialog === 'details' && wallet" class="wallet-action-modal evm-wallet-details">
+        <span class="modal-feature-icon"><AppIcon name="ShieldCheck" :size="26" /></span>
+        <h2>{{ t('evmWallet.details') }}</h2><p>{{ t('evmWallet.keyInfo') }}</p>
+        <div class="evm-address-box"><span>{{ t('evmWallet.address') }}</span><code>{{ wallet.address }}</code><button class="text-action" @click="copy(wallet.address)"><AppIcon name="Copy" :size="14" />{{ t('evmWallet.copyAddress') }}</button></div>
+        <dl class="evm-wallet-metadata"><div><dt>{{ t('evmWallet.network') }}</dt><dd>{{ wallet.network }}</dd></div><div><dt>{{ t('evmWallet.chainId') }}</dt><dd>{{ wallet.chainId }}</dd></div></dl>
+        <details class="evm-public-key"><summary>{{ t('evmWallet.publicKey') }}</summary><code data-testid="evm-public-key">{{ wallet.publicKey }}</code><button class="text-action" @click="copy(wallet.publicKey)"><AppIcon name="Copy" :size="14" />{{ t('evmWallet.copyPublicKey') }}</button></details>
+        <div class="evm-wallet-actions"><a class="button button-outline button-small" :href="wallet.explorerUrl" target="_blank" rel="noopener noreferrer">{{ t('evmWallet.explorer') }}<AppIcon name="ExternalLink" :size="15" /></a><button class="button button-outline button-small" @click="open('reveal')"><AppIcon name="LockKeyhole" :size="15" />{{ t('evmWallet.reveal') }}</button></div>
       </div>
       <div v-else class="wallet-action-modal evm-key-dialog"><span class="modal-feature-icon"><AppIcon name="LockKeyhole" :size="26" /></span><h2>{{ dialog === 'reveal' ? t('evmWallet.reveal') : t('evmWallet.create') }}</h2>
         <template v-if="privateKey"><p>{{ t('evmWallet.keyWarning') }}</p><label for="evm-private-key">{{ t('evmWallet.privateKey') }}</label><textarea id="evm-private-key" ref="privateKeyField" :value="privateKey" readonly rows="3" spellcheck="false" autocomplete="off" data-testid="evm-private-key" /><p class="evm-wallet-note">{{ t('evmWallet.autoHide') }}</p><div class="evm-wallet-actions"><button class="button button-outline button-small" @click="copy(privateKey)">{{ t('evmWallet.copyPrivateKey') }}</button><button class="button button-orange button-small" @click="close">{{ t('evmWallet.hide') }}</button></div></template>
-        <form v-else class="account-form" @submit.prevent="submit"><p>{{ dialog === 'reveal' ? t('evmWallet.confirmReveal') : t('evmWallet.createHint') }}</p><label for="evm-wallet-password">{{ t('ui.confirm_with_your_password') }}</label><input id="evm-wallet-password" v-model="password" class="auth-input" type="password" autocomplete="current-password" required maxlength="128" :disabled="busy" /><p v-if="error" class="auth-error" role="alert">{{ tr(error) }}</p><button class="button button-orange auth-wallet-button" type="submit" :disabled="busy"><AppIcon v-if="busy" name="LoaderCircle" class="auth-loading" :size="17" />{{ busy ? t('ui.please_wait') : dialog === 'reveal' ? t('evmWallet.reveal') : t('evmWallet.create') }}</button></form>
+        <form v-else class="account-form" @submit.prevent="submit"><p>{{ dialog === 'reveal' ? t('evmWallet.confirmReveal') : t('evmWallet.createHint') }}</p><label for="evm-wallet-password">{{ t('ui.confirm_with_your_password') }}</label><input id="evm-wallet-password" ref="passwordInput" v-model="password" class="auth-input" type="password" autocomplete="current-password" required maxlength="128" :disabled="busy" /><p v-if="error" class="auth-error" role="alert">{{ tr(error) }}</p><button class="button button-orange auth-wallet-button" type="submit" :disabled="busy"><AppIcon v-if="busy" name="LoaderCircle" class="auth-loading" :size="17" />{{ busy ? t('ui.please_wait') : dialog === 'reveal' ? t('evmWallet.reveal') : t('evmWallet.create') }}</button></form>
       </div>
     </AppModal></ModalTransition>
     <WalletSend v-if="wallet && !preview && user" :key="user.id" :open="sendOpen" @close="sendOpen = false" />
@@ -165,7 +159,10 @@ onBeforeUnmount(() => {
 .evm-refresh:disabled { opacity: .5; }
 .evm-balance-status, .evm-gas-balance { color: #b1b8c6; font-size: 11px; line-height: 1.7; margin-top: 10px; }
 .evm-retry { text-decoration: underline; color: #f4e4b7; }
-.evm-wallet-details { padding: 24px; min-width: 0; }
+.evm-wallet-details { min-width: 0; }
+.evm-wallet-metadata { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 20px 0; }
+.evm-wallet-metadata dt { font-size: 12px; color: var(--text-secondary); }
+.evm-wallet-metadata dd { margin: 6px 0 0; font-size: 13px; overflow-wrap: anywhere; }
 .evm-public-key { margin: 16px 0; font-size: 13px; }
 .evm-public-key summary { cursor: pointer; font-weight: 700; }
 .evm-public-key code { display: block; margin: 12px 0; overflow-wrap: anywhere; line-height: 1.8; font-size: 12px; }
@@ -176,6 +173,6 @@ onBeforeUnmount(() => {
 .evm-address-box { text-align: left; border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin: 20px 0; }
 .evm-address-box span { font-size: 12px; opacity: .65; }
 .evm-address-box code { display: block; overflow-wrap: anywhere; margin-top: 8px; font: 13px/1.8 monospace; }
-.evm-receive-dialog > .button { width: 100%; justify-content: center; }
-@media (max-width: 480px) { .evm-wallet-details { padding: 18px; } .evm-wallet-actions .button { width: 100%; justify-content: center; } }
+.evm-address-box .text-action { margin-top: 12px; }
+@media (max-width: 480px) { .evm-wallet-actions .button { width: 100%; justify-content: center; } }
 </style>

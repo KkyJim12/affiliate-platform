@@ -77,7 +77,9 @@ Verify both deployed contracts with `npm run contracts:verify` using
 with `npm run contracts:verify -- --dry-run`.
 
 The member wallet is one EVM balance card on both the overview and wallet page.
-It shows the existing address, network, live balances, Send, Receive and wallet details.
+It shows the existing address, network, live balances, Send and a Wallet details
+button. Wallet details opens a modal with the address, public key, explorer link
+and password-protected private-key action.
 The old internal balance, LW ID, funding requests, member transfers and ledger
 history have been removed from this card. Settings and navigation also use the
 EVM wallet. Existing addresses, encrypted keys and historical ledger records are
