@@ -55,7 +55,7 @@ test("signed-in navbar shows the owner's wallet, supports keyboard dismissal, an
   await expect(menu).toHaveCount(0);
   await trigger.click();
   await menu.getByRole("menuitem", { name: "My wallet", exact: true }).click();
-  await expect(page).toHaveURL(/view=wallet/);
+  await expect(page).toHaveURL(`${origin}/wallet`);
   await expect(menu).toHaveCount(0);
   for (const width of [1440, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
@@ -121,18 +121,18 @@ test("profile USDT balance follows wallet refreshes and handles missing tokens a
     ? route.fulfill({ status: 503, json: {} })
     : route.fulfill({ json: { address, chainId: 80002, blockNumber: "100",
       native: { symbol: "POL", decimals: 18, balance: "0.5", balanceUnits: "500000000000000000" },
-      token: mode === "native" ? null : { address: "0x1111111111111111111111111111111111111111", symbol: mode === "other" ? "USDC" : "USDT", decimals: 6,
+      token: mode === "native" ? null : { address: "0x1111111111111111111111111111111111111111", symbol: mode === "other" ? "USDC" : mode === "test" ? "tUSDT" : "USDT", decimals: 6,
         balance: mode === "zero" ? "0" : "12.345678", balanceUnits: mode === "zero" ? "0" : "12345678" } } }));
   await gotoReady(page, "/dashboard?view=wallet");
   const balance = page.getByTestId("profile-usdt-balance");
   const refresh = page.getByRole("button", { name: "Refresh on-chain balance", exact: true });
   await expect(balance).toContainText("12.35");
-  for (const [nextMode, expected] of [["zero", "0.00"], ["native", "—"], ["other", "—"], ["error", "—"], ["usdt", "12.35"]]) {
+  for (const [nextMode, expected] of [["test", "12.35"], ["zero", "0.00"], ["native", "—"], ["other", "—"], ["error", "—"], ["usdt", "12.35"]]) {
     mode = nextMode!;
     await refresh.click();
     await expect(refresh).toBeEnabled();
     await expect(balance).toContainText(expected!);
-    await expect(balance).toContainText("USDT");
+    await expect(balance.locator("small")).toHaveText(mode === "test" ? "tUSDT" : "USDT");
     if (["native", "other", "error"].includes(mode)) await expect(balance).toHaveAttribute("title", "USDT balance unavailable");
   }
 });

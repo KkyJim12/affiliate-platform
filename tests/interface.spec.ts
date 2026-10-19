@@ -128,6 +128,7 @@ test("referral overview, corrected ranks, referrals, and wallet preview on deskt
   await expect(page.getByRole("heading", { name: "No matching referrals" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Download image", exact: true })).toBeDisabled();
   await navigate(page, "EVM wallet");
+  await expect(page).toHaveURL("http://127.0.0.1:3100/wallet");
   await expect(page.getByTestId("wallet-balance")).toContainText("—");
   await page.getByRole("button", { name: "Wallet details", exact: true }).click();
   await expect(page.getByRole("dialog")).toContainText("Sign in");

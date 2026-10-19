@@ -60,6 +60,7 @@ async function injectWallets(page: Page,wallet: BaseWallet,provider: JsonRpcProv
       info: { uuid: `test-wallet-${index}`,name,rdns: ['io.metamask','io.rabby','app.phantom'][index],icon: '' },
       provider: { request: async ({ method,params = [] }: { method: string; params: unknown[] }) => {
         browser.walletCalls.push({ name,method,params });
+        if (method === 'eth_accounts' && browser.readWalletAccount) return [browser.readWalletAccount];
         if (browser.rejectWallet && ['personal_sign','eth_sendTransaction'].includes(method)) throw Object.assign(new Error('User rejected request'),{ code: 4001 });
         return browser.walletBridge(method,params);
       },on: (event: string,listener: Function) => { (events[event] ||= []).push(listener); },removeListener: (event: string,listener: Function) => { events[event] = (events[event] || []).filter(item => item !== listener); } },
@@ -318,9 +319,55 @@ test('browser purchase requests separate wallet approval and purchase signatures
     expect(calls.filter((call: any) => call.method === 'personal_sign')).toHaveLength(2);
     expect(calls.filter((call: any) => call.method === 'eth_sendTransaction')).toHaveLength(2);
     expect(calls.filter((call: any) => call.method === 'eth_sendTransaction').every((call: any) => call.name === 'MetaMask')).toBe(true);
-    await page.locator('.sidebar-nav a[href="/dashboard?view=wallet"]').click();
+    await page.locator('.sidebar-nav a[href="/wallet"]').click();
     await page.evaluate(() => { const browser = window as any; browser.walletEvents.accountsChanged?.forEach((listener: Function) => listener(['0x1111111111111111111111111111111111111111'])); });
     await expect(page.getByRole('button',{ name: 'Send',exact: true })).toBeDisabled();
     await expect(page.getByTestId('connected-wallet-panel')).toContainText('Select the wallet linked');
+  } finally { provider.destroy(); }
+});
+
+test('tUSDT balance and linked wallet agree across profile, referrals and wallet after reload', async ({ page }) => {
+  test.setTimeout(90_000);
+  const provider = rpc(), wallet = Wallet.createRandom().connect(provider);
+  try {
+    await fund(wallet, provider);
+    await injectWallets(page, wallet, provider);
+    await page.goto('/dashboard');
+    await page.getByRole('button', { name: 'Sign in', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Rabby', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByTestId('profile-usdt-balance')).toHaveText('100.00 tUSDT');
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const path of ['/referrals', '/wallet']) {
+        await page.goto(path);
+        await expect(page.getByTestId('connected-wallet-address')).toHaveText(wallet.address);
+        await expect(page.getByTestId('account-wallet-balance')).toHaveText('100.00 tUSDT');
+        await expect(page.getByTestId('profile-usdt-balance')).toHaveText('100.00 tUSDT');
+        const scope = path === '/wallet' ? page.getByTestId('connected-wallet-panel') : page.getByTestId('referral-wallet-summary');
+        await expect(scope).toBeVisible();
+        if (path === '/wallet') await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
+        else await expect(page.getByRole('button', { name: /Buy level 1/ })).toBeEnabled();
+        await page.locator('.profile-menu-trigger').click();
+        await expect(page.getByTestId('profile-wallet-address')).toHaveText(wallet.address);
+        await expect(page.getByRole('menu').getByTestId('account-wallet-balance')).toHaveText('100.00 tUSDT');
+        await page.keyboard.press('Escape');
+        const calls = await page.evaluate(() => (window as any).walletCalls as { name: string; method: string }[]);
+        expect(calls.filter(call => ['eth_requestAccounts', 'personal_sign', 'eth_sendTransaction', 'wallet_switchEthereumChain'].includes(call.method))).toEqual([]);
+        expect(calls.some(call => call.name === 'Rabby' && call.method === 'eth_accounts')).toBe(true);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: `.data/shared-wallet-${path.slice(1)}-${width}.png`, fullPage: true, animations: 'disabled' });
+      }
+    }
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
+    await page.evaluate(() => { (window as any).walletEvents.chainChanged?.forEach((listener: Function) => listener('0x89')); });
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+    await page.addInitScript(() => { (window as any).readWalletAccount = '0x1111111111111111111111111111111111111111'; });
+    await page.reload();
+    await expect(page.getByTestId('connected-wallet-address')).toHaveText(wallet.address);
+    await expect(page.getByTestId('profile-usdt-balance')).toHaveText('100.00 tUSDT');
+    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Rabby', exact: true })).toBeVisible();
   } finally { provider.destroy(); }
 });

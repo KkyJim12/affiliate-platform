@@ -1,4 +1,4 @@
-export default defineNuxtPlugin(async () => {
+export default defineNuxtPlugin({ name: "account-session", async setup() {
   const { user, restoreSession } = useAccount();
   const { wallet, walletError, refreshWallet, clearBalances } = useEvmWallet();
   const { wallet: legacyCredits, walletError: legacyError } = useWallet();
@@ -17,4 +17,4 @@ export default defineNuxtPlugin(async () => {
       if (user.value) await Promise.all([refreshWallet(), refreshDashboard()]);
     }, { flush: "sync" });
   }
-});
+} });

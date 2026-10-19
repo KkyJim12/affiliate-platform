@@ -202,7 +202,7 @@ test("recent sends is styled inside the overview column and absent from the EVM 
     await page.getByRole("listbox").locator('[data-value="th"]').click();
     await noOverflow(page);
     await page.screenshot({ path: `.data/recent-sends-overview-${info.project.name}.png`, fullPage: true });
-    await ready(page, "/dashboard?view=wallet");
+    await ready(page, "/wallet");
     await expect(page.getByTestId("connected-wallet-panel")).toBeVisible();
     await expect(recent).toHaveCount(0);
     await noOverflow(page);

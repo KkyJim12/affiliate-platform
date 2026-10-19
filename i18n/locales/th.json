@@ -136,6 +136,7 @@
     "showMore": "แสดงเพิ่มเติม"
   },
   "profileMenu": {
+    "assetBalance": "ยอดคงเหลือ {symbol}",
     "usdtBalance": "ยอดคงเหลือ USDT",
     "loadingBalance": "กำลังโหลดยอด USDT…",
     "balanceUnavailable": "ไม่สามารถแสดงยอด USDT ได้",
@@ -324,7 +325,11 @@
     "secureSession": "การเข้าถึงและเซสชันที่ปลอดภัย",
     "welcome": "ยินดีต้อนรับกลับ {username}",
     "overviewTitle": "มองเห็นทุกความเคลื่อนไหว",
-    "overviewSubtitle": "ภาพรวมสมาชิก การชำระเงิน และกิจกรรมของแพลตฟอร์ม",
+    "overviewSubtitle": "ภาพรวมบัญชี การควบคุมสิทธิ์ และกิจกรรมของแพลตฟอร์ม",
+    "activeAccountCount": "บัญชีที่ใช้งานอยู่",
+    "activeAccountHint": "บัญชีที่มีสิทธิ์เข้าสู่ระบบในขณะนี้",
+    "accountManagement": "จัดการชุมชนของคุณ",
+    "accountManagementHint": "ตรวจสอบบัญชี จัดการสิทธิ์ และสำรวจกิจกรรมเครือข่ายแนะนำ",
     "refresh": "รีเฟรช",
     "loadError": "ไม่สามารถโหลดข้อมูลนี้ได้",
     "requestError": "ไม่สามารถดำเนินการได้ กรุณาลองอีกครั้ง",

@@ -16,6 +16,8 @@ let accountListener: ((accounts: string[]) => void) | undefined;
 let chainListener: ((chain: string) => void) | undefined;
 let disconnectListener: (() => void) | undefined;
 let discovering = false;
+let connectionVersion = 0;
+let restoring = false;
 
 export function useConnectedWallet() {
   const external = computed(() => useRuntimeConfig().public.walletMode !== "embedded");
@@ -55,12 +57,42 @@ export function useConnectedWallet() {
     fallbacks();
   }
   function disconnect() {
+    connectionVersion++;
     if (activeProvider) {
       if (accountListener) activeProvider.removeListener?.("accountsChanged", accountListener);
       if (chainListener) activeProvider.removeListener?.("chainChanged", chainListener);
       if (disconnectListener) activeProvider.removeListener?.("disconnect", disconnectListener);
     }
     activeProvider = null; address.value = null; chainId.value = null; walletName.value = ""; error.value = "";
+  }
+  function attach(provider: InjectedProvider, id: string, account: string) {
+    disconnect(); activeProvider = provider;
+    address.value = getAddress(account); chainId.value = polygonTestnet.chainId;
+    walletName.value = providers.value.find(option => option.id === id)?.name ?? "Wallet";
+    accountListener = accounts => { address.value = accounts[0] ? getAddress(accounts[0]) : null; error.value = "Wallet account changed. Use your linked account or sign in again."; };
+    chainListener = chain => { chainId.value = Number(chain); error.value = chainId.value === polygonTestnet.chainId ? "" : "Select Polygon Amoy in your wallet."; };
+    disconnectListener = () => { address.value = null; chainId.value = null; error.value = "Your wallet disconnected. Connect it again to continue."; };
+    provider.on?.("accountsChanged", accountListener); provider.on?.("chainChanged", chainListener); provider.on?.("disconnect", disconnectListener);
+  }
+  async function restore() {
+    if (import.meta.server || !external.value || !user.value || !wallet.value || activeProvider || restoring) return;
+    const version = connectionVersion, accountId = user.value.id, linked = wallet.value.address;
+    let preferred: { id?: string; name?: string } = {};
+    try { const saved = JSON.parse(localStorage.getItem("unxo-wallet-provider") || "{}"); if (saved && typeof saved === "object") preferred = saved; } catch {}
+    const option = providers.value.find(item => item.id === preferred.id) ?? providers.value.find(item => item.name === preferred.name)
+      ?? (providers.value.length === 1 ? providers.value[0] : undefined);
+    const provider = option && injected.get(option.id);
+    if (!option || !provider) return;
+    restoring = true;
+    try {
+      // Read only the connection already authorized in the extension. No account,
+      // network-switch, signature or transaction approval is requested on reload.
+      const accounts = await provider.request({ method: "eth_accounts" }) as string[];
+      const network = Number(await provider.request({ method: "eth_chainId" }));
+      if (connectionVersion !== version || user.value?.id !== accountId || wallet.value?.address !== linked || activeProvider) return;
+      if (accounts[0]?.toLowerCase() === linked.toLowerCase() && network === polygonTestnet.chainId) attach(provider, option.id, accounts[0]);
+    } catch { /* A locked or unavailable extension can be connected explicitly. */ }
+    finally { restoring = false; if (user.value?.id !== accountId || wallet.value?.address !== linked) void restore(); }
   }
   async function switchNetwork(provider: InjectedProvider) {
     const current = Number(await provider.request({ method: "eth_chainId" }));
@@ -82,13 +114,8 @@ export function useConnectedWallet() {
     const accounts = await provider.request({ method: "eth_requestAccounts" }) as string[];
     if (!accounts?.[0]) throw new Error("Select an EVM account in your wallet.");
     await switchNetwork(provider);
-    disconnect(); activeProvider = provider;
-    address.value = getAddress(accounts[0]); chainId.value = polygonTestnet.chainId;
-    walletName.value = providers.value.find(option => option.id === id)?.name ?? "Wallet";
-    accountListener = accounts => { address.value = accounts[0] ? getAddress(accounts[0]) : null; error.value = "Wallet account changed. Use your linked account or sign in again."; };
-    chainListener = chain => { chainId.value = Number(chain); error.value = chainId.value === polygonTestnet.chainId ? "" : "Select Polygon Amoy in your wallet."; };
-    disconnectListener = () => { address.value = null; chainId.value = null; error.value = "Your wallet disconnected. Connect it again to continue."; };
-    provider.on?.("accountsChanged", accountListener); provider.on?.("chainChanged", chainListener); provider.on?.("disconnect", disconnectListener);
+    attach(provider, id, accounts[0]);
+    try { localStorage.setItem("unxo-wallet-provider", JSON.stringify({ id, name: walletName.value })); } catch {}
     return address.value;
   }
   async function authenticate(id: string, purpose: "login" | "link", sponsorCode = "") {
@@ -128,5 +155,5 @@ export function useConnectedWallet() {
     if (err.code === 4001 || err.code === "ACTION_REJECTED") return "You declined the wallet request. You can try again when ready.";
     return err.data?.statusMessage || err.shortMessage || err.message || "The wallet request failed. Please try again.";
   }
-  return { external, providers, address, chainId, walletName, busy, error, matches, discover, connect, authenticate, assertConnected, send, disconnect, failureMessage };
+  return { external, providers, address, chainId, walletName, busy, error, matches, discover, restore, connect, authenticate, assertConnected, send, disconnect, failureMessage };
 }

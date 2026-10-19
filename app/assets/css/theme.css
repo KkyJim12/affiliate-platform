@@ -117,7 +117,6 @@ body { background: var(--canvas); color: var(--text-primary); }
 .matrix-dashboard .sidebar-nav > a { color: var(--text-secondary); font-size: 12px; border: 1px solid transparent; border-radius: 9px; padding-block: 13px; }
 .matrix-dashboard .sidebar-nav > a:hover { color: var(--text-primary); background: var(--surface-alt); }
 .matrix-dashboard .sidebar-nav > a.active { color: var(--gold-text); background: var(--gold-soft); border-color: var(--gold-border); box-shadow: inset 3px 0 var(--gold); font-weight: 650; }
-.matrix-dashboard .sidebar-nav > a:last-child { border-top-color: var(--border); }
 .matrix-dashboard .nav-count { color: var(--text-secondary); background: var(--surface-alt); border-radius: 5px; font-size: 9px; }
 .matrix-dashboard .sidebar-invite { background: var(--gold-soft); border-color: var(--gold-border); border-radius: 13px; padding: 19px; }
 .matrix-dashboard .sidebar-invite > strong { color: var(--text-primary); font-size: 14px; }

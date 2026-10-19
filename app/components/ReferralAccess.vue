@@ -91,6 +91,7 @@ async function connectSponsor() {
 
 <template>
   <div class="referral-access">
+    <section v-if="!preview && config.public.walletMode !== 'embedded'" class="panel referral-wallet-summary" data-testid="referral-wallet-summary"><div class="panel-heading"><h2>{{ t('connected.walletTitle') }}</h2><AppIcon name="Wallet" :size="23" /></div><AccountWalletSummary show-native refreshable /></section>
     <div v-if="!preview && error" class="referral-access-error" role="alert"><p>{{ t('referral.loadFailed') }}</p><button class="text-action" @click="refresh()">{{ t('admin.retry') }}</button></div>
     <p v-else-if="!preview && !program" class="referral-access-loading" role="status">{{ t('explorer.loading') }}</p>
     <template v-else>

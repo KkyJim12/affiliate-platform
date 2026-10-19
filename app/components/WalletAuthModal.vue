@@ -18,7 +18,7 @@ async function signedIn() {
 async function migrateAccount() {
   if (!credentialsEnabled || busy.value) return;
   busy.value = true; error.value = "";
-  try { await signIn(username.value,password.value); authOpen.value = false; password.value = ""; await navigateTo("/dashboard?view=wallet"); }
+  try { await signIn(username.value,password.value); authOpen.value = false; password.value = ""; await navigateTo("/wallet"); }
   catch (failure) { error.value = (failure as { data?: { statusMessage?: string } }).data?.statusMessage || t('connected.loginFailed'); }
   finally { busy.value = false; password.value = ""; }
 }

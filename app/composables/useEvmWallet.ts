@@ -5,6 +5,8 @@ export function useEvmWallet() {
   // Public metadata only. Passwords and decrypted keys stay inside WalletPanel.
   const wallet = useState<EvmWalletDetails | null>("evm-wallet", () => null);
   const walletError = useState("evm-wallet-error", () => false);
+  const walletLoading = useState("evm-wallet-loading", () => false);
+  const walletVersion = useState("evm-wallet-version", () => 0);
   const balances = useState<EvmWalletBalances | null>("evm-wallet-balances", () => null);
   const balanceLoading = useState("evm-balance-loading", () => false);
   const balanceError = useState("evm-balance-error", () => false);
@@ -50,14 +52,18 @@ export function useEvmWallet() {
   async function refreshWallet() {
     const accountId = user.value?.id;
     if (!accountId) return;
+    const version = ++walletVersion.value;
+    walletLoading.value = true;
     try {
       const result = await request<{ wallet: EvmWalletDetails | null }>("/api/wallet/evm");
-      if (user.value?.id !== accountId) return;
+      if (user.value?.id !== accountId || version !== walletVersion.value) return;
       wallet.value = result.wallet;
       walletError.value = false;
     } catch {
-      if (user.value?.id === accountId) walletError.value = true;
+      if (user.value?.id === accountId && version === walletVersion.value) walletError.value = true;
+    } finally {
+      if (version === walletVersion.value) walletLoading.value = false;
     }
   }
-  return { wallet, walletError, refreshWallet, balances, balanceLoading, balanceError, refreshBalances, clearBalances };
+  return { wallet, walletError, walletLoading, refreshWallet, balances, balanceLoading, balanceError, refreshBalances, clearBalances };
 }

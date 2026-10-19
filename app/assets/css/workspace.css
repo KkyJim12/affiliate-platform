@@ -7,6 +7,9 @@
 .overview-tree-panel .inline-link { flex-shrink: 0; }
 .overview-tree-panel .auth-error { padding: 0 22px; }
 .overview-network-grid > * { min-width: 0; }
+.sidebar-nav-divider { flex-shrink: 0; margin: 14px 0 8px; border: 0; border-top: 1px solid var(--border); }
+.referral-wallet-summary { grid-column: 1 / -1; min-width: 0; padding: 24px; }
+.referral-wallet-summary .panel-heading { padding: 0 0 18px; }
 .faq-nav-group { margin-block: 3px; }
 .faq-nav-heading { display: flex; align-items: stretch; border-radius: 8px; }
 .faq-nav-heading.active { background: var(--gold-soft); }

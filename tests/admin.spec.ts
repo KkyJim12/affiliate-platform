@@ -145,16 +145,12 @@ test("admin login and all management pages work in English, Thai, light and dark
     await navigate(page, "Dashboard");
     await expect(page.getByRole("heading", { name: "The bigger picture.", exact: true })).toBeVisible();
     await page.screenshot({ path: `test-results/admin-dashboard-${testInfo.project.name}.png`, fullPage: true, animations: "disabled" });
-    await navigate(page, "Payments");
-    await page.getByRole("textbox", { name: "Search member or reference", exact: true }).fill(memberName);
-    await page.getByRole("textbox", { name: "Search member or reference", exact: true }).press("Enter");
-    await page.getByRole("row").filter({ hasText: `@${memberName}` }).getByRole("button", { name: "Review", exact: true }).click();
-    await page.getByLabel("Settlement reference", { exact: true }).fill(`ui-settlement-${suffix}`);
-    await page.getByLabel("I have verified receipt of this payment.", { exact: true }).check();
-    await page.getByRole("button", { name: "Approve and credit wallet", exact: true }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page.getByRole("row").filter({ hasText: `@${memberName}` })).toContainText("Completed");
-    expect((await (await member.get("/api/wallet")).json()).available).toBe(42.123456);
+    await expect(page.locator('a[href^="/admin/payment"]')).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Recent payments", exact: true })).toHaveCount(0);
+    for (const path of ["/admin/payments", "/admin/payment?status=pending"]) {
+      await gotoReady(page, path);
+      await expect(page).toHaveURL(origin + "/admin/dashboard");
+    }
     await navigate(page, "Settings");
     await page.getByLabel("Support email", { exact: true }).fill(supportEmail);
     await page.getByLabel("Platform fee address", { exact: true }).fill("0x3434343434343434343434343434343434343434");

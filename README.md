@@ -17,11 +17,11 @@ All selection controls use the shared `AppDropdown` component, with themed listb
 Signed-in navbar profiles open a shared menu on public, member and admin pages.
 The profile button includes the on-chain USDT balance; the member navbar no longer
 has a separate EVM wallet button. The profile and wallet card share a balance
-snapshot for 30 seconds, and a manual wallet refresh updates both. Missing USDT
-configuration, another token, or failed reads display an unavailable USDT amount.
+snapshot for 30 seconds, and a manual wallet refresh updates both. USDT and the configured Amoy tUSDT are supported, with the actual token symbol shown. Missing token
+configuration, another token, or failed reads display an unavailable amount.
 It shows the account's EVM address with a copy action, wallet/settings
 links and sign out. Menus support keyboard navigation, Escape and outside-click
-dismissal, and remain visible within narrow mobile viewports.
+dismissal, and remain visible within narrow mobile viewports. The profile menu, Referrals and EVM Wallet share the same linked address, network and balance summary. A selected extension is remembered locally; reloads reattach only an already-authorized matching account on Amoy through read-only provider calls. Signing still requires wallet approval.
 
 Motion is shared through `app/assets/css/motion.css` and `usePageMotion`: route fades, staggered scroll reveals across all dashboard views, floating brand artwork, card/button feedback, FAQ expansion, modal slide-down entrances and slide-up exits, dropdown entrances, transaction rows, and matrix branches. Server-rendered content stays readable before JavaScript loads. Reduced-motion preferences disable both CSS and browser-driven animation, including live preference changes; keyboard focus reveals controls immediately. View transitions preserve the existing form and filter state. `ModalTransition` wraps every conditional dialog, retains the backdrop and body scroll lock through the exit, makes departing content inactive, and restores focus after closing.
 
@@ -46,11 +46,11 @@ Open http://localhost:3000. Create an account through the sign-in dialog. Choose
 
 Run `npm run admin:create` (`npm.cmd run admin:create` in PowerShell) and choose a new administrator username and a password of at least 12 characters. Password input is hidden. Then open `/admin/login`. Non-interactive setup accepts `LOOP_ADMIN_USERNAME` and `LOOP_ADMIN_PASSWORD`; it uses the same PostgreSQL `DATABASE_URL` as the server and applies pending migrations. There are no default credentials or public admin registration. Existing accounts are never overwritten.
 
-The protected `/admin/dashboard`, `/admin/users`, `/admin/payments`, and `/admin/settings` pages use live PostgreSQL data, with English/Thai, light/dark mode, responsive navigation, custom dropdowns, and reduced-motion support. The dashboard shows account growth, funding totals, wallet balances, recent payments, and an admin activity log. Users can be searched, filtered, paginated, inspected, suspended, and reactivated. Suspension revokes sessions and blocks sign-in and transfers to the suspended recipient; administrator accounts are protected from suspension.
+The protected `/admin/dashboard`, `/admin/users`, `/admin/explorer`, and `/admin/settings` pages use live PostgreSQL data, with English/Thai, light/dark mode, responsive navigation, custom dropdowns, and reduced-motion support. The dashboard shows account totals, account growth and an admin activity log. Payments navigation, funding widgets and the payment-review page have been removed; old payment-page URLs redirect to the dashboard. Users can be searched, filtered, paginated, inspected, suspended, and reactivated. Suspension revokes sessions and blocks sign-in and transfers to the suspended recipient; administrator accounts are protected from suspension.
 
 Members and administrators can edit their own username in account settings. Admins can also rename accounts from Users → Manage; these changes are audited. Names use 3–24 letters, numbers or underscores, start with a letter, and are unique without regard to case. Account IDs, wallet links, sponsor relationships and history stay attached to the same account.
 
-Payments lists historical wallet funding requests. After independently verifying receipt, an administrator can approve a request using a unique settlement reference; the ledger credit, completion record, review, and audit entry commit atomically. Repeated identical approvals never credit twice. Rejection requires a reason, adds no funds, and remains visible in the transaction explorer. This records operator-confirmed settlement; it does not verify blockchain transactions automatically or implement withdrawals.
+Historical funding records and authenticated settlement APIs remain for legacy compatibility. These APIs require receipt verification and unique settlement references; ledger credits, reviews and audit entries commit atomically. They are separate from contract purchases and the current admin interface.
 
 Settings persist registration/funding availability and a support email shown in the member workspace. The API enforces these switches. Admin routes and every management API require an active admin session; writes require a matching Origin and are rate limited. Access roles, reviews, settings, and the audit trail use additive tables, preserving existing accounts and ledger records.
 
@@ -87,6 +87,8 @@ recipient and funded deployer fields in `.env`, inspect
 Verify both deployed contracts with `npm run contracts:verify` using
 `ETHERSCAN_API_KEY` in `.env`. Preview the exact source and constructor inputs
 with `npm run contracts:verify -- --dry-run`.
+
+The standalone member wallet page is `/wallet`; old `/dashboard?view=wallet` links redirect there. The sidebar places FAQ and its submenus after the divider, immediately before Account settings.
 
 The member wallet is one EVM balance card on both the overview and wallet page.
 It shows the existing address, network, live balances, Send and a Wallet details
@@ -159,7 +161,7 @@ Open `/explorer` (also available as `/dashboard?view=explorer`) in the member wo
 
 The network explorer supports member inspection from clickable tree nodes, branch navigation, username search with ancestor context, zoom/depth controls, and self-contained SVG downloads. Members can only open branches within their own first 15 referral levels; moving to a descendant does not extend that boundary. Admins can open any account by exact username and inspect up to 15 levels from that root. Responses cap branches at 500 nodes and flag truncation. Unsigned visitors see a labeled sample network.
 
-The default Transactions tab searches public platform contract hashes and addresses, with kind/status/date filters, pagination, confirmed volume and transaction details. It reads submitted purchases and fee updates across accounts from PostgreSQL. Historical private ledger search remains available through the authenticated compatibility API; payment review stays in the admin Payments page.
+The default Transactions tab searches public platform contract hashes and addresses, with kind/status/date filters, pagination, confirmed volume and transaction details. It reads submitted purchases and fee updates across accounts from PostgreSQL. Historical private ledger search remains available through the authenticated compatibility API.
 
 ## Database migrations
 

@@ -78,7 +78,7 @@ onBeforeUnmount(() => { mounted = false; password.value = ""; if (timer) clearIn
         <p class="referral-contract-note">{{ t('referral.nextLevel', { level: program.nextLevel, amount: formatUsdt(price) }) }}</p>
         <button class="button button-orange referral-unlock-button" :disabled="busy || !!pending || !chain.ready || !canAfford" @click="openConfirmation">{{ t('onchain.buy', { level: program.nextLevel, amount: formatUsdt(price), symbol }) }}</button>
         <p v-if="!canAfford && chain.balance !== null" class="referral-funding-hint" data-testid="chain-insufficient-token" role="status">{{ t('onchain.tokenRequired', { required: formatUsdt(price), available: formatUsdt(Number(chain.balance)), symbol }) }}</p>
-        <p v-if="!canAfford" class="referral-funding-hint"><NuxtLink to="/dashboard?view=wallet">{{ t('ui.open_wallet') }}</NuxtLink></p>
+        <p v-if="!canAfford" class="referral-funding-hint"><NuxtLink to="/wallet">{{ t('ui.open_wallet') }}</NuxtLink></p>
         <p v-if="!chain.ready" class="referral-funding-hint">{{ t('onchain.pausedOrUnavailable') }}</p>
       </template>
       <p v-else class="referral-contract-note">{{ t('referral.maximumLevel') }}</p>

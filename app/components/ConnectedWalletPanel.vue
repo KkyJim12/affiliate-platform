@@ -3,7 +3,7 @@ withDefaults(defineProps<{ preview?: boolean; compact?: boolean }>(), { preview:
 const { t } = useLoopI18n();
 const { user } = useAccount();
 const { authOpen, copy } = useAppUI();
-const { wallet, walletError, refreshWallet, balances, balanceLoading, balanceError, refreshBalances } = useEvmWallet();
+const { wallet, walletError, refreshWallet, balanceLoading, balanceError, refreshBalances } = useEvmWallet();
 const { address, matches, walletName } = useConnectedWallet();
 const { recover } = useWalletTransactions();
 const details = ref(false), sendOpen = ref(false);
@@ -15,9 +15,7 @@ watch(() => user.value?.id, () => { details.value = false; sendOpen.value = fals
   <section class="panel wallet-panel connected-wallet-panel" :class="{ 'wallet-panel-compact': compact }" data-testid="connected-wallet-panel">
     <div class="panel-heading"><div><h2>{{ t('connected.walletTitle') }}</h2><p>{{ t('connected.walletHint') }}</p></div><AppIcon name="Wallet" :size="24" /></div>
     <template v-if="wallet && !preview">
-      <div class="wallet-balance"><strong>{{ balances?.token?.balance ?? '—' }}</strong><span>{{ balances?.token?.symbol ?? 'USDT' }}</span></div>
-      <p>{{ balances?.native.balance ?? '—' }} POL · Polygon Amoy</p>
-      <code class="connected-address">{{ wallet.address }}</code>
+      <AccountWalletSummary show-native />
       <p v-if="matches" class="wallet-network">{{ t('connected.connectedAs', { name: walletName }) }}</p>
       <p v-else-if="address" class="auth-error" role="status">{{ t('connected.wrongAccount') }}</p>
       <WalletConnector v-if="!matches" @connected="refresh" />

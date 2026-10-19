@@ -4,9 +4,6 @@
 .matrix-dashboard .sidebar-logo { margin-bottom: 39px; }
 .matrix-dashboard .workspace-label { font-size: 9px; color: #87917d; }
 .matrix-dashboard .sidebar-nav > a { font-size: 12px; padding: 13px 12px; gap: 10px; }
-.matrix-dashboard .sidebar-nav > a:nth-last-child(2) { margin-bottom: 18px; }
-.matrix-dashboard .sidebar-nav > a:last-child { border-top: 1px solid var(--line); border-radius: 0; padding-top: 23px; }
-.matrix-dashboard .sidebar-nav > a:last-child.active { border-radius: 6px; }
 .matrix-dashboard .sidebar-bottom { padding-top: 40px; }
 .matrix-dashboard .sidebar-network { font-size: 10px; padding-inline: 6px; }
 .matrix-dashboard .sidebar-network > span:last-child { font-size: 7px; }

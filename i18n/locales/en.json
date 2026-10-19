@@ -136,6 +136,7 @@
     "showMore": "Show more"
   },
   "profileMenu": {
+    "assetBalance": "{symbol} balance",
     "usdtBalance": "USDT balance",
     "loadingBalance": "Loading USDT balance…",
     "balanceUnavailable": "USDT balance unavailable",
@@ -324,7 +325,11 @@
     "secureSession": "Protected access. Secure session.",
     "welcome": "Welcome back, {username}",
     "overviewTitle": "The bigger picture.",
-    "overviewSubtitle": "Your people, payments, and platform activity at a glance.",
+    "overviewSubtitle": "Your accounts, access controls, and platform activity at a glance.",
+    "activeAccountCount": "Active accounts",
+    "activeAccountHint": "Accounts currently permitted to sign in",
+    "accountManagement": "Manage your community",
+    "accountManagementHint": "Review accounts, manage access, and inspect referral activity.",
     "refresh": "Refresh",
     "loadError": "This data could not be loaded.",
     "requestError": "The request could not be completed. Please try again.",

@@ -7,6 +7,9 @@ export function useAccount() {
   const authenticated = computed(() => !!user.value);
   function clearWalletState() {
     useState("evm-wallet").value = null;
+    useState<number>("evm-wallet-version", () => 0).value++;
+    useState("evm-wallet-loading").value = false;
+    useState("evm-wallet-error").value = false;
     useState("evm-wallet-balances").value = null;
     useState("evm-balance-owner").value = null;
     useState<number>("evm-balance-version", () => 0).value++;
