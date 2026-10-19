@@ -1,6 +1,6 @@
 # UNXO API
 
-Connected wallets are now the default: wallet signatures for login and every on-chain write, with 1% bonuses at each of 15 depths. See [connected wallet setup, existing-account linking and distributor replacement](connected-wallets.md). In-app key management and password-authorized transactions below apply only when `NUXT_PUBLIC_WALLET_MODE=embedded` is explicitly enabled.
+Connected wallets are now the default for members: wallet signatures for login and every on-chain write, with 1% bonuses at each of 15 depths. See [connected wallet setup, existing-account linking and distributor replacement](connected-wallets.md). In-app key management and password-authorized transactions below apply only when `NUXT_PUBLIC_WALLET_MODE=embedded` is explicitly enabled.
 
 The member and administrator interfaces use the same-origin Nuxt API under `/api`.
 The API stores all account and ledger data in PostgreSQL through `DATABASE_URL`.
@@ -17,6 +17,7 @@ rate limited.
 | POST | `/api/auth/register` | Legacy account and wallet creation; requires embedded mode and password login enabled |
 | POST | `/api/auth/login` | Legacy username/password login; requires `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true` |
 | GET | `/api/auth/session` | Current account or `null` |
+| PATCH | `/api/auth/profile` | Rename the current account using `{ username }`; authenticated, same-origin and rate limited |
 | POST | `/api/auth/logout` | Revoke the current session |
 | GET | `/api/dashboard` | Own completed commissions, pending funding, transfer count and referral totals |
 | GET | `/api/wallet` | Historic ledger balance and recent transactions (compatibility) |
@@ -35,10 +36,10 @@ rate limited.
 | GET | `/api/explorer/network` | Inspect an authorized referral branch |
 | GET | `/api/explorer/transactions` | Search and paginate the current account's ledger |
 | GET | `/api/platform-settings` | Registration/funding availability and support email |
-| POST | `/api/admin/login` | Legacy administrator login; requires `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true` |
+| POST | `/api/admin/login` | Administrator username/password login; always available, including for linked wallets |
 | GET | `/api/admin/overview` | Platform totals and recent activity |
 | GET | `/api/admin/users` | Search and paginate accounts |
-| PATCH | `/api/admin/users/:id` | Suspend/reactivate a member and revoke suspended sessions |
+| PATCH | `/api/admin/users/:id` | Rename an account using `{ username }` and/or suspend/reactivate a member using `{ status }`; changes commit atomically |
 | GET | `/api/admin/payments` | Search funding requests and settlements |
 | POST | `/api/admin/payments/:id` | Approve or reject a funding request |
 | GET, PUT | `/api/admin/settings` | Read/update operational settings |

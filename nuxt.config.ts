@@ -22,8 +22,8 @@ export default defineNuxtConfig({
     "~/assets/css/connected-wallet.css",
   ],
   colorMode: {
-    preference: "light",
-    fallback: "light",
+    preference: "dark",
+    fallback: "dark",
     classSuffix: "",
     storageKey: "loop-color-mode",
     dataValue: "theme",
@@ -31,14 +31,14 @@ export default defineNuxtConfig({
   },
   i18n: {
     strategy: "no_prefix",
-    defaultLocale: "en",
+    defaultLocale: "th",
     langDir: "locales",
     vueI18n: "./i18n.config.ts",
     locales: [
       { code: "en", language: "en-US", name: "English", file: "en.json" },
       { code: "th", language: "th-TH", name: "ไทย", file: "th.json" },
     ],
-    detectBrowserLanguage: { useCookie: true, cookieKey: "loop_locale", redirectOn: "root", fallbackLocale: "en" },
+    detectBrowserLanguage: false,
   },
   runtimeConfig: {
     referral: { paymentMode: "contract", contractAddress: "", authorityPrivateKey: "", minConfirmations: "2", minGasBalance: "0.003" },

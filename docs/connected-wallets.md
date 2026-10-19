@@ -16,17 +16,18 @@ and atomically consumes the challenge. Unknown wallets create member accounts;
 only active invite codes establish sponsors. Registration controls also apply to
 new wallet accounts. Sessions retain the existing HttpOnly cookie protections.
 
-Username/password login is hidden and blocked by default for both members and
-administrators (`NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=false`). MetaMask, Rabby and
-Phantom wallet signatures are the available login method. Existing linked admin
-wallets retain their administrator access; new wallets create member accounts.
+Member username/password login is hidden and blocked by default
+(`NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=false`). Members sign in with MetaMask,
+Rabby or Phantom. Administrators always use username/password at `/admin/login`;
+their linked wallets sign transactions rather than admin sign-in messages.
 
 To enable legacy login later, set `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true` and
-restart the app. Existing members and administrators can then choose **Already
+restart the app. Existing members can then choose **Already
 have a username account?**, sign in with their existing credentials once, and
 link a wallet in the wallet page or admin contract panel. Linking also requires
 a wallet signature. It preserves the account ID, sponsor, levels and history.
-Once linked, password login remains disabled for that account in external mode.
+Once linked, member password login remains disabled for that account in external mode.
+Administrators can link a wallet after password sign-in and keep using credentials.
 Set the flag back to `false` and restart when migration is complete. A linked
 wallet cannot be replaced or shared with another account through the public API.
 EOA message signatures are supported; contract-account/EIP-1271 login is not

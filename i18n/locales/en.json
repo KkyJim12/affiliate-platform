@@ -1,5 +1,14 @@
 {
+  "profile": {
+    "usernameHint": "Use 3–24 letters, numbers, or underscores. Start with a letter.",
+    "saveUsername": "Save username",
+    "usernameSaved": "Username has been updated.",
+    "adminPasswordRequired": "Sign in to admin with your username and password."
+  },
   "connected": {
+    "walletFaqAnswer": "Connect MetaMask, Rabby or Phantom and sign a message to create an account or sign in. Your wallet approves every purchase and transfer.",
+    "testnetFaqAnswer": "The current network is Polygon Amoy testnet. Purchases and transfers use test tokens and wallet approvals. Test tokens have no monetary value.",
+    "embeddedFundingFaqAnswer": "Internal funding requests need operator settlement before the balance is credited.",
     "connectTitle": "Connect your wallet",
     "connectHint": "Sign in or create an account with your wallet.",
     "detected": "Available in this browser",
@@ -361,6 +370,7 @@
       "rejected": "Rejected"
     },
     "audit": {
+      "user_username_changed": "Username updated",
       "admin_created": "Administrator account created",
       "user_suspended": "Member suspended",
       "user_activated": "Member reactivated",

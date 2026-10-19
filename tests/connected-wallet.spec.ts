@@ -92,7 +92,7 @@ test('wallet authentication is nonce-bound, one-time, origin-bound and creates n
   } finally { await api.dispose(); await database.close(); }
 });
 
-test('wallet-only mode rejects valid unlinked member and administrator credentials without creating sessions',async ({ playwright }) => {
+test('wallet-only mode rejects member credentials while retaining administrator password login',async ({ playwright }) => {
   test.skip(passwordLogin, 'Password migration must be explicitly disabled for this check.');
   const database = openTestDatabase(), password = 'Existing account password 42!';
   try {
@@ -105,10 +105,14 @@ test('wallet-only mode rejects valid unlinked member and administrator credentia
         if (role === 'admin') await database.execute("INSERT INTO user_access (user_id,role) VALUES ($1,'admin')",id);
         const path = role === 'admin' ? '/api/admin/login' : '/api/auth/login';
         const response = await post(api,path,{ username,password });
-        expect(response.status(),await response.text()).toBe(403);
-        expect(response.headers()['set-cookie'] || '').not.toContain('loop_session=');
-        expect((await (await api.get('/api/auth/session')).json()).user).toBeNull();
-        expect((await database.one('SELECT COUNT(*) AS count FROM sessions WHERE user_id = $1',id))!.count).toBe(0);
+        expect(response.status(),await response.text()).toBe(role === 'admin' ? 200 : 403);
+        const session = (await (await api.get('/api/auth/session')).json()).user;
+        if (role === 'admin') expect(session).toMatchObject({ id,role });
+        else {
+          expect(response.headers()['set-cookie'] || '').not.toContain('loop_session=');
+          expect(session).toBeNull();
+        }
+        expect((await database.one('SELECT COUNT(*) AS count FROM sessions WHERE user_id = $1',id))!.count).toBe(role === 'admin' ? 1 : 0);
         expect(await database.one('SELECT user_id FROM evm_wallets WHERE user_id = $1',id)).toBeUndefined();
         expect(await database.one('SELECT user_id FROM connected_wallets WHERE user_id = $1',id)).toBeUndefined();
       } finally { await api.dispose(); }
@@ -116,8 +120,8 @@ test('wallet-only mode rejects valid unlinked member and administrator credentia
   } finally { await database.close(); }
 });
 
-for (const role of ['member','admin']) test(`existing accounts link once as ${role}, retain account history, and subsequently require wallet login`,async ({ playwright }) => {
-  test.skip(!passwordLogin, 'Enable NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true to test explicit credential migration.');
+for (const role of ['member','admin']) test(`existing accounts link once as ${role}, retain account history, and keep the appropriate sign-in method`,async ({ playwright }) => {
+  test.skip(role === 'member' && !passwordLogin, 'Member credential migration must be explicitly enabled.');
   const api = await playwright.request.newContext({ baseURL: origin }), database = openTestDatabase(), wallet = Wallet.createRandom();
   const id = randomUUID(), username = `old_${id.slice(0,8)}`, password = 'Existing account password 42!';
   const path = role === 'admin' ? '/api/admin/login' : '/api/auth/login';
@@ -129,8 +133,12 @@ for (const role of ['member','admin']) test(`existing accounts link once as ${ro
     const challenge = await (await post(api,'/api/auth/wallet/challenge',{ address: wallet.address,purpose: 'link' })).json();
     expect((await post(api,'/api/auth/wallet/verify',{ id: challenge.id,signature: await wallet.signMessage(challenge.message) })).status()).toBe(200);
     expect((await database.one('SELECT available FROM wallets WHERE user_id = $1',id))!.available).toBe(123000000);
-    expect((await post(api,path,{ username,password })).status()).toBe(403);
-    expect(await login(api,wallet)).toMatchObject({ id,role });
+    expect((await post(api,path,{ username,password })).status()).toBe(role === 'admin' ? 200 : 403);
+    if (role === 'member') expect(await login(api,wallet)).toMatchObject({ id,role });
+    else {
+      const loginChallenge = await (await post(api,'/api/auth/wallet/challenge',{ address: wallet.address })).json();
+      expect((await post(api,'/api/auth/wallet/verify',{ id: loginChallenge.id,signature: await wallet.signMessage(loginChallenge.message) })).status()).toBe(403);
+    }
     const other = Wallet.createRandom(), replace = await (await post(api,'/api/auth/wallet/challenge',{ address: other.address,purpose: 'link' })).json();
     expect((await post(api,'/api/auth/wallet/verify',{ id: replace.id,signature: await other.signMessage(replace.message) })).status()).toBe(409);
   } finally { await api.dispose(); await database.close(); }
@@ -201,7 +209,7 @@ test('administrator fee changes must be sent by the connected contract owner',as
   } finally { await api.dispose(); await database.close(); provider.destroy(); }
 });
 
-test('wallet-only member and administrator login show wallet choices without password fields or a legacy toggle',async ({ page }) => {
+test('wallet-only members see wallet choices and administrators see credentials',async ({ page }) => {
   test.skip(passwordLogin, 'Password migration must be explicitly disabled for this check.');
   const provider = rpc(), wallet = Wallet.createRandom().connect(provider);
   try {
@@ -212,13 +220,14 @@ test('wallet-only member and administrator login show wallet choices without pas
     await expect(member.locator('input[autocomplete="username"], input[type="password"], input[autocomplete="current-password"]')).toHaveCount(0);
     await expect(member.getByRole('button',{ name: 'Already have a username account?',exact: true })).toHaveCount(0);
     await page.goto('/admin/login');
-    for (const name of ['MetaMask','Rabby','Phantom']) await expect(page.getByRole('button',{ name,exact: true })).toBeVisible();
-    await expect(page.locator('input[autocomplete="username"], input[type="password"], input[autocomplete="current-password"]')).toHaveCount(0);
+    for (const name of ['MetaMask','Rabby','Phantom']) await expect(page.getByRole('button',{ name,exact: true })).toHaveCount(0);
+    await expect(page.getByLabel('Username',{ exact: true })).toBeVisible();
+    await expect(page.getByLabel('Password',{ exact: true })).toBeVisible();
     await expect(page.getByRole('button',{ name: 'Already have a username account?',exact: true })).toHaveCount(0);
   } finally { provider.destroy(); }
 });
 
-test('password forms are available for member and administrator migration only when explicitly enabled',async ({ page }) => {
+test('member migration is opt-in while administrators always have a password form',async ({ page }) => {
   test.skip(!passwordLogin, 'Enable NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true to test explicit credential migration.');
   const provider = rpc(), wallet = Wallet.createRandom().connect(provider);
   try {
@@ -229,23 +238,26 @@ test('password forms are available for member and administrator migration only w
     await expect(member.getByLabel('Username',{ exact: true })).toBeVisible();
     await expect(member.getByLabel('Password',{ exact: true })).toBeVisible();
     await page.goto('/admin/login');
-    await page.getByRole('button',{ name: 'Already have a username account?',exact: true }).click();
     await expect(page.getByLabel('Username',{ exact: true })).toBeVisible();
     await expect(page.getByLabel('Password',{ exact: true })).toBeVisible();
   } finally { provider.destroy(); }
 });
 
-test('administrator browser login uses a wallet signature and retains administrator access',async ({ page,playwright }) => {
+test('administrator browser login uses credentials with a linked wallet',async ({ page,playwright }) => {
   const api = await playwright.request.newContext({ baseURL: origin }), database = openTestDatabase(), provider = rpc(), wallet = Wallet.createRandom().connect(provider);
   try {
     const user = await login(api,wallet);
+    const password = 'Administrator credential password 42!';
+    await database.execute('UPDATE users SET password_hash = $1 WHERE id = $2',await hashPassword(password),user.id);
     await database.execute("INSERT INTO user_access (user_id,role) VALUES ($1,'admin')",user.id);
     await injectWallets(page,wallet,provider); await page.goto('/admin/login');
-    await page.getByRole('button',{ name: 'MetaMask',exact: true }).click();
+    await page.getByLabel('Username',{ exact: true }).fill(user.username);
+    await page.getByLabel('Password',{ exact: true }).fill(password);
+    await page.getByRole('button',{ name: 'Sign in to admin',exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/dashboard$/);
     expect((await (await page.request.get('/api/auth/session')).json()).user).toMatchObject({ id: user.id,role: 'admin' });
     const calls = await page.evaluate(() => (window as any).walletCalls);
-    expect(calls.filter((call: any) => call.method === 'personal_sign')).toHaveLength(1);
+    expect(calls.filter((call: any) => call.method === 'personal_sign')).toHaveLength(0);
     expect(calls.filter((call: any) => call.method === 'eth_sendTransaction')).toHaveLength(0);
   } finally { await api.dispose(); await database.close(); provider.destroy(); }
 });

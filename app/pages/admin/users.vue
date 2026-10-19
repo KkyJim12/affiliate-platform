@@ -5,6 +5,7 @@ definePageMeta({ layout: "admin", middleware: "admin" });
 const { t, formatDate } = useLoopI18n();
 const { errorMessage } = useAdminTools();
 const { notify } = useAppUI();
+const { user } = useAccount();
 const search = ref("");
 const searchTerm = ref("");
 const filter = ref("all");
@@ -12,12 +13,28 @@ const page = ref(1);
 const selected = ref<AdminMember | null>(null);
 const busy = ref(false);
 const actionError = ref("");
+const username = ref("");
 const root = ref<HTMLElement | null>(null);
 usePageMotion(root);
 const { data, error, status, refresh } = await useFetch<AdminList<AdminMember>>("/api/admin/users", { query: { search: searchTerm, status: filter, page } });
 watch(filter, () => { page.value = 1; });
 function searchUsers() { page.value = 1; searchTerm.value = search.value.trim(); }
-function openUser(member: AdminMember) { selected.value = member; actionError.value = ""; }
+function openUser(member: AdminMember) { selected.value = member; username.value = member.username; actionError.value = ""; }
+async function saveUsername() {
+  if (!selected.value || busy.value) return;
+  busy.value = true;
+  actionError.value = "";
+  try {
+    await $fetch(`/api/admin/users/${selected.value.id}`, { method: "PATCH", body: { username: username.value } });
+    const updated = username.value.trim().toLowerCase();
+    selected.value = { ...selected.value, username: updated };
+    username.value = updated;
+    if (user.value?.id === selected.value.id) user.value = { ...user.value, username: updated };
+    await refresh();
+    notify(t("profile.usernameSaved"));
+  } catch (failure) { actionError.value = errorMessage(failure); }
+  finally { busy.value = false; }
+}
 async function changeStatus() {
   if (!selected.value || busy.value) return;
   busy.value = true;
@@ -38,6 +55,6 @@ useHead({ title: computed(() => `${t('admin.users')} · UNXO`) });
     <section class="admin-panel"><div class="admin-toolbar"><form class="admin-search" @submit.prevent="searchUsers"><label class="search-field"><AppIcon name="Search" :size="17" /><input v-model="search" :aria-label="t('admin.searchUsers')" :placeholder="t('admin.searchUsers')" maxlength="64" /></label><button class="button button-outline button-small" type="submit">{{ t('admin.search') }}</button></form><AppDropdown v-model="filter" :label="t('admin.filterUsers')" :options="[{ value: 'all', label: t('admin.allStatuses') }, { value: 'active', label: t('admin.status.active') }, { value: 'suspended', label: t('admin.status.suspended') }]" /></div>
       <div v-if="error" class="admin-load-error" role="alert">{{ t('admin.loadError') }}<button class="admin-text-button" @click="refresh()">{{ t('admin.retry') }}</button></div>
       <div class="admin-table-scroll" :aria-busy="status === 'pending'"><table class="admin-table"><thead><tr><th>{{ t('admin.member') }}</th><th>{{ t('ui.status') }}</th><th>{{ t('admin.balance') }}</th><th>{{ t('admin.referrals') }}</th><th>{{ t('admin.joined') }}</th><th><span class="sr-only">{{ t('admin.actions') }}</span></th></tr></thead><tbody><tr v-for="member in data?.items || []" :key="member.id"><td><div class="admin-table-identity"><span class="admin-table-avatar">{{ member.username.slice(0, 2).toUpperCase() }}</span><div><strong>@{{ member.username }}</strong><small>{{ member.role === 'admin' ? t('admin.administrator') : member.referralCode || t('referral.notActivated') }}</small></div></div></td><td><span class="admin-status" :class="member.status"><i></i>{{ t(`admin.status.${member.status}`) }}</span></td><td class="admin-money">{{ formatUsdt(member.balance) }} <small>USDT</small></td><td>{{ member.referrals }}</td><td>{{ formatDate(member.createdAt) }}</td><td><button class="admin-text-button" @click="openUser(member)">{{ t('admin.manage') }}<AppIcon name="ArrowUpRight" :size="14" /></button></td></tr><tr v-if="data && !data.items.length"><td colspan="6"><div class="admin-empty"><AppIcon name="Users" :size="29" /><strong>{{ t('admin.noUsers') }}</strong><p>{{ t('admin.noUsersHint') }}</p></div></td></tr></tbody></table></div><AdminPagination v-if="data" :page="page" :total="data.total" :page-size="data.pageSize" @change="page = $event" /></section>
-    <ModalTransition><AppModal v-if="selected" :title="t('admin.userDetails')" @close="!busy && (selected = null)"><div class="admin-dialog"><span class="admin-dialog-icon"><AppIcon name="Users" :size="25" /></span><h2>{{ t('admin.userDetails') }}</h2><p>@{{ selected.username }}</p><dl class="admin-details"><div><dt>{{ t('admin.role') }}</dt><dd>{{ selected.role === 'admin' ? t('admin.administrator') : t('admin.member') }}</dd></div><div><dt>{{ t('ui.status') }}</dt><dd>{{ t(`admin.status.${selected.status}`) }}</dd></div><div><dt>{{ t('admin.balance') }}</dt><dd>{{ formatUsdt(selected.balance) }} USDT</dd></div><div><dt>{{ t('admin.sponsor') }}</dt><dd>{{ selected.sponsor ? '@' + selected.sponsor : '—' }}</dd></div><div><dt>{{ t('ui.invite_code') }}</dt><dd>{{ selected.referralCode || t('referral.notActivated') }}</dd></div><div><dt>{{ t('admin.referrals') }}</dt><dd>{{ selected.referrals }}</dd></div></dl><p v-if="selected.role === 'admin'" class="admin-callout">{{ t('admin.adminProtected') }}</p><template v-else><p class="admin-callout">{{ selected.status === 'active' ? t('admin.suspensionHint') : t('admin.activationHint') }}</p><p v-if="actionError" class="auth-error" role="alert">{{ actionError }}</p><button class="button" :class="selected.status === 'active' ? 'admin-danger-button' : 'button-orange'" :disabled="busy" @click="changeStatus">{{ busy ? t('ui.please_wait') : selected.status === 'active' ? t('admin.suspendUser') : t('admin.activateUser') }}</button></template></div></AppModal></ModalTransition>
+    <ModalTransition><AppModal v-if="selected" :title="t('admin.userDetails')" @close="!busy && (selected = null)"><div class="admin-dialog"><span class="admin-dialog-icon"><AppIcon name="Users" :size="25" /></span><h2>{{ t('admin.userDetails') }}</h2><p>@{{ selected.username }}</p><form class="account-form" @submit.prevent="saveUsername"><label for="managed-username">{{ t('ui.username') }}</label><input id="managed-username" v-model="username" class="auth-input" autocomplete="off" autocapitalize="none" spellcheck="false" required minlength="3" maxlength="24" pattern="[a-zA-Z][a-zA-Z0-9_]{2,23}" :disabled="busy" aria-describedby="managed-username-hint" /><p id="managed-username-hint">{{ t('profile.usernameHint') }}</p><button class="button button-outline button-small" type="submit" :disabled="busy || username.trim().toLowerCase() === selected.username">{{ busy ? t('ui.please_wait') : t('profile.saveUsername') }}</button></form><p v-if="actionError" class="auth-error" role="alert">{{ actionError }}</p><dl class="admin-details"><div><dt>{{ t('admin.role') }}</dt><dd>{{ selected.role === 'admin' ? t('admin.administrator') : t('admin.member') }}</dd></div><div><dt>{{ t('ui.status') }}</dt><dd>{{ t(`admin.status.${selected.status}`) }}</dd></div><div><dt>{{ t('admin.balance') }}</dt><dd>{{ formatUsdt(selected.balance) }} USDT</dd></div><div><dt>{{ t('admin.sponsor') }}</dt><dd>{{ selected.sponsor ? '@' + selected.sponsor : '—' }}</dd></div><div><dt>{{ t('ui.invite_code') }}</dt><dd>{{ selected.referralCode || t('referral.notActivated') }}</dd></div><div><dt>{{ t('admin.referrals') }}</dt><dd>{{ selected.referrals }}</dd></div></dl><p v-if="selected.role === 'admin'" class="admin-callout">{{ t('admin.adminProtected') }}</p><template v-else><p class="admin-callout">{{ selected.status === 'active' ? t('admin.suspensionHint') : t('admin.activationHint') }}</p><button class="button" :class="selected.status === 'active' ? 'admin-danger-button' : 'button-orange'" :disabled="busy" @click="changeStatus">{{ busy ? t('ui.please_wait') : selected.status === 'active' ? t('admin.suspendUser') : t('admin.activateUser') }}</button></template></div></AppModal></ModalTransition>
   </main>
 </template>

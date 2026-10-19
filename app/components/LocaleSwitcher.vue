@@ -1,11 +1,12 @@
 <script setup lang="ts">
 const { locale, setLocale } = useI18n();
 const { tr } = useLoopI18n();
+const preference = useCookie<string>("loop_locale", { path: "/", sameSite: "lax", maxAge: 365 * 24 * 60 * 60 });
 const changing = ref(false);
 async function change(language: string) {
   if (language !== "en" && language !== "th") return;
   changing.value = true;
-  try { await setLocale(language); }
+  try { await setLocale(language); preference.value = language; }
   finally { changing.value = false; }
 }
 </script>

@@ -1,5 +1,10 @@
 // Source-message aliases for statuses, API errors, and activity records.
 export const messageKeys: Record<string, string> = {
+  "Sign in to admin with your username and password.": "profile.adminPasswordRequired",
+  "Create an account with a username and password. Your encrypted in-app wallet is created automatically.": "ui.create_an_account_with_a_username_and_password_your_in_app_usdt_ledger_wallet_is_crea",
+  "Connect MetaMask, Rabby or Phantom and sign a message to create an account or sign in. Your wallet approves every purchase and transfer.": "connected.walletFaqAnswer",
+  "The current network is Polygon Amoy testnet. Purchases and transfers use test tokens and wallet approvals. Test tokens have no monetary value.": "connected.testnetFaqAnswer",
+  "Internal funding requests need operator settlement before the balance is credited.": "connected.embeddedFundingFaqAnswer",
   "Your on-chain USDT balance is too low for this purchase.": "onchain.insufficientToken",
   "Add POL to your Amoy wallet to cover transaction gas.": "onchain.insufficientGas",
   "Gas prices changed. Refresh the gas estimate and confirm again.": "onchain.gasChanged",

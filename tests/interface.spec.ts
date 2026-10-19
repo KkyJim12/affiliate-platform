@@ -127,7 +127,7 @@ test("matrix, corrected ranks, referrals, and wallet preview on desktop and mobi
   await expect(page.getByRole("button", { name: "Download image", exact: true })).toBeDisabled();
   await navigate(page, "EVM wallet");
   await expect(page.getByTestId("wallet-balance")).toContainText("—");
-  await page.getByRole("button", { name: "Receive", exact: true }).click();
+  await page.getByRole("button", { name: "Wallet details", exact: true }).click();
   await expect(page.getByRole("dialog")).toContainText("Sign in");
   await page.keyboard.press("Escape");
   await noOverflow(page);
@@ -321,13 +321,14 @@ test("Thai switching persists across pages, localizes forms and tree exports, an
   expect(errors).toEqual([]);
 });
 
-test("a first visit detects Thai from the browser", async ({ browser }, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop", "One browser-language detection check is sufficient.");
-  const context = await browser.newContext({ locale: "th-TH" });
+test("a first visit defaults to Thai and dark even in an English browser", async ({ browser }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "One fresh-browser default check is sufficient.");
+  const context = await browser.newContext({ locale: "en-US", colorScheme: "light", storageState: { cookies: [], origins: [] } });
   try {
     const page = await context.newPage();
     await gotoReady(page, "http://127.0.0.1:3100/");
     await expect(page.locator("html")).toHaveAttribute("lang", "th-TH");
+    await expect(page.locator("html")).toHaveClass(/dark/);
     await expect(page.getByLabel(thai.ui.language, { exact: true })).toHaveAttribute("data-value", "th");
     await expect(page.getByRole("heading", { level: 1 })).toContainText(thai.ui.your_circle);
   } finally {

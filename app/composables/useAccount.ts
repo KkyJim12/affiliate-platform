@@ -45,5 +45,10 @@ export function useAccount() {
     useAppUI().notify("You have signed out of Loop.");
   }
 
-  return { user, authenticated, sessionError, restoreSession, signIn, register, logout };
+  async function updateUsername(username: string) {
+    const result = await $fetch<{ user: Account }>("/api/auth/profile", { method: "PATCH", body: { username } });
+    user.value = result.user;
+  }
+
+  return { user, authenticated, sessionError, restoreSession, signIn, register, logout, updateUsername };
 }

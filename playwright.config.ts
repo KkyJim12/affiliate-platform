@@ -12,6 +12,11 @@ export default defineConfig({
   reporter: "list",
   use: {
     baseURL: "http://127.0.0.1:3100",
+    // Existing UI scenarios explicitly exercise English/light; fresh-context tests cover defaults.
+    storageState: {
+      cookies: [{ name: "loop_locale", value: "en", domain: "127.0.0.1", path: "/", expires: -1, httpOnly: false, secure: false, sameSite: "Lax" }],
+      origins: [{ origin: "http://127.0.0.1:3100", localStorage: [{ name: "loop-color-mode", value: "light" }] }],
+    },
     channel: "msedge",
     headless: true,
     trace: "retain-on-failure",
@@ -33,7 +38,7 @@ export default defineConfig({
     },
     {
       name: "mobile",
-      testMatch: ["**/interface.spec.ts", "**/admin.spec.ts", "**/explorer.spec.ts", "**/referral.spec.ts", "**/onchain-referral.spec.ts", "**/onchain-wallet.spec.ts"],
+      testMatch: ["**/interface.spec.ts", "**/admin.spec.ts", "**/account-settings.spec.ts", "**/explorer.spec.ts", "**/referral.spec.ts", "**/onchain-referral.spec.ts", "**/onchain-wallet.spec.ts"],
       use: {
         ...devices["iPhone 13"],
         defaultBrowserType: "chromium",
