@@ -85,8 +85,9 @@ An RPC or token precision failure produces HTTP 503 and an unavailable balance;
 provider errors and credentials are never returned to the browser.
 
 Receive displays the same EVM address and network. Wallet details contain the
-public key, explorer link and password-protected key reveal. General wallet sends are separate from
-referral purchases. The new referral contract workflow signs token approvals and
+public key, explorer link and password-protected key reveal. Send supports native POL
+and the configured ERC-20 token, using the same encrypted wallet and a reviewed gas
+budget. See [wallet sends](api.md#evm-wallet-sends). The referral contract workflow signs token approvals and
 purchases from the encrypted account wallet, verifies receipts and distributes
 automatically. Historical ledger APIs remain for compatibility; credit-based
 referral activation requires explicit ledger mode. See [the contract setup](referral-contract.md).

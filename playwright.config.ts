@@ -30,7 +30,7 @@ export default defineConfig({
     },
     {
       name: "mobile",
-      testMatch: ["**/interface.spec.ts", "**/admin.spec.ts", "**/explorer.spec.ts", "**/referral.spec.ts", "**/onchain-referral.spec.ts"],
+      testMatch: ["**/interface.spec.ts", "**/admin.spec.ts", "**/explorer.spec.ts", "**/referral.spec.ts", "**/onchain-referral.spec.ts", "**/onchain-wallet.spec.ts"],
       use: {
         ...devices["iPhone 13"],
         defaultBrowserType: "chromium",

@@ -462,5 +462,15 @@ export const messageKeys: Record<string, string> = {
   "Your account is already linked to a sponsor.": "referral.alreadyLinked",
   "This referral would create a circular network. Choose another sponsor.": "referral.circular",
   "Referral activation": "referral.transactionDescription",
-  "Your account activity could not be loaded. Please refresh to try again.": "dashboard.loadFailed"
+  "Your account activity could not be loaded. Please refresh to try again.": "dashboard.loadFailed",
+  "Enter a valid recipient address different from your wallet and the token contract.": "evmSend.invalidRecipient",
+  "Enter a positive amount within this asset's decimal precision.": "evmSend.invalidAmount",
+  "Choose POL or the configured token.": "evmSend.invalidAsset",
+  "The wallet token is not configured or unavailable.": "evmSend.tokenUnavailable",
+  "Your token balance is too low for this transfer.": "evmSend.insufficientToken",
+  "Keep enough POL for the amount and maximum gas fee.": "evmSend.insufficientGas",
+  "This send quote expired or fees changed. Review the transfer again.": "evmSend.quoteExpired",
+  "This send quote is unavailable. Review the transfer again.": "evmSend.quoteUnavailable",
+  "The token rejected this transfer.": "evmSend.tokenRejected",
+  "The send request could not be completed. Check recent sends before trying again.": "evmSend.requestFailed"
 };

@@ -1,8 +1,7 @@
 import { createError } from "h3";
-import { Wallet, ZeroAddress, getAddress, id as hashId, parseUnits } from "ethers";
+import { ZeroAddress, getAddress, id as hashId, parseUnits } from "ethers";
 import { ReferralChainClient, uplineHash, type PreparedChainTransaction, type PurchasePayload } from "../lib/referral-chain";
-import type { StoredEvmWallet } from "../lib/evm-wallet";
-import { decryptEvmPrivateKey } from "../lib/evm-wallet";
+import { assertNoPendingWalletOperation, walletSigner, withWalletLock } from "./evm-operations";
 import type { ChainPurchaseStatus, ReferralChainStatus } from "../../shared/referral-contract";
 import { ledgerScale, levelPrice } from "../../shared/compensation";
 import { polygonTestnet } from "../../shared/evm-wallet";
@@ -59,25 +58,6 @@ export async function referralChainStatus(userId: string): Promise<ReferralChain
   } catch { return base; }
 }
 
-async function walletSigner(userId: string, password: string) {
-  const row = await db().one<StoredEvmWallet>("SELECT address, public_key, encrypted_keystore, chain_id, created_at FROM evm_wallets WHERE user_id = $1", userId);
-  if (!row) throw createError({ statusCode: 409, statusMessage: "Create your Polygon testnet wallet first." });
-  return new Wallet(await decryptEvmPrivateKey(row, password));
-}
-
-async function withWalletLock<T>(userId: string, operation: () => Promise<T>) {
-  const connection = await db().pool.connect();
-  let locked = false;
-  try {
-    locked = (await connection.query("SELECT pg_try_advisory_lock(782439, hashtext($1)) AS locked", [userId])).rows[0].locked;
-    if (!locked) throw createError({ statusCode: 409, statusMessage: "A wallet operation is already being prepared. Please try again." });
-    return await operation();
-  } finally {
-    if (locked) await connection.query("SELECT pg_advisory_unlock(782439, hashtext($1))", [userId]);
-    connection.release();
-  }
-}
-
 async function saveTransactions(userId: string, operationId: string, prepared: PreparedChainTransaction[]) {
   for (const item of prepared) await db().execute(`INSERT INTO referral_chain_transactions
     (id, user_id, operation_id, stage, nonce, transaction_hash, raw_transaction, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
@@ -97,8 +77,7 @@ export async function submitChainPurchase(userId: string, password: string, leve
       if (pending.level !== level) throw createError({ statusCode: 409, statusMessage: "Wait for your pending blockchain purchase to finish." });
       return reconcileChainPurchase(pending);
     }
-    if (await db().one("SELECT id FROM referral_chain_fee_updates WHERE admin_id = $1 AND status = 'pending'", userId))
-      throw createError({ statusCode: 409, statusMessage: "Wait for your pending blockchain transaction to finish." });
+    await assertNoPendingWalletOperation(userId);
     const signer = await walletSigner(userId, password);
     const state = await reader.inspect(signer.address);
     if (state.paused) throw createError({ statusCode: 409, statusMessage: "Referral smart contract purchases are paused." });
@@ -190,6 +169,7 @@ export async function submitFeeUpdate(adminId: string, password: string, address
     }
     if (await pendingChainPurchase(adminId) || await db().one("SELECT id FROM referral_chain_fee_updates WHERE status = 'pending'"))
       throw createError({ statusCode: 409, statusMessage: "Wait for your pending blockchain transaction to finish." });
+    await assertNoPendingWalletOperation(adminId);
     const signer = await walletSigner(adminId, password);
     const state = await reader.inspect();
     if (state.owner !== signer.address) throw createError({ statusCode: 403, statusMessage: "Your admin wallet must own the referral contract to change its fee address." });

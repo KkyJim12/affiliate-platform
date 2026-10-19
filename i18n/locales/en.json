@@ -79,6 +79,23 @@
     "keyInfo": "Your address and public key are shareable. Your private key is encrypted and password protected.",
     "previewHint": "Sign in to access your EVM wallet"
   },
+  "evmSend": {
+    "title": "Send", "network": "Polygon Amoy · testnet", "asset": "Asset", "available": "Available",
+    "recipient": "Recipient address", "amount": "Amount", "review": "Review transfer", "reviewTitle": "Review transfer",
+    "maxGas": "Maximum gas fee", "confirm": "Confirm and send", "edit": "Edit transfer",
+    "gasHint": "Keep POL in your wallet to pay transaction fees, including when sending tokens.",
+    "reviewHint": "Check the full recipient address. This quote is valid for 5 minutes. Your password authorizes this transfer.",
+    "recent": "Recent sends", "pending": "Pending confirmation", "confirmed": "Confirmed", "failed": "Failed · gas charged",
+    "viewTransaction": "View transaction", "historyFailed": "Recent sends could not be loaded. Refresh before sending again.",
+    "requestFailed": "The send request could not be completed. Check recent sends before trying again.",
+    "waitPending": "Wait for your pending blockchain transaction to finish.",
+    "invalidRecipient": "Enter a valid recipient address different from your wallet and the token contract.",
+    "invalidAmount": "Enter a positive amount within this asset's decimal precision.", "invalidAsset": "Choose POL or the configured token.",
+    "tokenUnavailable": "The wallet token is not configured or unavailable.", "insufficientToken": "Your token balance is too low for this transfer.",
+    "insufficientGas": "Keep enough POL for the amount and maximum gas fee.",
+    "quoteExpired": "This send quote expired or fees changed. Review the transfer again.",
+    "quoteUnavailable": "This send quote is unavailable. Review the transfer again.", "tokenRejected": "The token rejected this transfer."
+  },
   "explorer": {
     "title": "Explorer",
     "heading": "Every connection. Every movement.",

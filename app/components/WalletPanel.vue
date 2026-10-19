@@ -10,6 +10,7 @@ const fetching = ref(true);
 
 const dialog = ref<"create" | "reveal" | "receive" | null>(null);
 const detailsOpen = ref(false);
+const sendOpen = ref(false);
 const asset = computed(() => balances.value?.token ?? balances.value?.native);
 function formatBalance(value: string) {
   const [whole = "0", fraction = ""] = value.split(".");
@@ -40,6 +41,7 @@ function close() {
   operationVersion++;
   clearSecret();
   dialog.value = null;
+  sendOpen.value = false;
   error.value = "";
   busy.value = false;
 }
@@ -47,6 +49,10 @@ function open(action: "create" | "reveal" | "receive") {
   if (props.preview) { authOpen.value = true; return; }
   close();
   dialog.value = action;
+}
+function openSend() {
+  if (props.preview) { authOpen.value = true; return; }
+  close(); sendOpen.value = true;
 }
 async function load() {
   const version = ++loadVersion;
@@ -121,7 +127,7 @@ onBeforeUnmount(() => {
       <p v-if="balanceLoading" class="evm-balance-status" role="status">{{ t('evmWallet.balanceLoading') }}</p>
       <p v-else-if="balanceError" class="evm-balance-status" role="status">{{ t('evmWallet.balanceUnavailable') }}</p>
       <p v-if="loadError && !preview" class="evm-balance-status" role="alert">{{ t('evmWallet.loadFailed') }} <button class="evm-retry" @click="load">{{ t('evmWallet.retry') }}</button></p>
-      <div v-if="wallet || preview" class="wallet-actions"><button @click="open('receive')"><AppIcon name="ArrowDownLeft" :size="17" />{{ t('evmWallet.receive') }}</button><button :aria-expanded="detailsOpen" @click="showDetails"><AppIcon name="Settings" :size="16" />{{ t('evmWallet.details') }}</button></div>
+      <div v-if="wallet || preview" class="wallet-actions"><button @click="openSend"><AppIcon name="ArrowUpRight" :size="17" />{{ t('evmSend.title') }}</button><button @click="open('receive')"><AppIcon name="ArrowDownLeft" :size="17" />{{ t('evmWallet.receive') }}</button><button :aria-expanded="detailsOpen" @click="showDetails"><AppIcon name="Settings" :size="16" />{{ t('evmWallet.details') }}</button></div>
       <div v-else-if="!fetching && !loadError" class="wallet-actions"><button @click="open('create')">{{ t('evmWallet.create') }}</button></div>
     </div>
     <div v-if="detailsOpen && wallet && !preview" class="panel evm-wallet-details">
@@ -141,6 +147,7 @@ onBeforeUnmount(() => {
         <form v-else class="account-form" @submit.prevent="submit"><p>{{ dialog === 'reveal' ? t('evmWallet.confirmReveal') : t('evmWallet.createHint') }}</p><label for="evm-wallet-password">{{ t('ui.confirm_with_your_password') }}</label><input id="evm-wallet-password" v-model="password" class="auth-input" type="password" autocomplete="current-password" required maxlength="128" :disabled="busy" /><p v-if="error" class="auth-error" role="alert">{{ tr(error) }}</p><button class="button button-orange auth-wallet-button" type="submit" :disabled="busy"><AppIcon v-if="busy" name="LoaderCircle" class="auth-loading" :size="17" />{{ busy ? t('ui.please_wait') : dialog === 'reveal' ? t('evmWallet.reveal') : t('evmWallet.create') }}</button></form>
       </div>
     </AppModal></ModalTransition>
+    <WalletSend v-if="wallet && !preview && user" :key="user.id" :open="sendOpen" @close="sendOpen = false" />
   </section>
 </template>
 

@@ -91,6 +91,49 @@ ledger IDs or ledger balances. The referrals page can spend existing referral
 credits only in explicit legacy ledger mode. Default contract purchases use the
 configured Amoy token and distribute automatically; see [the contract API](referral-contract.md).
 
+## EVM wallet sends
+
+The Send action transfers native POL or `NUXT_EVM_TOKEN_ADDRESS` on Polygon Amoy.
+It requires no referral activation, distributor contract, or quote authority key.
+Native sends work without a configured token. Configuration uses `NUXT_EVM_RPC_URL`,
+`NUXT_EVM_CHAIN_ID=80002`, and `NUXT_EVM_MIN_CONFIRMATIONS` (default 2).
+
+- `POST /api/wallet/evm/send/quote` accepts `{ recipient, asset: "native" | "token", amount }`.
+  Amount is a decimal string; excess precision, zero, self-transfers, zero addresses
+  and the configured token contract as recipient are rejected. Returns `{ quote }`
+  containing its single-use ID, review hash, amount, recipient, asset, maximum POL
+  gas budget and five-minute expiry. Quoting does not sign or move funds.
+- `POST /api/wallet/evm/send` accepts `{ id, quoteHash, requestKey, password }`.
+  The current account password unlocks its encrypted wallet on the server. The
+  exact reviewed transaction is rechecked and signed; its bytes and hash commit
+  before broadcast. Returns `{ send }`, HTTP 202 while pending or 200 when settled.
+  Retrying the same quote returns the same transfer even with a different request
+  key. Reusing a request key for another quote returns 409.
+- `GET /api/wallet/evm/sends` reconciles the owner's pending send and returns
+  `{ sends }` with the latest 20 submitted sends, including transaction explorer
+  links. Unsigned quotes, signed bytes and private keys are never returned.
+
+All endpoints resolve the wallet from the active session and use `no-store`.
+POST requests require a matching Origin. Quotes allow 40 attempts and send
+confirmation allows 20 attempts per account/IP per 15 minutes. The UI clears
+passwords on closing, leaving the tab, account changes and completion. Both
+assets reserve POL for the reviewed maximum gas cost; the referral purchase
+minimum balance does not apply to general sends.
+
+Sends, purchases and admin fee updates share a database advisory lock and cannot
+prepare a new transaction while that wallet has a pending operation. A background
+worker retries the same signed bytes every 15 seconds even after closing the
+browser or restarting the app. Confirmations require a canonical receipt and an
+exact matching transaction; tokens additionally require the exact Transfer event.
+Reverted receipts show failed and may charge gas. An unavailable RPC, dropped
+transaction, unsupported token transfer behavior or external nonce replacement
+stays pending for investigation rather than automatically issuing another send.
+These transfers never credit or debit the historical internal ledger.
+
+Validate with `npm run test:sends` and `npm run test:onchain`. Both use a disposable
+local EVM; the latter also creates a disposable PostgreSQL database and exercises
+real API signing, recovery and desktop/mobile send dialogs.
+
 ## EVM wallet transaction history
 
 `GET /api/wallet/evm/transactions` resolves the wallet from the authenticated

@@ -77,13 +77,16 @@ Verify both deployed contracts with `npm run contracts:verify` using
 with `npm run contracts:verify -- --dry-run`.
 
 The member wallet is one EVM balance card on both the overview and wallet page.
-It shows the existing address, network, live balances, Receive and wallet details.
+It shows the existing address, network, live balances, Send, Receive and wallet details.
 The old internal balance, LW ID, funding requests, member transfers and ledger
 history have been removed from this card. Settings and navigation also use the
 EVM wallet. Existing addresses, encrypted keys and historical ledger records are
 preserved. Referrals now pay through the smart contract using the configured
 Amoy token. Historical credits remain available only in explicit legacy ledger
-mode. General wallet sends are separate from referral purchases.
+mode. Send transfers native POL or the configured Amoy token to an address after
+reviewing the amount and maximum gas fee and confirming the account password.
+Signed sends persist before broadcast, recover automatically, and share a nonce
+lock with referral purchases. See [wallet sends](docs/api.md#evm-wallet-sends).
 
 `GET /api/wallet/evm/balance` reads the signed-in owner's native POL balance on
 Amoy. It uses `NUXT_EVM_RPC_URL` or the public Amoy RPC, and rejects another
