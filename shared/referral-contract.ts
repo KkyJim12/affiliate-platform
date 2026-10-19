@@ -1,4 +1,5 @@
 export const referralContractAbi = [
+  "function distributionVersion() view returns (uint256)",
   "function paymentToken() view returns (address)",
   "function tokenDecimals() view returns (uint8)",
   "function feeRecipient() view returns (address)",
@@ -32,12 +33,13 @@ export interface ChainPurchaseQuote {
 export interface ChainPurchaseStatus {
   id: string;
   level: number;
-  status: "pending" | "confirmed" | "failed";
+  status: "awaiting_signature" | "pending" | "confirmed" | "failed";
   transactionHash: string | null;
   explorerUrl: string | null;
 }
 
 export interface ReferralChainStatus {
+  error?: string;
   mode: "contract" | "ledger";
   configured: boolean;
   ready: boolean;

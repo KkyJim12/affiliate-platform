@@ -18,7 +18,7 @@ contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable 
     using SafeERC20 for IERC20;
 
     uint8 public constant MAX_LEVEL = 15;
-    uint256 private constant WEIGHT_TOTAL = 32767;
+    uint256 public constant distributionVersion = 2;
     bytes32 public constant PURCHASE_TYPEHASH = keccak256(
         "Purchase(bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline)"
     );
@@ -53,7 +53,7 @@ contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable 
 
     event FeeRecipientChanged(address indexed previousRecipient, address indexed recipient, uint256 configNonce);
     event QuoteSignerChanged(address indexed signer, uint256 configNonce);
-    // kind: 0 = direct, 1 = halving bonus, 2 = platform fee.
+    // kind: 0 = direct, 1 = 1%-per-level bonus, 2 = platform fee.
     event SharePaid(bytes32 indexed id, uint8 kind, uint8 depth, address indexed recipient, uint256 amount, bool redirected);
     event PurchaseCompleted(bytes32 indexed id, address indexed buyer, uint8 level, uint8 previousLevel,
         uint256 amount, address feeRecipient, bytes32 uplinesHash, uint256 configNonce);
@@ -85,28 +85,7 @@ contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable 
         amounts[1] = microPrice / 5;
         amounts[2] = microPrice / 10;
         amounts[18] = microPrice / 20;
-        uint256 pool = microPrice * 15 / 100;
-        uint256 allocated;
-        uint256[15] memory remainders;
-        for (uint256 i; i < 15; ++i) {
-            uint256 numerator = pool * (uint256(1) << (14 - i));
-            amounts[i + 3] = numerator / WEIGHT_TOTAL;
-            remainders[i] = numerator % WEIGHT_TOTAL;
-            allocated += amounts[i + 3];
-        }
-        uint256 awarded;
-        for (uint256 remaining = pool - allocated; remaining > 0; --remaining) {
-            uint256 best;
-            uint256 largest;
-            for (uint256 i; i < 15; ++i) {
-                if ((awarded & (uint256(1) << i)) == 0 && remainders[i] > largest) {
-                    best = i;
-                    largest = remainders[i];
-                }
-            }
-            ++amounts[best + 3];
-            awarded |= uint256(1) << best;
-        }
+        for (uint256 i; i < 15; ++i) amounts[i + 3] = microPrice / 100;
         for (uint256 i; i < 19; ++i) amounts[i] *= ledgerMultiplier;
     }
 
@@ -137,17 +116,22 @@ contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable 
         paymentToken.safeTransferFrom(msg.sender, address(this), price);
         if (paymentToken.balanceOf(address(this)) != beforeBalance + price) revert UnsupportedToken();
         uint256[19] memory amounts = previewShares(quote.level);
-        for (uint8 i; i < 3; ++i) _pay(quote.id, 0, i + 1, uplines[i], amounts[i]);
-        for (uint8 i; i < 15; ++i) _pay(quote.id, 1, i + 1, uplines[i], amounts[i + 3]);
-        _pay(quote.id, 2, 0, feeRecipient, amounts[18]);
+        uint8 highest;
+        for (uint8 i; i < 15; ++i) if (uplines[i] != address(0)) highest = i + 1;
+        for (uint8 i; i < 3; ++i) _pay(quote.id, 0, i + 1, uplines[i], amounts[i], false);
+        for (uint8 i; i < 15; ++i) {
+            bool toHighest = highest != 0 && i >= highest;
+            address recipient = toHighest ? uplines[highest - 1] : uplines[i];
+            _pay(quote.id, 1, i + 1, recipient, amounts[i + 3], toHighest);
+        }
+        _pay(quote.id, 2, 0, feeRecipient, amounts[18], false);
         if (paymentToken.balanceOf(address(this)) != beforeBalance) revert UnsupportedToken();
         emit PurchaseCompleted(quote.id, msg.sender, quote.level, quote.previousLevel, price,
             feeRecipient, quote.uplinesHash, quote.configNonce);
     }
 
-    function _pay(bytes32 id, uint8 kind, uint8 depth, address recipient, uint256 amount) private {
-        bool redirected = recipient == address(0);
-        if (redirected) recipient = feeRecipient;
+    function _pay(bytes32 id, uint8 kind, uint8 depth, address recipient, uint256 amount, bool redirected) private {
+        if (recipient == address(0)) { recipient = feeRecipient; redirected = true; }
         uint256 beforeBalance = paymentToken.balanceOf(recipient);
         paymentToken.safeTransfer(recipient, amount);
         if (paymentToken.balanceOf(recipient) != beforeBalance + amount) revert UnsupportedToken();

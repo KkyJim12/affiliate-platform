@@ -1,0 +1,14 @@
+.connected-wallet-panel { padding: 24px; }
+.connected-wallet-panel .panel-heading { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.connected-wallet-panel p, .wallet-connector p { color: var(--text-muted, #7b756b); margin: 12px 0; line-height: 1.6; }
+.connected-wallet-panel h2 { font-size: 21px; margin-bottom: 6px; }
+.connected-wallet-panel .wallet-balance { display: flex; align-items: baseline; gap: 10px; margin: 16px 0; }
+.connected-wallet-panel .wallet-balance strong { font-size: clamp(26px, 4vw, 42px); overflow-wrap: anywhere; }
+.connected-wallet-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 10px; margin: 16px 0; }
+.connected-wallet-options .button { justify-content: center; min-height: 48px; }
+.connected-address { display: block; overflow-wrap: anywhere; word-break: break-word; font-size: 13px; line-height: 1.7; }
+.connected-wallet-panel .wallet-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 12px; }
+.wallet-action-modal .inline-link { display: inline-flex; margin: 16px; }
+.wallet-action-modal .admin-details dd { max-width: 100%; }
+.account-auth > label { display: block; margin: 16px 0 8px; }
+.wallet-connector .auth-error { color: var(--danger, #c14940); }

@@ -9,18 +9,21 @@ import { db, transaction } from "./database";
 import { randomUUID } from "./auth";
 import { newReferralCode, referralProgram } from "./referral";
 import { audit } from "./admin";
+import { evmWalletFor } from "./evm-wallet";
+import { externalWalletMode } from "./wallet-mode";
 
 export interface ChainPurchaseRow {
   id: string; user_id: string; level: number; amount: number; request_key: string;
   contract_address: string; token_address: string; buyer_address: string; fee_recipient_address: string;
-  transaction_hash: string; payload: PurchasePayload; status: "pending" | "confirmed" | "failed";
+  transaction_hash: string | null; payload: PurchasePayload; status: ChainPurchaseStatus["status"];
+  signing_mode: "external" | "embedded";
 }
 interface FeeUpdateRow {
   id: string; admin_id: string; request_key: string; contract_address: string; owner_address: string;
   recipient_address: string; transaction_hash: string; status: "pending" | "confirmed" | "failed";
 }
 let client: ReferralChainClient | undefined;
-export const referralPaymentMode = () => useRuntimeConfig().referral.paymentMode === "ledger" ? "ledger" : "contract";
+export const referralPaymentMode = () => !externalWalletMode() && useRuntimeConfig().referral.paymentMode === "ledger" ? "ledger" : "contract";
 export function referralChainClient() {
   const config = useRuntimeConfig();
   if (referralPaymentMode() === "ledger" || !config.referral.contractAddress || !config.referral.authorityPrivateKey || !config.evm.tokenAddress) return null;
@@ -29,17 +32,17 @@ export function referralChainClient() {
     contractAddress: config.referral.contractAddress, tokenAddress: config.evm.tokenAddress,
     authorityPrivateKey: config.referral.authorityPrivateKey, minConfirmations: Number(config.referral.minConfirmations), minGasBalance: config.referral.minGasBalance });
 }
-function requireChainClient() {
+export function requireChainClient() {
   const result = referralChainClient();
   if (!result) throw createError({ statusCode: 503, statusMessage: "The referral smart contract is not configured yet." });
   return result;
 }
-export function chainPurchaseStatus(row: { id: string; level: number; status: ChainPurchaseStatus["status"]; transaction_hash: string }): ChainPurchaseStatus {
+export function chainPurchaseStatus(row: { id: string; level: number; status: ChainPurchaseStatus["status"]; transaction_hash: string | null }): ChainPurchaseStatus {
   return { id: row.id, level: row.level, status: row.status, transactionHash: row.transaction_hash,
-    explorerUrl: `${polygonTestnet.explorerUrl}/tx/${row.transaction_hash}` };
+    explorerUrl: row.transaction_hash ? `${polygonTestnet.explorerUrl}/tx/${row.transaction_hash}` : null };
 }
 export async function pendingChainPurchase(userId: string) {
-  return await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE user_id = $1 AND status = 'pending'", userId);
+  return await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE user_id = $1 AND status IN ('pending','awaiting_signature')", userId);
 }
 export async function referralChainStatus(userId: string, includeGas = false): Promise<ReferralChainStatus> {
   const pending = await pendingChainPurchase(userId);
@@ -49,13 +52,13 @@ export async function referralChainStatus(userId: string, includeGas = false): P
   try {
     const reader = referralChainClient();
     if (!reader) return base;
-    const wallet = await db().one("SELECT address FROM evm_wallets WHERE user_id = $1", userId);
+    const wallet = await evmWalletFor(userId);
     const program = wallet ? await referralProgram(userId) : null;
     const status = await reader.inspect(wallet?.address, program?.nextLevel, includeGas);
     return { ...base, configured: true, ready: !status.paused && !!wallet, contractAddress: getAddress(reader.config.contractAddress),
       tokenAddress: getAddress(reader.config.tokenAddress), feeRecipient: status.feeRecipient, owner: status.owner,
       balance: status.balance, gasBalance: status.gasBalance, gasBudget: status.gasBudget, tokenSymbol: status.tokenSymbol, currentLevel: status.currentLevel };
-  } catch { return base; }
+  } catch (error) { return { ...base, error: error instanceof Error && error.message.startsWith("Deploy the updated") ? error.message : "The referral contract is unavailable. Please try again later." }; }
 }
 
 async function saveTransactions(userId: string, operationId: string, prepared: PreparedChainTransaction[]) {
@@ -121,6 +124,7 @@ export async function submitChainPurchase(userId: string, password: string, leve
 }
 
 async function rebroadcast(operationId: string, reader: ReferralChainClient) {
+  if (externalWalletMode()) return;
   const rows = await db().all("SELECT raw_transaction FROM referral_chain_transactions WHERE operation_id = $1 ORDER BY nonce", operationId);
   for (const row of rows) {
     try { await reader.broadcast(row.raw_transaction); }
@@ -129,24 +133,38 @@ async function rebroadcast(operationId: string, reader: ReferralChainClient) {
 }
 
 export async function reconcileChainPurchase(purchase: ChainPurchaseRow): Promise<ChainPurchaseRow> {
-  if (purchase.status !== "pending") return purchase;
-  const reader = requireChainClient();
-  if (getAddress(purchase.contract_address) !== getAddress(reader.config.contractAddress) || getAddress(purchase.token_address) !== getAddress(reader.config.tokenAddress)) return purchase;
+  if (purchase.status !== "pending" && purchase.status !== "awaiting_signature") return purchase;
+  const configured = requireChainClient();
+  const reader = getAddress(purchase.contract_address) === getAddress(configured.config.contractAddress) && getAddress(purchase.token_address) === getAddress(configured.config.tokenAddress)
+    ? configured : new ReferralChainClient({ ...configured.config,contractAddress: purchase.contract_address,tokenAddress: purchase.token_address });
   await rebroadcast(purchase.id, reader);
   const evidence = await reader.verifyPurchase(purchase.transaction_hash, purchase.payload);
-  if (!evidence) return purchase;
+  if (!evidence) {
+    if (purchase.signing_mode === "external") {
+      const head = await reader.provider.getBlockNumber();
+      const finalized = await reader.provider.getBlock(Math.max(0, head - reader.config.minConfirmations + 1));
+      // No new valid transaction can appear once the quote is expired in a finalized block.
+      if (finalized && finalized.timestamp > purchase.payload.quote.deadline
+        && !await reader.contract.getFunction("purchased")(purchase.payload.quote.id)) {
+        await db().execute("UPDATE referral_chain_purchases SET status = 'failed',updated_at = $1 WHERE id = $2 AND status IN ('pending','awaiting_signature')",new Date().toISOString(),purchase.id);
+        return { ...purchase,status: "failed" };
+      }
+    }
+    await db().execute("UPDATE referral_chain_purchases SET updated_at = $1 WHERE id = $2 AND status IN ('pending','awaiting_signature')",new Date().toISOString(),purchase.id);
+    return purchase;
+  }
   await transaction(async () => {
     await db().execute("SELECT pg_advisory_xact_lock(782438, 2)");
     const current = await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE id = $1 FOR UPDATE", purchase.id);
-    if (current?.status !== "pending") return;
+    if (current?.status !== "pending" && current?.status !== "awaiting_signature") return;
     if (evidence.status === "confirmed") {
       for (const allocation of evidence.allocations) {
-        const recipient = allocation.depth ? purchase.payload.recipients[allocation.depth - 1]! : null;
+        const recipient = allocation.recipientDepth ? purchase.payload.recipients[allocation.recipientDepth - 1]! : null;
         await db().execute(`INSERT INTO referral_chain_allocations
           (purchase_id,kind,depth,amount,recipient_address,recipient_user_id,reason,log_index) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
           purchase.id, allocation.kind, allocation.depth, allocation.units, allocation.recipient,
-          allocation.redirected || allocation.kind === "platform" ? null : recipient?.userId,
-          allocation.kind === "platform" ? "platform_fee" : recipient!.reason, allocation.logIndex);
+          recipient?.userId ?? null,
+          allocation.kind === "platform" ? "platform_fee" : allocation.recipientDepth ? allocation.redirected ? "highest_upline" : "upline" : purchase.payload.recipients[allocation.depth - 1]!.reason, allocation.logIndex);
       }
       if (!await db().one("SELECT user_id FROM referral_activations WHERE user_id = $1", purchase.user_id)) {
         await db().execute("UPDATE users SET referral_code = $1 WHERE id = $2", await newReferralCode(), purchase.user_id);
@@ -216,7 +234,7 @@ export async function reconcilePendingChainOperations() {
   if (sweeping || referralPaymentMode() !== "contract") return;
   sweeping = true;
   try {
-    const purchases = await db().all<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE status = 'pending' ORDER BY created_at LIMIT 10");
+    const purchases = await db().all<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE status IN ('pending','awaiting_signature') ORDER BY updated_at LIMIT 10");
     for (const row of purchases) { try { await reconcileChainPurchase(row); } catch { /* Retry on the next reconciliation pass. */ } }
     const updates = await db().all<FeeUpdateRow>("SELECT * FROM referral_chain_fee_updates WHERE status = 'pending' ORDER BY created_at LIMIT 5");
     for (const row of updates) { try { await reconcileFeeUpdate(row); } catch { /* Preserve indeterminate transactions. */ } }

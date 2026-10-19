@@ -26,6 +26,15 @@ async function fixture({ confirmations = 1, funds = 100n, decimals = 6 } = {}) {
   return { connection, provider, buyer, token, contract, client, payload, fee, config, close: async () => { provider.destroy(); await connection.close(); } };
 }
 
+test('an older deployment without the new distribution version cannot accept new quotes', async () => {
+  const f = await fixture();
+  try {
+    const call = f.provider.call.bind(f.provider), selector = f.contract.interface.getFunction('distributionVersion').selector;
+    f.provider.call = async request => request.data?.startsWith(selector) ? '0x' : call(request);
+    await assert.rejects(f.client.inspect(f.buyer.address,1,false), /Deploy the updated referral contract/);
+  } finally { await f.close(); }
+});
+
 test('signed purchase batches bind chain, spender, exact allowance and nonce order without a gas quote', async () => {
   const f = await fixture();
   try {

@@ -45,7 +45,7 @@ test('contract ABI matches server selectors and event signatures', () => {
   }
 });
 
-test('real token transfers conserve 100% across every level, including 15 normalized bonus shares', async () => {
+test('real token transfers conserve 100% across every level, including 15 equal 1% bonus shares', async () => {
   const f = await fixture();
   try {
     let spent = 0n;
@@ -69,17 +69,51 @@ test('real token transfers conserve 100% across every level, including 15 normal
   } finally { await f.close(); }
 });
 
-test('18-decimal tokens preserve the app micro-USDT rounding and missing shares go to the fee wallet', async () => {
+test('18-decimal tokens pay 65% to the sole upline, including the entire 15% bonus pool', async () => {
   const f = await fixture(18);
   try {
     const ancestors = [f.uplines[0], ...Array(14).fill(ZeroAddress)];
     const signed = await f.quote(1, {}, ancestors);
     await f.buy(signed);
-    const expected = purchaseShares(1).filter(share => share.depth === 1).reduce((sum, share) => sum + BigInt(share.units), 0n) * f.multiplier;
+    const expected = 6_500_000n * f.multiplier;
     assert.equal(await f.token.balanceOf(f.uplines[0]), expected);
     assert.equal(await f.token.balanceOf(await f.fee.getAddress()), 10n ** 19n - expected);
     assert.equal(await f.token.balanceOf(await f.contract.getAddress()), 0n);
     assert.deepEqual(Array.from(await f.contract.previewShares(15)), purchaseShares(15).map(share => BigInt(share.units) * f.multiplier));
+  } finally { await f.close(); }
+});
+
+test('short chains pay exactly 1% per level and the top upline receives unused bonus steps', async () => {
+  for (const count of [0, 1, 5, 14, 15]) {
+    const f = await fixture();
+    try {
+      const ancestors = f.uplines.map((address, i) => i < count ? address : ZeroAddress);
+      const receipt = await f.buy(await f.quote(1,{},ancestors));
+      const shares = receipt.logs.flatMap(log => { try { const event = f.contract.interface.parseLog(log); return event?.name === 'SharePaid' ? [event] : []; } catch { return []; } });
+      const bonus = shares.filter(event => Number(event.args.kind) === 1);
+      assert.equal(bonus.length,15);
+      assert.equal(await f.contract.distributionVersion(),2n);
+      for (let i=0;i<15;i++) {
+        assert.equal(bonus[i].args.amount,100000n);
+        assert.equal(bonus[i].args.recipient,count ? ancestors[Math.min(i,count-1)] : await f.fee.getAddress());
+        assert.equal(bonus[i].args.redirected,count === 0 || i >= count);
+      }
+      if (count === 5) assert.equal(await f.token.balanceOf(ancestors[4]),1_100_000n);
+      if (count === 0) assert.equal(await f.token.balanceOf(await f.fee.getAddress()),10_000_000n);
+      assert.equal(await f.token.balanceOf(await f.contract.getAddress()),0n);
+    } finally { await f.close(); }
+  }
+});
+
+test('an ineligible interior gap pays the platform while trailing bonus steps pay the highest eligible ancestor', async () => {
+  const f = await fixture();
+  try {
+    const ancestors = [f.uplines[0],ZeroAddress,f.uplines[2],...Array(12).fill(ZeroAddress)];
+    await f.buy(await f.quote(1,{},ancestors));
+    assert.equal(await f.token.balanceOf(f.uplines[0]),5_100_000n);
+    assert.equal(await f.token.balanceOf(f.uplines[2]),2_300_000n);
+    assert.equal(await f.token.balanceOf(await f.fee.getAddress()),2_600_000n);
+    assert.equal(await f.token.balanceOf(await f.contract.getAddress()),0n);
   } finally { await f.close(); }
 });
 

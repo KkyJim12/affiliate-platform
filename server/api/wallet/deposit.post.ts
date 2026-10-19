@@ -2,8 +2,10 @@ import { assertSameOrigin, randomUUID, rateLimit, requireUser } from "../../util
 import { db, transaction } from "../../utils/database";
 import { platformSettings } from "../../utils/admin";
 import { moneyScale, parseAmount, parseRequestKey, walletFor, walletRow } from "../../utils/wallet";
+import { requireEmbeddedWalletMode } from "../../utils/wallet-mode";
 export default defineEventHandler(async (event) => {
     assertSameOrigin(event);
+    requireEmbeddedWalletMode();
     const user = await requireUser(event);
     if (!(await platformSettings()).fundingOpen)
         throw createError({ statusCode: 403, statusMessage: "Funding requests are temporarily paused." });

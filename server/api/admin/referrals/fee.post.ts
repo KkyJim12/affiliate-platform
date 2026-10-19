@@ -2,8 +2,10 @@ import { getAddress, isAddress, ZeroAddress } from "ethers";
 import { assertSameOrigin, rateLimit, requireAdmin, verifyPassword } from "../../../utils/auth";
 import { parseRequestKey } from "../../../utils/wallet";
 import { chainActionError, parseGasBudget, submitFeeUpdate } from "../../../utils/referral-chain";
+import { requireEmbeddedWalletMode } from "../../../utils/wallet-mode";
 export default defineEventHandler(async event => {
   assertSameOrigin(event);
+  requireEmbeddedWalletMode();
   const admin = await requireAdmin(event);
   await rateLimit(event, `chain-fee:${admin.id}`, 20);
   const body = await readBody(event), key = parseRequestKey(body?.requestKey);

@@ -9,7 +9,7 @@ export const polygonTestnet = {
 
 export interface EvmWalletDetails {
   address: string;
-  publicKey: string;
+  publicKey: string | null;
   chainId: 80002;
   network: "Polygon Amoy";
   currency: "POL";

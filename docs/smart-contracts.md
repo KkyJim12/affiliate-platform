@@ -1,5 +1,7 @@
 # EVM smart contract integration and function analysis
 
+Connected wallets are now the default: wallet signatures for login and every on-chain write, with 1% bonuses at each of 15 depths. See [connected wallet setup, existing-account linking and distributor replacement](connected-wallets.md). In-app key management and password-authorized transactions below apply only when `NUXT_PUBLIC_WALLET_MODE=embedded` is explicitly enabled.
+
 Viem handles contract reads; Ethers generates and encrypts account wallets.
 Viem fits Nuxt's ESM setup and
 provides typed ERC-20 calls, ABI encoding/decoding and transaction inspection.

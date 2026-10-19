@@ -1,5 +1,7 @@
 # UNXO API
 
+Connected wallets are now the default: wallet signatures for login and every on-chain write, with 1% bonuses at each of 15 depths. See [connected wallet setup, existing-account linking and distributor replacement](connected-wallets.md). In-app key management and password-authorized transactions below apply only when `NUXT_PUBLIC_WALLET_MODE=embedded` is explicitly enabled.
+
 The member and administrator interfaces use the same-origin Nuxt API under `/api`.
 The API stores all account and ledger data in PostgreSQL through `DATABASE_URL`.
 Schema migrations run before the server starts accepting requests; CLI migration
@@ -208,12 +210,11 @@ remain level 1; historical payments do not receive retroactive distributions.
 Every new activation and upgrade atomically debits the buyer and allocates 100%:
 
 - 50%, 20%, 10% of the purchase to sponsor ancestors at depths 1, 2, 3.
-- 15% shared across depths 1–15 using weights 16384, 8192, …, 1 divided by
-  32767. These bonuses overlap the direct shares for the first three uplines.
+- Exactly 1% at each bonus depth from 1 to 15. These overlap the direct shares.
+  Unused trailing bonus shares pay the highest eligible upline. These bonuses overlap the direct shares for the first three uplines.
 - 5% payable to the configured platform fee address.
 
-Amounts use integer micro-USDT. Largest-remainder rounding makes the bonus pool
-exactly 15%, including at the maximum price. Each ancestor must have an activated
+Amounts use integer micro-USDT; each bonus is exactly 1% at every price. Each ancestor must have an activated
 referral code, an active account and an internal wallet. Missing/ineligible shares
 become payable to the platform fee address, preserving their kind/depth and reason;
 the system never shifts another ancestor into a missing position.

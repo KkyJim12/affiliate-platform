@@ -1,14 +1,16 @@
 import { createError } from "h3";
-import { ledgerScale, levelPrice, maxReferralLevel, purchaseShares } from "../../shared/compensation";
+import { ledgerScale, levelPrice, maxReferralLevel, purchaseShares, shareRecipientDepth } from "../../shared/compensation";
 import { db, transaction } from "./database";
 import { randomUUID } from "./auth";
 import { newReferralCode } from "./referral";
 import { walletRow } from "./wallet";
 import { referralPaymentMode } from "./referral-chain";
+import { requireEmbeddedWalletMode } from "./wallet-mode";
 
 interface Upline { id: string; depth: number; eligible: boolean; wallet_id: string | null }
 
 export async function buyReferralLevel(userId: string, level: number, requestKey: string) {
+  requireEmbeddedWalletMode();
   if (referralPaymentMode() !== "ledger")
     throw createError({ statusCode: 409, statusMessage: "Use the smart contract purchase flow to pay from your Amoy wallet." });
   if (!Number.isInteger(level) || level < 1 || level > maxReferralLevel)
@@ -61,7 +63,8 @@ export async function buyReferralLevel(userId: string, level: number, requestKey
     }
     for (const share of purchaseShares(level)) {
       const upline = uplines.find(item => item.depth === share.depth);
-      const recipient = upline?.eligible ? upline : undefined;
+      const depth = shareRecipientDepth(share, Array.from({ length: 15 }, (_, index) => !!uplines.find(item => item.depth === index + 1)?.eligible));
+      const recipient = depth ? uplines.find(item => item.depth === depth) : undefined;
       const creditId = recipient ? randomUUID() : null;
       if (recipient) {
         await db().execute("UPDATE wallets SET available = available + $1 WHERE id = $2", share.units, recipient.wallet_id);

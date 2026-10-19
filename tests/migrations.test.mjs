@@ -49,7 +49,7 @@ test("existing referral codes migrate to UNXO while preserving suffixes and spon
     ('sponsor', 'sponsor', 'hash', 'LOOP-1234ABCD', NULL, '2026-10-18'),
     ('member', 'member', 'hash', 'UNASSIGNED-member', 'sponsor', '2026-10-18'),
     ('current', 'current', 'hash', 'UNXO-ABCDEF12', NULL, '2026-10-18')`);
-  assert.deepEqual(await migrate(db.pool, sources), ["0009_unxo_referral_codes.sql"]);
+  assert.deepEqual(await migrate(db.pool, sources), sources.filter(source => source.name >= "0009_").map(source => source.name));
   assert.equal((await db.one("SELECT referral_code FROM users WHERE id = 'sponsor'")).referral_code, "UNXO-1234ABCD");
   assert.deepEqual(await db.one("SELECT referral_code, sponsor_id FROM users WHERE id = 'member'"), { referral_code: "UNASSIGNED-member", sponsor_id: "sponsor" });
   assert.equal((await db.one("SELECT referral_code FROM users WHERE id = 'current'")).referral_code, "UNXO-ABCDEF12");

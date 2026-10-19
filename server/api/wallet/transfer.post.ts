@@ -1,8 +1,10 @@
 import { assertSameOrigin, findUser, randomUUID, rateLimit, requireUser, verifyPassword } from "../../utils/auth";
 import { db, transaction } from "../../utils/database";
 import { parseAmount, parseRequestKey, walletFor, walletRow } from "../../utils/wallet";
+import { requireEmbeddedWalletMode } from "../../utils/wallet-mode";
 export default defineEventHandler(async (event) => {
     assertSameOrigin(event);
+    requireEmbeddedWalletMode();
     const user = await requireUser(event);
     await rateLimit(event, `transfer:${user.id}`, 15);
     const body = await readBody(event);

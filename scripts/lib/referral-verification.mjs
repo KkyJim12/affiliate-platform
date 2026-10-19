@@ -46,6 +46,8 @@ export function prepareVerification(env = process.env, root = process.cwd()) {
   }
   const progressFile = path.join(directory, 'deployment-progress.json');
   const progress = fs.existsSync(progressFile) ? JSON.parse(fs.readFileSync(progressFile, 'utf8')) : null;
+  const replacementFile = path.join(directory,'latest-replacement.json');
+  const replacement = fs.existsSync(replacementFile) ? JSON.parse(fs.readFileSync(replacementFile,'utf8')) : null;
   const jobs = contractNames.map(name => {
     const artifact = artifacts[name];
     const { compilationTarget, ...settings } = artifact.metadata.settings;
@@ -56,7 +58,8 @@ export function prepareVerification(env = process.env, root = process.cwd()) {
     const filename = Object.keys(compilationTarget)[0];
     const bytecode = `0x${output.contracts[filename][name].evm.bytecode.object}`;
     if (bytecode !== artifact.bytecode) throw new VerificationError(`${name} verification bytecode differs from the saved build.`);
-    const saved = progress?.transactions?.[name];
+    const replaced = replacement?.transactions?.[name];
+    const saved = replaced?.address && getAddress(replaced.address) === addresses[name] ? replaced : progress?.transactions?.[name];
     const types = name === 'AmoyTestUSDT' ? ['address'] : ['address', 'address', 'address', 'address'];
     let constructorArguments, constructorSource;
     if (saved?.raw && getAddress(saved.address) === addresses[name]) {

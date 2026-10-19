@@ -1,8 +1,10 @@
 import { assertSameOrigin, rateLimit, requireUser, verifyPassword } from "../../../utils/auth";
 import { parseRequestKey } from "../../../utils/wallet";
 import { chainActionError, chainPurchaseStatus, submitChainPurchase } from "../../../utils/referral-chain";
+import { requireEmbeddedWalletMode } from "../../../utils/wallet-mode";
 export default defineEventHandler(async event => {
   assertSameOrigin(event);
+  requireEmbeddedWalletMode();
   const user = await requireUser(event);
   await rateLimit(event, `chain-purchase:${user.id}`, 30);
   const body = await readBody(event), key = parseRequestKey(body?.requestKey);

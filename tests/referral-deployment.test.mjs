@@ -84,6 +84,17 @@ test('Amoy deployment command deploys both contracts, preserves env settings and
     await fs.writeFile(path.join(directory, '.env'), saved);
     assert.equal((await run()).code, 1, 'A configured distributor must prevent duplicate deployment.');
     assert.equal(await provider.getTransactionCount(deployer.address), 2);
+    const planned = await run('scripts/deploy-referral.mjs',['--replace-distributor']);
+    assert.equal(planned.code,0);
+    assert.equal(await provider.getTransactionCount(deployer.address),2,'Replacement preview must not broadcast');
+    const replacement = await run('scripts/deploy-referral.mjs',['--replace-distributor','--previous-contract',distributorAddress,'--broadcast']);
+    assert.equal(replacement.code,0,'Replacement reuses the current token');
+    assert.equal(await provider.getTransactionCount(deployer.address),3,'Only one distributor deployment transaction is sent');
+    const updated = await fs.readFile(path.join(directory,'.env'),'utf8');
+    assert.ok(updated.includes(`NUXT_EVM_TOKEN_ADDRESS=${tokenAddress}`));
+    assert.ok(!updated.includes(`NUXT_REFERRAL_CONTRACT_ADDRESS=${distributorAddress}`));
+    assert.equal((await run('scripts/verify-referral.mjs',['--dry-run'])).code,0);
+    assert.equal((await run('scripts/deploy-referral.mjs',['--replace-distributor','--previous-contract',distributorAddress,'--broadcast'])).code,1,'A repeated old-address confirmation cannot deploy again');
   } finally {
     provider?.destroy();
     await server.close();

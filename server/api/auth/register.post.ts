@@ -4,8 +4,10 @@ import { platformSettings } from "../../utils/admin";
 import { activeSponsor } from "../../utils/referral";
 import { generateEncryptedEvmWallet } from "../../lib/evm-wallet";
 import { insertEvmWallet } from "../../utils/evm-wallet";
+import { requireEmbeddedWalletMode } from "../../utils/wallet-mode";
 export default defineEventHandler(async (event) => {
     assertSameOrigin(event);
+    requireEmbeddedWalletMode();
     await rateLimit(event, "register", 10);
     if (!(await platformSettings()).registrationOpen)
         throw createError({ statusCode: 403, statusMessage: "New registrations are temporarily paused." });

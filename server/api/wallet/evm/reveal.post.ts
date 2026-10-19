@@ -2,9 +2,11 @@ import { assertSameOrigin, rateLimit, requireUser, verifyPassword } from "../../
 import { db } from "../../../utils/database";
 import { decryptEvmPrivateKey } from "../../../lib/evm-wallet";
 import type { StoredEvmWallet } from "../../../lib/evm-wallet";
+import { requireEmbeddedWalletMode } from "../../../utils/wallet-mode";
 
 export default defineEventHandler(async event => {
   assertSameOrigin(event);
+  requireEmbeddedWalletMode();
   const user = await requireUser(event);
   await rateLimit(event, `evm-wallet-reveal:${user.id}`, 5);
   const body = await readBody(event);

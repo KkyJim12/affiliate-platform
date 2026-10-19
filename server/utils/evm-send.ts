@@ -6,6 +6,7 @@ import { polygonTestnet } from "../../shared/evm-wallet";
 import { db, transaction } from "./database";
 import { randomUUID } from "./auth";
 import { assertNoPendingWalletOperation, walletSigner, withWalletLock } from "./evm-operations";
+import { externalWalletMode, requireEmbeddedWalletMode } from "./wallet-mode";
 
 interface SendRow {
   id: string; user_id: string; request_key: string | null; payload: SendPlan; quote_hash: string;
@@ -25,6 +26,7 @@ export function sendStatus(row: SendRow): EvmSendStatus {
     explorerUrl: `${polygonTestnet.explorerUrl}/tx/${row.transaction_hash}`, createdAt: row.created_at };
 }
 export async function createSendQuote(userId: string, recipient: string, asset: EvmSendAsset, amount: string): Promise<EvmSendQuote> {
+  requireEmbeddedWalletMode();
   return withWalletLock(userId, async () => {
     await assertNoPendingWalletOperation(userId);
     const wallet = await db().one("SELECT address FROM evm_wallets WHERE user_id = $1", userId);
@@ -64,7 +66,7 @@ async function reconcileEvmSend(row: SendRow): Promise<SendRow> {
   if (row.status !== "pending") return row;
   const reader = sendClient();
   // Never replace an indeterminate send with a new nonce or new signed bytes.
-  try { await reader.broadcast(row.raw_transaction!, row.payload); } catch { /* Receipt lookup still works after an RPC timeout. */ }
+  if (!externalWalletMode()) { try { await reader.broadcast(row.raw_transaction!, row.payload); } catch { /* Receipt lookup still works after an RPC timeout. */ } }
   let result;
   try { result = await reader.verify(row.transaction_hash!, row.payload); } catch { return row; }
   if (!result) return row;

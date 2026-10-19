@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bonusRate, ledgerScale, levelPrice, purchaseShares } from '../shared/compensation.ts';
+import { bonusRate, ledgerScale, levelPrice, purchaseShares, shareRecipientDepth } from '../shared/compensation.ts';
 
 test('all 15 prices double, bounded from $10 through $163,840', () => {
   assert.deepEqual(Array.from({ length: 15 }, (_, i) => levelPrice(i + 1)),
@@ -20,19 +20,28 @@ test('every price conserves 100% with exact 80/15/5 pools and positive integer m
   }
 });
 
-test('15 normalized halving shares match exact rational amounts within a single micro-USDT', () => {
+test('every bonus share is exactly 1%, at every purchase level', () => {
   assert.ok(Math.abs(Array.from({ length: 15 }, (_, i) => bonusRate(i + 1)).reduce((a, b) => a + b, 0) - 0.15) < 1e-15);
   for (let level = 1; level <= 15; level++) {
     const shares = purchaseShares(level).filter(share => share.kind === 'bonus');
     for (let index = 0; index < shares.length; index++) {
       const share = shares[index];
       const exact = levelPrice(level) * ledgerScale * bonusRate(index + 1);
-      assert.ok(Math.abs(share.units - exact) < 1);
-      if (index) {
-        assert.ok(shares[index - 1].units > share.units);
-        assert.ok(Math.abs(shares[index - 1].units - 2 * share.units) <= 2);
-      }
+      assert.equal(share.units, exact);
+      assert.equal(bonusRate(index + 1), 0.01);
     }
   }
   for (const depth of [0, 16, 1.5, NaN]) assert.throws(() => bonusRate(depth), RangeError);
+});
+
+test('short chains give unused trailing bonuses to the highest eligible upline; gaps and no-upline chains go to platform', () => {
+  for (let count = 0; count <= 15; count++) {
+    const eligible = Array.from({ length: 15 }, (_, i) => i < count);
+    const bonus = purchaseShares(1).filter(share => share.kind === 'bonus');
+    for (const share of bonus) assert.equal(shareRecipientDepth(share, eligible), Math.min(share.depth, count));
+    if (count) assert.equal(bonus.filter(share => shareRecipientDepth(share,eligible) === count).reduce((sum,share) => sum + share.units,0), (16-count) * 100000);
+  }
+  assert.equal(shareRecipientDepth({ kind: 'bonus', depth: 2 }, [true,false,true]), 0);
+  assert.equal(shareRecipientDepth({ kind: 'bonus', depth: 15 }, [true,false,true]), 3);
+  assert.equal(shareRecipientDepth({ kind: 'direct', depth: 2 }, [true]), 0);
 });

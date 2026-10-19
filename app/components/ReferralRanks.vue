@@ -2,6 +2,7 @@
 import { baseReferralPrice, bonusPoolRate, bonusRate, directRates, ledgerScale, levelPrice, maxReferralLevel, platformFeeRate, purchaseShares } from "#shared/compensation";
 
 const { t, localeTag } = useLoopI18n();
+const external = useRuntimeConfig().public.walletMode !== "embedded";
 const selectedLevel = ref(1);
 const levels = Array.from({ length: maxReferralLevel }, (_, index) => ({ level: index + 1, price: levelPrice(index + 1) }));
 const price = computed(() => levelPrice(selectedLevel.value));
@@ -32,7 +33,7 @@ const percent = (value: number) => (value * 100).toLocaleString(localeTag.value,
         <div><span>{{ t('ranksPage.upgrade') }}</span><strong>2× <small>{{ t('ranksPage.eachLevel') }}</small></strong><p>{{ t('ranksPage.upgradeHint') }}</p></div>
         <div><span>{{ t('ranksPage.maximum') }}</span><strong>{{ maxReferralLevel }} <small>{{ t('ranksPage.levels') }}</small></strong><p>{{ money(levelPrice(maxReferralLevel)) }} USDT · {{ t('ranksPage.finalPrice') }}</p></div>
       </div>
-      <div class="level-network-note"><AppIcon name="Info" :size="16" /><p>{{ t('ranksPage.paymentHint') }}</p></div>
+      <div class="level-network-note"><AppIcon name="Info" :size="16" /><p>{{ t(external ? 'connected.purchaseHint' : 'ranksPage.paymentHint') }}</p></div>
     </section>
 
     <section class="level-selection" :aria-label="t('ranksPage.selectLevel')">
@@ -63,7 +64,7 @@ const percent = (value: number) => (value * 100).toLocaleString(localeTag.value,
 
     <div class="level-details-grid">
       <section class="panel level-detail"><span class="level-detail-icon"><AppIcon name="Users" :size="21" /></span><h2>{{ t('ranksPage.eligibility') }}</h2><p>{{ t('ranksPage.uplineHint') }}</p><p>{{ t('ranksPage.eligibilityHint') }}</p><p>{{ t('ranksPage.missingHint') }}</p></section>
-      <section class="panel level-detail"><span class="level-detail-icon"><AppIcon name="Wallet" :size="21" /></span><h2>{{ t('ranksPage.settlement') }}</h2><p>{{ t('ranksPage.settlementHint') }}</p><p>{{ t('ranksPage.feeHint') }}</p><NuxtLink to="/referrals" class="button button-orange button-small">{{ t('ranksPage.openPurchases') }}<AppIcon name="ArrowUpRight" :size="16" /></NuxtLink></section>
+      <section class="panel level-detail"><span class="level-detail-icon"><AppIcon name="Wallet" :size="21" /></span><h2>{{ t('ranksPage.settlement') }}</h2><p>{{ t('ranksPage.settlementHint') }}</p><p>{{ t(external ? 'connected.confirmInWallet' : 'ranksPage.feeHint') }}</p><NuxtLink to="/referrals" class="button button-orange button-small">{{ t('ranksPage.openPurchases') }}<AppIcon name="ArrowUpRight" :size="16" /></NuxtLink></section>
     </div>
   </div>
 </template>

@@ -5,6 +5,7 @@ import { compileContracts } from './lib/compile-contracts.mjs';
 
 // All transactions in this runner stay on a fresh localhost Amoy simulation.
 const server = await network.createServer(undefined, '127.0.0.1', 0);
+const external = process.argv.includes('--external');
 let provider;
 let testExitCode = 1;
 try {
@@ -21,11 +22,12 @@ try {
     .deploy(await token.getAddress(), owner.address, fee, authority.address);
   await contract.waitForDeployment();
   await provider.send('hardhat_setBalance', [owner.address, toBeHex(parseEther('100'))]);
-  const child = spawn(process.execPath, ['scripts/test-postgres.mjs', 'ui', 'onchain-referral.spec.ts', 'onchain-wallet.spec.ts', ...process.argv.slice(2)], {
+  const specs = external ? ['connected-wallet.spec.ts'] : ['onchain-referral.spec.ts','onchain-wallet.spec.ts'];
+  const child = spawn(process.execPath, ['scripts/test-postgres.mjs', 'ui', ...specs, ...process.argv.slice(2).filter(arg => arg !== '--external')], {
     stdio: 'inherit', env: { ...process.env, NUXT_REFERRAL_PAYMENT_MODE: 'contract', NUXT_EVM_RPC_URL: url, NUXT_EVM_CHAIN_ID: '80002',
       NUXT_EVM_TOKEN_ADDRESS: await token.getAddress(), NUXT_EVM_MIN_CONFIRMATIONS: '1', NUXT_REFERRAL_CONTRACT_ADDRESS: await contract.getAddress(),
       NUXT_REFERRAL_AUTHORITY_PRIVATE_KEY: authority.privateKey, NUXT_REFERRAL_MIN_CONFIRMATIONS: '1',
-      REFERRAL_TEST_OWNER_KEY: owner.privateKey, REFERRAL_TEST_ORIGINAL_FEE: fee },
+      REFERRAL_TEST_OWNER_KEY: owner.privateKey, REFERRAL_TEST_ORIGINAL_FEE: fee, NUXT_PUBLIC_WALLET_MODE: external ? 'external' : 'embedded' },
   });
   testExitCode = await new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', code => resolve(code ?? 1)); });
 } finally { provider?.destroy(); await server.close(); }

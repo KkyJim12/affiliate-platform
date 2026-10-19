@@ -2,7 +2,7 @@ import { expect, test, type APIRequestContext } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { hashPassword } from '../server/lib/password';
 import { openTestDatabase } from './database';
-import { ledgerScale, levelPrice, purchaseShares } from '../shared/compensation';
+import { ledgerScale, levelPrice, purchaseShares, shareRecipientDepth } from '../shared/compensation';
 
 const origin = 'http://127.0.0.1:3100';
 const password = 'Referral compensation testing 42!';
@@ -105,7 +105,7 @@ test('missing and ineligible shares accrue to the configured address and address
     for (const address of ['not-an-address', `0x${'0'.repeat(40)}`, 123]) expect((await save(address)).status()).toBe(400);
     const first = await post(buyer, '/api/referrals/activate', { password, requestKey: randomUUID() });
     expect(first.status()).toBe(200);
-    const eligibleShare = purchaseShares(1).filter(share => share.depth === 2).reduce((sum, share) => sum + share.units, 0);
+    const eligibleShare = purchaseShares(1).filter(share => shareRecipientDepth(share,[false,true]) === 2).reduce((sum, share) => sum + share.units, 0);
     expect((await first.json()).program.latestPurchase.platformPayable).toBe((10000000 - eligibleShare) / ledgerScale);
     expect((await db.one('SELECT available FROM wallets WHERE user_id = $1', data.uplines[0]!.id))!.available).toBe(0);
     expect((await db.one('SELECT available FROM wallets WHERE user_id = $1', data.uplines[1]!.id))!.available).toBe(eligibleShare);

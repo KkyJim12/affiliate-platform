@@ -18,7 +18,7 @@ export default defineConfig({
     url: "http://127.0.0.1:3100",
     timeout: 120_000,
     reuseExistingServer: false,
-    env: { PORT: "3100", HOST: "127.0.0.1", DATABASE_URL: process.env.TEST_DATABASE_URL || "", NUXT_PUBLIC_APP_URL: "http://127.0.0.1:3100", NUXT_EVM_EXPLORER_API_KEY: "", NUXT_REFERRAL_PAYMENT_MODE: process.env.NUXT_REFERRAL_PAYMENT_MODE || "ledger" },
+    env: { PORT: "3100", HOST: "127.0.0.1", DATABASE_URL: process.env.TEST_DATABASE_URL || "", NUXT_PUBLIC_APP_URL: "http://127.0.0.1:3100", NUXT_EVM_EXPLORER_API_KEY: "", NUXT_REFERRAL_PAYMENT_MODE: process.env.NUXT_REFERRAL_PAYMENT_MODE || "ledger", NUXT_PUBLIC_WALLET_MODE: process.env.NUXT_PUBLIC_WALLET_MODE || "embedded" },
   },
   projects: [
     {

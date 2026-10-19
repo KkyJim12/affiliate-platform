@@ -15,6 +15,8 @@
     "test:verification": "node --test tests/referral-verification.test.mjs",
     "test:distributor": "node --test tests/referral-contract.test.mjs tests/referral-chain.test.mjs tests/referral-deployment.test.mjs",
     "test:onchain": "node scripts/test-onchain.mjs",
+    "test:connected": "node scripts/test-onchain.mjs --external",
+    "test:wallet-auth": "node --test tests/wallet-challenge.test.mjs",
     "test:sends": "node --test tests/evm-send.test.mjs",
     "build": "nuxt build",
     "dev": "nuxt dev",

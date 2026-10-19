@@ -1,6 +1,8 @@
 # UNXO — matrix and referral workspace
 
-Nuxt 4 app with a three-layer binary matrix UI, 15-rank explorer, 15-level unilevel projections, username/password accounts, and encrypted EVM wallets. The UNXO interface uses a modern gold palette with light and dark themes.
+Connected wallets are now the default: wallet signatures for login and every on-chain write, with 1% bonuses at each of 15 depths. See [connected wallet setup, existing-account linking and distributor replacement](docs/connected-wallets.md). In-app key management and password-authorized transactions below apply only when `NUXT_PUBLIC_WALLET_MODE=embedded` is explicitly enabled.
+
+Nuxt 4 app with a three-layer binary matrix UI, 15-rank explorer, 15-level unilevel projections, wallet-signature accounts, and connected EVM wallets. The UNXO interface uses a modern gold palette with light and dark themes.
 
 Branding uses the supplied UNXO artwork from `public/logo.jpg`. The horizontal, transparent version is in `public/unxo-horizontal.webp`, with its full-resolution PNG master alongside it. `BrandLogo.vue` shares responsive sizing across navigation, account dialogs, footers, and compact decorative emblems. The original image also supplies the browser icon. See `design/unxo-logo-prompt.md` for generation details.
 
@@ -36,7 +38,7 @@ Before running these commands, set `DATABASE_URL` in `.env` using `.env.example`
 
 Without Docker or an installed PostgreSQL service, run `npm run db:start` in a separate terminal before migrations and development. It starts a native PostgreSQL 17 process on the localhost port in `DATABASE_URL`, creates that database if missing, and keeps data in `.data/postgresql`. Keep the terminal open; Ctrl+C stops the service and retains its data. This development command requires the `embedded-postgres` dev dependency. Choose either this command or Docker for a given port.
 
-Open http://localhost:3000. Create an account through the sign-in dialog. No Privy keys, browser wallet, email provider, or blockchain connection is required.
+Open http://localhost:3000. Create an account through the sign-in dialog. Choose MetaMask, Rabby or Phantom and sign the login message. Purchases use Polygon Amoy test tokens.
 
 ## Administrator workspace
 
@@ -78,17 +80,16 @@ with `npm run contracts:verify -- --dry-run`.
 
 The member wallet is one EVM balance card on both the overview and wallet page.
 It shows the existing address, network, live balances, Send and a Wallet details
-button. Wallet details opens a modal with the address, public key, explorer link
-and password-protected private-key action.
+button. Wallet details opens a modal with the linked address, network, copy and
+explorer actions. Keys stay in the connected wallet.
 The old internal balance, LW ID, funding requests, member transfers and ledger
 history have been removed from this card. Settings and navigation also use the
 EVM wallet. Existing addresses, encrypted keys and historical ledger records are
 preserved. Referrals now pay through the smart contract using the configured
 Amoy token. Historical credits remain available only in explicit legacy ledger
-mode. Send transfers native POL or the configured Amoy token to an address after
-reviewing the amount and maximum gas fee and confirming the account password.
-Signed sends persist before broadcast, recover automatically, and share a nonce
-lock with referral purchases. See [wallet sends](docs/api.md#evm-wallet-sends).
+mode. Send transfers native POL or the configured Amoy token after review and a
+wallet signature. The backend prepares unsigned intents and verifies receipts.
+See [connected wallet transactions](docs/connected-wallets.md#transaction-approval).
 
 `GET /api/wallet/evm/balance` reads the signed-in owner's native POL balance on
 Amoy. It uses `NUXT_EVM_RPC_URL` or the public Amoy RPC, and rejects another
@@ -107,7 +108,7 @@ tokens are included. Missing credentials/provider failures show an unavailable
 state, while an actual empty history has its own message. No ledger records or
 sample transactions are presented as on-chain activity.
 
-Ethers generates an account wallet on Polygon Amoy testnet (chain ID 80002).
+In explicit embedded mode, Ethers generates an account wallet on Polygon Amoy testnet (chain ID 80002).
 PostgreSQL stores its address, public key and V3 keystore encrypted with the
 account password. The wallet page displays public details; revealing the private
 key requires that password and hides it after 30 seconds. Existing accounts get
@@ -130,11 +131,11 @@ Run `npm run test:contracts` for offline helper tests without a database or wall
 
 `shared/compensation.ts` is the source for purchase prices and exact allocations. Level 1 activates a personal referral code for 10 USDT. Each sequential upgrade costs twice the previous level: 20, 40, 80 USDT, through level 15 at 163,840 USDT. Each upgrade charges its full price and retains the same code. Existing paid activations remain level 1, without retroactive commissions.
 
-Every contract activation and upgrade collects and distributes 100% in one on-chain transaction; verified receipts are then mirrored into PostgreSQL. Sponsor ancestors 1–3 receive 50%, 20%, 10% of the whole purchase (80% total). An additional 15% is shared across ancestors 1–15 with normalized halving weights, `2^(15 − depth) / 32767`; the first three receive both kinds of commission. Largest-remainder rounding conserves the exact 15% pool in integer micro-USDT. The platform gets 5%. Missing, suspended, unactivated, or wallet-less upline shares are sent to the platform address by the contract. No ancestor is moved into another position. Binary illustrations in `shared/plan.ts` use the same direct rates; actual payouts follow the sponsor genealogy.
+Every contract activation and upgrade collects and distributes 100% in one on-chain transaction; verified receipts are then mirrored into PostgreSQL. Sponsor ancestors 1–3 receive 50%, 20%, 10% of the whole purchase (80% total). An additional 15% pays exactly 1% at each depth 1 to 15; the first three receive both shares. Unused trailing bonus shares pay the highest eligible upline. The platform gets 5%. Missing direct shares and ineligible gaps go to the platform. Without an eligible upline, the full bonus pool also goes to the platform. Binary illustrations in `shared/plan.ts` use the same direct rates; actual payouts follow the sponsor genealogy.
 
 Set the owner and initial fee recipient in `.env` before deployment. Admin Settings reads the current on-chain recipient and lets its owner submit a signed update. Purchases require configured token/contract addresses and sufficient payment tokens. The app does not check POL balances or require a gas quote for purchases; network fees still apply. New distributions are actual ERC-20 transfers; historical internal-ledger payables remain separate. The default contract mode never silently spends or credits internal balances.
 
-The referrals page at `/referrals` (also `/referral` or `/dashboard?view=referrals`) includes activation, current level, sequential upgrades, code/link sharing, a distribution summary, and sponsor linking. Purchases verify the password, debit the wallet, record the purchase and all allocations, and credit eligible uplines atomically. Consistent wallet lock ordering prevents transfer deadlocks. Request keys and unique user/level records prevent duplicate charges and commissions. Accounts with no sponsor can enter an activated code for free; an established sponsor cannot be changed, and self-referrals, suspended sponsors, and cycles at any depth are rejected. Existing sponsor relationships are preserved; older unpaid codes require activation before they can accept new referrals. Registration and funding alone do not purchase a level or place binary matrix positions. The rank explorer remains a projection, separate from paid account levels.
+The referrals page at `/referrals` (also `/referral` or `/dashboard?view=referrals`) includes activation, current level, sequential upgrades, code/link sharing, a distribution summary, and sponsor linking. Purchases require the connected wallet to sign approval and payment; the contract transfers all allocations atomically, and the backend mirrors confirmed receipts. Consistent wallet lock ordering prevents transfer deadlocks. Request keys and unique user/level records prevent duplicate charges and commissions. Accounts with no sponsor can enter an activated code for free; an established sponsor cannot be changed, and self-referrals, suspended sponsors, and cycles at any depth are rejected. Existing sponsor relationships are preserved; older unpaid codes require activation before they can accept new referrals. Registration and funding alone do not purchase a level or place binary matrix positions. The rank explorer remains a projection, separate from paid account levels.
 
 The referral network switches between list and tree views. The tree follows actual sponsor relationships across up to 15 levels (first 500 members), with zoom, level controls, and a self-contained SVG image download. Search and status filters preserve ancestor branches for context; matching descendants beyond the selected level limit are revealed automatically. The `layout=tree` query parameter preserves the selected view on refresh. Referral genealogy and binary matrix placement remain separate.
 

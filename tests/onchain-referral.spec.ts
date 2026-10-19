@@ -73,11 +73,11 @@ test('real contract purchases debit tokens, distribute automatically, deduplicat
     const child = await register(member, program.code); await fund(child.wallet.address);
     const second = await buy(member); await confirmed(member, second.id);
     const token = new Contract(process.env.NUXT_EVM_TOKEN_ADDRESS!, tokenAbi, rpc);
-    expect(await token.getFunction('balanceOf')(first.wallet.address)).toBe(95_750_023n);
+    expect(await token.getFunction('balanceOf')(first.wallet.address)).toBe(96_500_000n);
     expect(await token.getFunction('balanceOf')(child.wallet.address)).toBe(90_000_000n);
     const rootWallet = await (await root.get('/api/wallet')).json();
     expect(rootWallet.available).toBe(0); expect(rootWallet.earned).toBe(0);
-    expect((await (await root.get('/api/dashboard')).json()).commissions).toBe(5.750023);
+    expect((await (await root.get('/api/dashboard')).json()).commissions).toBe(6.5);
     expect((await database.one('SELECT COUNT(*) AS count FROM referral_chain_allocations WHERE purchase_id = $1', second.id))!.count).toBe(19);
     expect((await database.one('SELECT SUM(amount) AS total FROM referral_chain_allocations WHERE purchase_id = $1', second.id))!.total).toBe(10_000_000);
     expect((await database.one('SELECT COUNT(*) AS count FROM referral_chain_purchases WHERE user_id = $1', first.user.id))!.count).toBe(1);

@@ -1,7 +1,8 @@
 import { AbiCoder, Contract, FetchRequest, Interface, JsonRpcProvider, Transaction, Wallet, ZeroAddress, formatUnits, getAddress, keccak256, parseUnits } from "ethers";
 import type { Provider, TransactionReceipt } from "ethers";
 import { purchaseTypes, referralContractAbi, type ChainPurchaseQuote } from "../../shared/referral-contract.ts";
-import { purchaseShares } from "../../shared/compensation.ts";
+import { purchaseShares, shareRecipientDepth } from "../../shared/compensation.ts";
+import { legacyPurchaseShares } from "./legacy-distribution.ts";
 
 export const tokenAbi = ["function decimals() view returns (uint8)", "function symbol() view returns (string)",
   "function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)",
@@ -56,6 +57,8 @@ export class ReferralChainClient {
   async inspect(buyer?: string, nextLevel?: number | null, includeGas = true) {
     if ((await this.provider.getNetwork()).chainId !== 80002n) throw new Error("Referral purchases require Polygon Amoy.");
     if (await this.provider.getCode(this.config.contractAddress) === "0x") throw new Error("Referral contract is not deployed.");
+    if (await this.contract.getFunction("distributionVersion")().catch(() => 0n) !== 2n)
+      throw new Error("Deploy the updated referral contract for 1% bonuses before accepting purchases.");
     const [token, decimals, actualDecimals, feeRecipient, owner, quoteSigner, nonce, paused, symbol, gasFees] = await Promise.all([
       this.contract.getFunction("paymentToken")(), this.contract.getFunction("tokenDecimals")(), this.token.getFunction("decimals")(), this.contract.getFunction("feeRecipient")(),
       this.contract.getFunction("owner")(), this.contract.getFunction("quoteSigner")(), this.contract.getFunction("configNonce")(), this.contract.getFunction("paused")(),
@@ -91,9 +94,14 @@ export class ReferralChainClient {
   // Sign the complete nonce-ordered batch before any broadcast. Persisting these
   // exact signed bytes makes restart/retry recovery independent of passwords.
   async preparePurchase(buyer: Wallet, payload: PurchasePayload, decimals: number): Promise<PreparedChainTransaction[]> {
+    return this.prepareBatch(buyer, await this.purchaseCalls(buyer.address, payload, decimals));
+  }
+
+  // No private key, nonce, gas quote, or native-balance precheck is needed here.
+  async purchaseCalls(buyer: string, payload: PurchasePayload, decimals: number) {
     const price = BigInt(purchaseShares(payload.quote.level).reduce((sum, share) => sum + share.units, 0)) * 10n ** BigInt(decimals - 6);
-    if (await this.token.getFunction("balanceOf")(buyer.address) < price) throw new Error("INSUFFICIENT_TOKEN");
-    const allowance: bigint = await this.token.getFunction("allowance")(buyer.address, this.config.contractAddress);
+    if (await this.token.getFunction("balanceOf")(buyer) < price) throw new Error("INSUFFICIENT_TOKEN");
+    const allowance: bigint = await this.token.getFunction("allowance")(buyer, this.config.contractAddress);
     const calls: { stage: string; to: string; data: string; gasLimit: bigint }[] = [];
     const tokenInterface = new Interface(tokenAbi);
     if (allowance < price) {
@@ -101,7 +109,7 @@ export class ReferralChainClient {
       calls.push({ stage: "approval", to: this.config.tokenAddress, data: tokenInterface.encodeFunctionData("approve", [this.config.contractAddress, price]), gasLimit: approvalGasLimit });
     }
     calls.push({ stage: "purchase", to: this.config.contractAddress, data: distributorInterface.encodeFunctionData("purchase", [payload.quote, payload.uplines, payload.signature]), gasLimit: purchaseGasLimit });
-    return this.prepareBatch(buyer, calls);
+    return calls;
   }
 
   async prepareFeeUpdate(owner: Wallet, recipient: string, maxGasFee: bigint) {
@@ -153,8 +161,8 @@ export class ReferralChainClient {
     return receipt;
   }
 
-  async verifyPurchase(hash: string, payload: PurchasePayload) {
-    let receipt = await this.finalizedReceipt(hash);
+  async verifyPurchase(hash: string | null, payload: PurchasePayload) {
+    let receipt = hash ? await this.finalizedReceipt(hash) : null;
     // A wallet can replace a transaction's gas price, changing its hash. The
     // signed purchase ID still identifies the one authorized distribution.
     if (!receipt && await this.contract.getFunction("purchased")(payload.quote.id)) {
@@ -180,21 +188,23 @@ export class ReferralChainClient {
       || completion[0]!.args.configNonce.toString() !== payload.quote.configNonce) throw new Error("Invalid purchase completion event.");
     const decimals = Number(await this.contract.getFunction("tokenDecimals")());
     const multiplier = 10n ** BigInt(decimals - 6);
-    const expected = purchaseShares(payload.quote.level);
+    const version = await this.contract.getFunction("distributionVersion")().catch(() => 1n);
+    const expected = version === 2n ? purchaseShares(payload.quote.level) : legacyPurchaseShares(payload.quote.level);
     if (completion[0]!.args.amount !== expected.reduce((sum, share) => sum + BigInt(share.units), 0n) * multiplier)
       throw new Error("Invalid purchase amount.");
     const shares = events.filter(event => event.name === "SharePaid");
     if (shares.length !== 19) throw new Error("Incomplete purchase distribution.");
     const allocations = expected.map((share, index) => {
       const actual = shares[index]!;
-      const target = share.depth ? payload.uplines[share.depth - 1]! : payload.quote.feeRecipient;
-      const redirected = target === ZeroAddress;
-      const recipient = redirected ? payload.quote.feeRecipient : target;
+      const recipientDepth = version === 2n ? shareRecipientDepth(share, payload.uplines.map(address => address !== ZeroAddress))
+        : share.depth && payload.uplines[share.depth - 1] !== ZeroAddress ? share.depth : 0;
+      const recipient = recipientDepth ? payload.uplines[recipientDepth - 1]! : payload.quote.feeRecipient;
+      const redirected = share.kind !== "platform" && recipientDepth !== share.depth;
       if (actual.args.id !== payload.quote.id || Number(actual.args.kind) !== (share.kind === "direct" ? 0 : share.kind === "bonus" ? 1 : 2)
         || Number(actual.args.depth) !== share.depth || actual.args.amount !== BigInt(share.units) * multiplier
         || getAddress(actual.args.recipient) !== getAddress(recipient) || actual.args.redirected !== redirected)
         throw new Error("Purchase allocation does not match its authorization.");
-      return { ...share, recipient: getAddress(recipient), redirected, logIndex: actual.logIndex };
+      return { ...share, recipientDepth, recipient: getAddress(recipient), redirected, logIndex: actual.logIndex };
     });
     return { status: "confirmed" as const, receipt, allocations };
   }

@@ -19,6 +19,7 @@ export default defineNuxtConfig({
     "~/assets/css/explorer.css",
     "~/assets/css/referral.css",
     "~/assets/css/motion.css",
+    "~/assets/css/connected-wallet.css",
   ],
   colorMode: {
     preference: "light",
@@ -42,7 +43,7 @@ export default defineNuxtConfig({
   runtimeConfig: {
     referral: { paymentMode: "contract", contractAddress: "", authorityPrivateKey: "", minConfirmations: "2", minGasBalance: "0.003" },
     evm: { rpcUrl: "", chainId: "", tokenAddress: "", treasuryAddress: "", minConfirmations: "", explorerApiKey: "" },
-    public: { appUrl: "" },
+    public: { appUrl: "", walletMode: "external" },
   },
   app: {
     pageTransition: { name: "page", mode: "out-in" },
@@ -52,7 +53,7 @@ export default defineNuxtConfig({
         {
           name: "description",
           content:
-            "Your three-layer binary matrix, 15 referral levels, and EVM wallet. Sign in with your username and password.",
+            "Your three-layer binary matrix and 15 referral levels. Connect your wallet to sign in and approve transactions.",
         },
       ],
       link: [{ rel: "icon", type: "image/jpeg", href: "/logo.jpg" }],

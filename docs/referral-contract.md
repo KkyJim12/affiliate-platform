@@ -1,5 +1,7 @@
 # Amoy referral contract
 
+Connected wallets are now the default: wallet signatures for login and every on-chain write, with 1% bonuses at each of 15 depths. See [connected wallet setup, existing-account linking and distributor replacement](connected-wallets.md). In-app key management and password-authorized transactions below apply only when `NUXT_PUBLIC_WALLET_MODE=embedded` is explicitly enabled.
+
 `contracts/ReferralDistributor.sol` collects the configured ERC-20 payment and
 distributes 100% in the same transaction. The default app mode is `contract`;
 missing blockchain configuration never falls back to internal credits.
@@ -76,10 +78,10 @@ purchases cost 327,670 tUSDT together. Members also need test POL for gas.
 
 Level 1 costs 10 tokens; each full-price sequential upgrade doubles, ending at
 level 15 for 163,840 tokens. The contract pays 50%, 20%, 10% to uplines 1–3,
-another 15% across uplines 1–15 with normalized halving weights, and 5% to the
-platform address. Missing/ineligible shares also go to the platform address.
-The first three uplines receive both shares. Largest-remainder micro-USDT
-rounding conserves exactly 100%, including with 18-decimal tokens.
+exactly 1% at each bonus depth from 1 to 15, and 5% to the platform. Unused
+trailing bonus shares pay the highest eligible upline. Missing direct shares
+and ineligible gaps go to the platform; with no eligible upline the entire bonus
+pool goes there too. Prices split exactly at micro-USDT precision.
 
 Supported token precision is 6–18 decimals. Fee-on-transfer tokens, short
 deliveries and rebasing during transfer are rejected. A failed payout reverts
@@ -95,7 +97,7 @@ eligibility and legacy levels using EIP-712. The quote signer is trusted for
 those facts. Signatures bind buyer, unique ID, next/previous level, fifteen
 recipient addresses, fee recipient, configuration nonce, deadline, chain and
 contract. Clients cannot substitute recipients. Fee/signer changes invalidate
-older quotes. Quotes expire after an hour. Legacy levels bootstrap the first
+older quotes. External-wallet quotes expire after ten minutes; embedded quotes after an hour. Legacy levels bootstrap the first
 chain purchase once, without repaying old purchases or converting credit to tokens.
 
 Password confirmation decrypts the existing wallet on the server and authorizes

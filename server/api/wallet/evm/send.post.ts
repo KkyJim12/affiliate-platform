@@ -1,9 +1,11 @@
 import { assertSameOrigin, rateLimit, requireUser, verifyPassword } from "../../../utils/auth";
 import { parseRequestKey } from "../../../utils/wallet";
 import { evmSendError, sendStatus, submitEvmSend } from "../../../utils/evm-send";
+import { requireEmbeddedWalletMode } from "../../../utils/wallet-mode";
 
 export default defineEventHandler(async event => {
   assertSameOrigin(event);
+  requireEmbeddedWalletMode();
   const user = await requireUser(event);
   await rateLimit(event, `evm-send:${user.id}`, 20);
   const body = await readBody(event), requestKey = parseRequestKey(body?.requestKey);

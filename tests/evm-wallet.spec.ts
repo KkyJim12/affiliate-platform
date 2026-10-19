@@ -172,6 +172,8 @@ test("wallet UI reveals keys after a password check and clears them on close, ti
   await expect(card).toContainText("Polygon Amoy");
   await expect(card).toContainText("80002");
   await expect(card.getByTestId("evm-address")).toHaveText(/^0x[0-9a-fA-F]{40}$/);
+  // The address is server-rendered; the balance response confirms client mounting.
+  await expect(card).toContainText("Balance unavailable. Refresh to try again.");
   await expect(page.getByTestId("evm-private-key")).toHaveCount(0);
   async function openReveal() {
     await card.getByRole("button", { name: "Wallet details", exact: true }).click();
