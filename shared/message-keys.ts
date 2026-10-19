@@ -472,5 +472,7 @@ export const messageKeys: Record<string, string> = {
   "This send quote expired or fees changed. Review the transfer again.": "evmSend.quoteExpired",
   "This send quote is unavailable. Review the transfer again.": "evmSend.quoteUnavailable",
   "The token rejected this transfer.": "evmSend.tokenRejected",
+  "Referral levels & commissions.": "ranksPage.title",
+  "Purchase prices, upgrade rules, and payouts from each referral purchase.": "ranksPage.subtitle",
   "The send request could not be completed. Check recent sends before trying again.": "evmSend.requestFailed"
 };

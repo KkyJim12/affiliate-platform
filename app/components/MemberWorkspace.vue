@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const { t, tr, localeTag, formatDate } = useLoopI18n();
 
-import { ranks, matrixRates, unilevelProjection, formatUsdt } from "#shared/plan";
+import { ranks, matrixRates, formatUsdt } from "#shared/plan";
 import type { ReferralNode, ReferralNetwork } from "../../shared/types";
 
 const route = useRoute();
@@ -44,12 +44,11 @@ const navigation = [
   { view: "wallet", label: "EVM wallet", icon: "Wallet" },
   { view: "settings", label: "Account settings", icon: "Settings" },
 ] as const;
-const titles: Record<string, string> = { overview: "Your network, at a glance.", matrix: "Every connection has a place.", referrals: "Good people. Growing together.", ranks: "A clearer view of every rank.", wallet: "Your EVM wallet.", settings: "Your little corner of Loop." };
-const subtitles: Record<string, string> = { overview: "Your matrix, commissions, and wallet. All connected.", matrix: "A binary structure. Three layers. Fourteen positions.", referrals: "Your personal invites and 15 levels of referral commissions.", ranks: "Explore the 15 ranks and the maths behind each one.", wallet: "Your EVM address, balances, and keys.", settings: "Your account, invite code, and security in one place." };
+const titles: Record<string, string> = { overview: "Your network, at a glance.", matrix: "Every connection has a place.", referrals: "Good people. Growing together.", ranks: "Referral levels & commissions.", wallet: "Your EVM wallet.", settings: "Your little corner of Loop." };
+const subtitles: Record<string, string> = { overview: "Your matrix, commissions, and wallet. All connected.", matrix: "A binary structure. Three layers. Fourteen positions.", referrals: "Your personal invites and 15 levels of referral commissions.", ranks: "Purchase prices, upgrade rules, and payouts from each referral purchase.", wallet: "Your EVM address, balances, and keys.", settings: "Your account, invite code, and security in one place." };
 useHead({ title: computed(() => `${currentView.value === 'wallet' ? t('evmWallet.title') : tr(navigation.find((item) => item.view === currentView.value)?.label)} — UNXO`) });
 const origin = useRequestURL().origin;
 const referralLink = computed(() => `${String(config.public.appUrl || origin).replace(/\/$/, "")}/referrals?ref=${user.value?.referralCode || ""}`);
-const projections = computed(() => unilevelProjection(selectedRank.value));
 const sampleMembers: ReferralNode[] = ["alex_morgan", "jamie_chen", "taylor_kim", "sam_wilson", "jordan_lee", "riley_park", "casey_brooks", "drew_miller"].map((username, index) => ({
   id: `preview-member-${index}`,
   parentId: index < 2 ? "preview-root" : `preview-member-${[0, 0, 0, 0, 1, 1, 2, 2][index]}`,
@@ -159,12 +158,7 @@ function exportReferrals() {
           </section>
         </template>
 
-        <template v-if="currentView === 'ranks'">
-          <section class="rank-intro"><span class="outline-pill">{{ t('ui.15_ranks_usdt') }}</span><p>{{ t('ui.select_a_rank_to_explore_its_three_layer_matrix_and_15_level_referral_projection') }}</p></section>
-          <div class="rank-grid"><button v-for="rank in ranks" :key="rank.rank" class="rank-card" :class="{ selected: selectedRank === rank.rank }" :aria-pressed="selectedRank === rank.rank" @click="selectedRank = rank.rank"><span class="rank-number">{{ t('ui.rank') }} {{ String(rank.rank).padStart(2, '0') }}<AppIcon v-if="selectedRank === rank.rank" name="CheckCircle2" :size="17" /><AppIcon v-else name="Layers" :size="16" /></span><strong>{{ rank.price.toLocaleString(localeTag) }}<small>USDT</small></strong><span>{{ t('ui.full_matrix_gross') }} <b>{{ rank.gross.toLocaleString(localeTag) }}</b></span></button></div>
-          <div class="rank-detail-grid"><section class="panel"><div class="section-card-header"><div><h2>{{ t('ui.rank_dd48a') }} {{ selectedRank }} {{ t('ui.binary_matrix_fe990') }}</h2><p>{{ activeRank.price.toLocaleString(localeTag) }} {{ t('ui.usdt_per_qualifying_position') }}</p></div><span class="sample-label">{{ t('ui.projection') }}</span></div><div class="table-scroll"><table><thead><tr><th>{{ t('ui.layer') }}</th><th>{{ t('ui.positions') }}</th><th>{{ t('ui.rate') }}</th><th>{{ t('ui.gross_usdt') }}</th></tr></thead><tbody><tr v-for="layer in activeRank.layers" :key="layer.depth"><td>{{ t('ui.layer_43436') }} {{ layer.depth }}</td><td>{{ layer.positions }}</td><td>{{ layer.rate * 100 }}%</td><td class="number-cell">{{ formatUsdt(layer.gross) }}</td></tr></tbody><tfoot><tr><td colspan="3">{{ t('ui.full_matrix_gross') }}</td><td>{{ formatUsdt(activeRank.gross) }}</td></tr></tfoot></table></div><div class="cycle-breakdown"><div><span>{{ t('ui.shown_first_cycle_retained_amount') }}</span><strong>{{ formatUsdt(activeRank.firstCycle) }} USDT</strong></div><div><span>{{ t('ui.remaining_cycle_allocation') }}</span><strong>{{ formatUsdt(activeRank.allocated) }} USDT</strong></div><p>{{ t('ui.the_poster_earmarks_part_of_the_first_cycle_for_recycling_or_upgrades_allocation_rule') }}</p></div></section><section class="panel unilevel-explainer"><span class="modal-feature-icon"><AppIcon name="Users" :size="26" /></span><h2>{{ t('ui.15_levels_1_at_each') }}</h2><p>{{ t('ui.a_qualifying_payment_can_distribute_1_to_each_eligible_ancestor_across_15_referral_le') }}</p><div class="unilevel-example"><span>{{ t('ui.one_rank') }} {{ selectedRank }} {{ t('ui.qualifying_payment') }}</span><strong>{{ formatUsdt(projections[0]!.gross) }} <small>{{ t('ui.usdt_level') }}</small></strong></div><p>{{ t('ui.matrix_and_referral_trees_may_differ_these_tables_assume_doubling_at_each_depth_to_re') }}</p></section></div>
-          <section class="panel unilevel-table"><div class="section-card-header"><div><h2>{{ t('ui.rank_dd48a') }} {{ selectedRank }} {{ t('ui.15_level_unilevel_projection') }}</h2><p>{{ t('ui.fully_filled_example') }} {{ activeRank.price.toLocaleString(localeTag) }} {{ t('ui.usdt_per_position_1_commission') }}</p></div><span class="sample-label">{{ t('ui.conditional_figures') }}</span></div><div class="table-scroll"><table><thead><tr><th>{{ t('ui.referral_depth') }}</th><th>{{ t('ui.positions_at_depth') }}</th><th>{{ t('ui.commission_rate') }}</th><th>{{ t('ui.gross_receipts_usdt') }}</th></tr></thead><tbody><tr v-for="row in projections" :key="row.depth"><td>{{ t('ui.level') }} {{ row.depth }}</td><td>{{ row.positions.toLocaleString(localeTag) }}</td><td>{{ (row.rate * 100).toFixed(6) }}%</td><td class="number-cell">{{ formatUsdt(row.gross) }}</td></tr></tbody></table></div><p class="wallet-history-note">{{ t('ui.projections_require_qualifying_payments_in_every_shown_position_they_do_not_represent') }}</p></section>
-        </template>
+        <ReferralRanks v-if="currentView === 'ranks'" />
 
         <PlatformExplorer v-if="currentView === 'explorer'" :key="user?.id || 'preview'" :preview="preview" :preview-members="sampleMembers" />
 
