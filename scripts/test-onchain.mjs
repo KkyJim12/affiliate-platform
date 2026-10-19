@@ -23,7 +23,7 @@ try {
     .deploy(await token.getAddress(), owner.address, fee, authority.address);
   await contract.waitForDeployment();
   await provider.send('hardhat_setBalance', [owner.address, toBeHex(parseEther('100'))]);
-  const specs = external ? ['connected-wallet.spec.ts','account-settings.spec.ts'] : ['onchain-referral.spec.ts','onchain-wallet.spec.ts'];
+  const specs = external ? ['connected-wallet.spec.ts','account-settings.spec.ts','platform-workspace.spec.ts'] : ['onchain-referral.spec.ts','onchain-wallet.spec.ts'];
   const child = spawn(process.execPath, ['scripts/test-postgres.mjs', 'ui', ...specs, ...process.argv.slice(2).filter(arg => arg !== '--external')], {
     stdio: 'inherit', env: { ...process.env, NUXT_REFERRAL_PAYMENT_MODE: 'contract', NUXT_EVM_RPC_URL: url, NUXT_EVM_CHAIN_ID: '80002',
       NUXT_EVM_TOKEN_ADDRESS: await token.getAddress(), NUXT_EVM_MIN_CONFIRMATIONS: '1', NUXT_REFERRAL_CONTRACT_ADDRESS: await contract.getAddress(),

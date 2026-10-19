@@ -80,7 +80,7 @@ test("explorer APIs enforce network boundaries and wallet ownership with accurat
         expect((await post(member, "/api/auth/login", { username: data.owner.username, password })).status()).toBe(200);
         expect((await post(admin, "/api/admin/login", { username: data.adminName, password })).status()).toBe(200);
         const overview = await (await member.get(`/api/dashboard?userId=${data.outsider.id}`)).json();
-        expect(overview).toEqual({ commissions: 3.15, pendingFunding: 3.25, completedTransfers: 1, referrals: { direct: 1, total: 15, depth: 15, truncated: false } });
+        expect(overview).toEqual({ commissions: 3.15, directCommissions: 0, bonusCommissions: 0, pendingFunding: 3.25, completedTransfers: 1, referrals: { direct: 1, total: 15, depth: 15, truncated: false } });
         for (const part of ["network", "transactions"])
             expect((await member.get(`/api/admin/explorer/${part}`)).status()).toBe(403);
         const network = await (await member.get("/api/explorer/network")).json();
@@ -154,7 +154,7 @@ test("member and admin explorers support branch navigation, transaction details,
     await expect(page.getByTestId("overview-network-members")).toHaveText("15");
     await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect(page.getByRole("button", { name: "Refresh", exact: true })).toBeEnabled();
-    await ready(page, "/explorer");
+    await ready(page, "/explorer?tab=network");
     await expect(page.getByRole("tab", { name: "Network", exact: true })).toHaveAttribute("aria-selected", "true");
     const child = data.descendants[0]!;
     await page.getByRole("button", { name: `Inspect ${child.username}`, exact: true }).click();
@@ -173,19 +173,13 @@ test("member and admin explorers support branch navigation, transaction details,
     expect((await download).suggestedFilename()).toContain(".svg");
     await page.getByRole("tab", { name: "Transactions", exact: true }).click();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await expect(page.getByTestId("contract-explorer")).toBeVisible();
     await dropdown(page, "Filter transaction status", "pending");
-    await expect(page.locator(".explorer-table tbody tr")).toHaveCount(1);
-    await page.getByRole("button", { name: `Inspect transaction ${data.pendingId.slice(0, 8)}`, exact: true }).click();
-    await expect(page.getByRole("dialog")).toContainText(data.pendingId);
-    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Clear filters", exact: true }).click();
-    await expect(page.locator(".explorer-table tbody tr")).toHaveCount(12);
-    await page.getByRole("button", { name: "Next page", exact: true }).click();
-    await expect(page.locator(".explorer-table tbody tr")).toHaveCount(7);
-    await page.getByRole("button", { name: "Clear filters", exact: true }).click();
-    await page.getByRole("textbox", { name: "Search ID, description, or reference", exact: true }).fill(data.reference);
-    await page.getByRole("textbox", { name: "Search ID, description, or reference", exact: true }).press("Enter");
-    await expect(page.locator(".explorer-table tbody tr")).toHaveCount(1);
+    await page.getByRole("textbox", { name: "Search transaction hash or wallet address", exact: true }).fill(data.reference);
+    await page.getByRole("textbox", { name: "Search transaction hash or wallet address", exact: true }).press("Enter");
+    await expect(page.locator(".explorer-table tbody")).not.toContainText(data.pendingId);
+    await expect(page.locator(".explorer-table tbody")).not.toContainText(data.reference);
     await page.getByRole("button", { name: "Use dark theme", exact: true }).click();
     await dropdown(page, "Language", "th");
     await expect(page.getByRole("tab", { name: thai.explorer.transactions, exact: true })).toHaveAttribute("aria-selected", "true");
@@ -200,7 +194,8 @@ test("member and admin explorers support branch navigation, transaction details,
     await page.getByLabel(thai.ui.password, { exact: true }).fill(password);
     await page.getByRole("button", { name: thai.admin.signIn, exact: true }).click();
     await expect(page).toHaveURL(`${origin}/admin/explorer?tab=transactions&q=${data.outsiderId}`);
-    await expect(page.locator(".explorer-table tbody")).toContainText(data.outsider.username);
+    await expect(page.getByTestId("contract-explorer")).toBeVisible();
+    await expect(page.locator(".explorer-table tbody")).not.toContainText(data.outsider.username);
     await page.getByRole("tab", { name: thai.explorer.network, exact: true }).click();
     await page.getByLabel(thai.explorer.accountRoot, { exact: true }).fill(data.owner.username);
     await page.getByRole("button", { name: thai.explorer.openNetwork, exact: true }).click();
@@ -213,13 +208,15 @@ test("member and admin explorers support branch navigation, transaction details,
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     expect(errors).toEqual([]);
 });
-test("unsigned explorer offers a network preview and sign-in for private activity", async ({ page }) => {
+test("unsigned explorer opens public contract activity and offers a network preview", async ({ page }) => {
     await ready(page, "/explorer");
+    await expect(page.getByTestId("contract-explorer")).toBeVisible();
+    await page.getByRole("tab", { name: "Network", exact: true }).click();
     await expect(page.locator("[data-tree-node]")).toHaveCount(9);
     await page.getByRole("tab", { name: "Network", exact: true }).focus();
     await page.getByRole("tab", { name: "Network", exact: true }).press("ArrowRight");
     await expect(page.getByRole("tab", { name: "Transactions", exact: true })).toBeFocused();
-    await expect(page.getByRole("heading", { name: "Your activity, in one clear view.", exact: true })).toBeVisible();
-    await expect(page.locator(".explorer-table")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Platform contract transactions", exact: true })).toBeVisible();
+    await expect(page.getByTestId("contract-explorer")).toBeVisible();
     await expect(page.locator("select, option")).toHaveCount(0);
 });

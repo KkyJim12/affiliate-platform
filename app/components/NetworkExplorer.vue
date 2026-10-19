@@ -23,7 +23,7 @@ const isOwnRoot = computed(() => !route.query.root && !route.query.username || n
 watch(() => network.value?.root.id, id => { selectedId.value = id || ""; search.value = ""; }, { immediate: true });
 async function changeRoot(id?: string, username?: string) {
   search.value = "";
-  await navigateTo({ path: route.path, query: { ...route.query, root: id, username, tab: undefined } }, { replace: true });
+  await navigateTo({ path: route.path, query: { ...route.query, root: id, username, tab: 'network' } }, { replace: true });
 }
 function findAccount() { const username = rootSearch.value.trim(); if (username) changeRoot(undefined, username); }
 function resetRoot() { rootSearch.value = ""; changeRoot(); }

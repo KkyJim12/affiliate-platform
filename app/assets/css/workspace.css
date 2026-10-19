@@ -1,0 +1,26 @@
+.overview-banner { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 22px; padding: 27px; border: 1px solid var(--gold-border); border-radius: 14px; background: linear-gradient(115deg,var(--gold-soft),var(--surface)); }
+.overview-banner .eyebrow { font-size: 10px; }
+.overview-banner h2 { margin-top: 12px; font: 650 clamp(21px,3vw,30px) var(--heading); letter-spacing: -.6px; color: var(--text-primary); }
+.overview-banner p { margin-top: 10px; color: var(--text-secondary); font-size: 12px; line-height: 1.8; }
+.overview-wallet-column { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.overview-tree-panel > .section-card-header { flex-wrap: wrap; padding-bottom: 20px; }
+.overview-tree-panel .inline-link { flex-shrink: 0; }
+.overview-tree-panel .auth-error { padding: 0 22px; }
+.overview-network-grid > * { min-width: 0; }
+.faq-nav-group { margin-block: 3px; }
+.faq-nav-heading { display: flex; align-items: stretch; border-radius: 8px; }
+.faq-nav-heading.active { background: var(--gold-soft); }
+.faq-nav-heading > a { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 13px 12px; color: var(--text-secondary); font-size: 12px; }
+.faq-nav-heading.active > a { color: var(--gold-text); }
+.faq-nav-heading > button { display: grid; place-items: center; width: 36px; flex-shrink: 0; color: var(--text-secondary); border-radius: 7px; }
+.faq-nav-heading > button:hover { color: var(--gold-text); background: var(--gold-soft); }
+.faq-nav-heading > button[aria-expanded="true"] svg { transform: rotate(180deg); }
+.faq-subnav { display: grid; gap: 4px; margin: 5px 0 10px 22px; padding-left: 12px; border-left: 1px solid var(--border); }
+.dashboard-sidebar .faq-subnav > a { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 11px 9px; font-size: 11px; border-radius: 7px; color: var(--text-secondary); }
+.dashboard-sidebar .faq-subnav > a.active, .dashboard-sidebar .faq-subnav > a:hover { color: var(--gold-text); background: var(--gold-soft); }
+.wallet-invite-field { padding-top: 17px; }
+.wallet-invite-field > label { display: flex; align-items: center; gap: 7px; }
+.wallet-invite-field > label > span { margin-left: auto; }
+.admin-status.confirmed { color: var(--success); background: var(--success-soft); }
+.admin-status.failed { color: var(--danger); background: var(--danger-soft); }
+@media(max-width:650px) { .overview-banner { padding: 22px 18px; } .faq-nav-heading > a, .dashboard-sidebar .faq-subnav > a { font-size: 13px; } }

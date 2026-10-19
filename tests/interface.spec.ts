@@ -12,6 +12,10 @@ async function chooseDropdown(page: Page, control: Locator, value: string) {
   await page.getByRole("listbox").locator(`[role="option"][data-value="${value}"]`).click();
   await expect(page.getByRole("listbox")).toHaveCount(0);
 }
+async function openLandingAuth(page: Page) {
+  if (!await page.locator(".nav-connect").isVisible()) await page.locator(".mobile-menu-button").click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).last().click();
+}
 async function noOverflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBeTruthy();
 }
@@ -38,7 +42,7 @@ test("landing plan calculator, FAQ, and username/password dialog", async ({ page
   await expect(page.locator(".calculator-total strong")).toContainText("3,328.00");
   await page.getByRole("button", { name: "Do I need a crypto wallet to get started?" }).click();
   await expect(page.locator("#faq-1")).toContainText("username and password");
-  await page.getByRole("button", { name: "Start your loop", exact: true }).click();
+  await openLandingAuth(page);
   await expect(page.getByRole("dialog")).toBeVisible();
   await expect(page.getByLabel("Username", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute("type", "password");
@@ -46,21 +50,19 @@ test("landing plan calculator, FAQ, and username/password dialog", async ({ page
   await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute("type", "text");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).not.toBeVisible();
-  await expect(page.getByRole("button", { name: "Start your loop", exact: true })).toBeFocused();
+  if (await page.locator(".nav-connect").isVisible()) await expect(page.locator(".nav-connect")).toBeFocused();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: `test-results/landing-${testInfo.project.name}.png`, fullPage: true });
   await noOverflow(page);
   expect(errors).toEqual([]);
 });
 
-test("matrix, corrected ranks, referrals, and wallet preview on desktop and mobile", async ({ page }, testInfo) => {
+test("referral overview, corrected ranks, referrals, and wallet preview on desktop and mobile", async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await gotoReady(page, "/dashboard");
   await expect(page.getByRole("heading", { name: "Your network, at a glance." })).toBeVisible();
-  await expect(page.getByRole("img", { name: /Example binary matrix/ })).toBeVisible();
-  await chooseDropdown(page, page.getByLabel("Select matrix rank"), "8");
-  await expect(page.locator(".matrix-layer-summary")).toContainText("1,280.00");
+  await expect(page.getByTestId("overview-referral-tree").locator("[data-tree-node]")).toHaveCount(9);
   await noOverflow(page);
   await page.screenshot({ path: `test-results/dashboard-${testInfo.project.name}.png`, fullPage: true });
   await navigate(page, "Ranks & commissions");
@@ -196,16 +198,16 @@ test("single theme icon toggles light/dark, persists, and exports themed trees",
   await expect(page.locator("html")).toHaveClass(/dark/);
   await page.getByRole("button", { name: "Use light theme", exact: true }).press("Enter");
   await expect(page.locator("html")).toHaveClass(/light/);
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("loop-color-mode"))).toBe("light");
   await page.reload();
   await expect(page.locator("html")).toHaveClass(/light/);
-  expect(await page.evaluate(() => localStorage.getItem("loop-color-mode"))).toBe("light");
   await page.screenshot({ path: `test-results/gold-overview-light-${testInfo.project.name}.png`, fullPage: true });
   await gotoReady(page, "/");
   await expect(page.locator("html")).toHaveClass(/light/);
   await noOverflow(page);
   await page.getByRole("button", { name: "Use dark theme", exact: true }).click();
   await expect(page.locator("html")).toHaveClass(/dark/);
-  await page.getByRole("button", { name: "Start your loop", exact: true }).click();
+  await openLandingAuth(page);
   await expect(page.getByRole("dialog")).toBeVisible();
   const dialogBackground = await page.getByRole("dialog").evaluate((element) => getComputedStyle(element).backgroundColor);
   expect(dialogBackground).toBe("rgb(21, 26, 35)");
@@ -305,9 +307,10 @@ test("Thai switching persists across pages, localizes forms and tree exports, an
 
   await gotoReady(page, "/");
   await chooseDropdown(page, page.getByLabel("Language", { exact: true }), "th");
-  await page.getByRole("button", { name: th.do_i_need_a_crypto_wallet_to_get_started }).click();
-  await expect(page.locator("#faq-1")).toContainText(th.create_an_account_with_a_username_and_password_your_in_app_usdt_ledger_wallet_is_crea);
-  await page.getByRole("button", { name: th.start_your_loop, exact: true }).click();
+  await page.getByRole("button", { name: thai.platformFaq.walletQuestion }).click();
+  await expect(page.locator("#faq-1")).toContainText(thai.platformFaq.embeddedAnswer);
+  if (!await page.locator(".nav-connect").isVisible()) await page.locator(".mobile-menu-button").click();
+  await page.getByRole("button", { name: th.sign_in, exact: true }).last().click();
   await page.getByLabel(th.username, { exact: true }).fill(`missing_${Date.now().toString(36)}`);
   await page.getByLabel(th.password, { exact: true }).fill("A wrong password 42!");
   await page.getByRole("button", { name: th.sign_in_to_loop, exact: true }).click();
@@ -338,10 +341,10 @@ test("a first visit defaults to Thai and dark even in an English browser", async
 
 test("custom dropdowns support keyboard selection, cancellation, and outside dismissal", async ({ page }, testInfo) => {
   await gotoReady(page, "/dashboard");
-  const rank = page.getByRole("combobox", { name: "Select matrix rank", exact: true });
+  const rank = page.getByRole("combobox", { name: "Show levels", exact: true });
   await rank.focus();
   await rank.press("End");
-  await expect(page.getByRole("option", { name: "15 · 163,840 USDT", exact: true })).toBeInViewport();
+  await expect(page.getByRole("option", { name: "15 levels", exact: true })).toBeInViewport();
   await rank.press("Enter");
   await expect(rank).toHaveAttribute("data-value", "15");
   await expect(rank).toBeFocused();
@@ -350,7 +353,7 @@ test("custom dropdowns support keyboard selection, cancellation, and outside dis
   await expect(rank).toHaveAttribute("data-value", "15");
   await expect(page.getByRole("listbox")).toHaveCount(0);
   await rank.press("ArrowUp");
-  await rank.press("PageUp");
+  await rank.press("ArrowUp");
   await rank.press("Tab");
   await expect(rank).toHaveAttribute("data-value", "5");
   await expect(rank).not.toBeFocused();
@@ -403,7 +406,7 @@ test("page motion reveals content, preserves keyboard access, and respects reduc
   await expect(page.getByRole("heading", { level: 1 })).toHaveCSS("opacity", "1");
   await page.locator(".step").first().scrollIntoViewIfNeeded();
   await expect(page.locator(".step").first()).toHaveCSS("opacity", "1");
-  const openModal = page.locator(".hero-copy .button").first();
+  const openModal = page.locator(".nav-connect");
   async function slideDirection() {
     return page.locator(".modal-card").evaluate(async (element) => {
       for (let frame = 0; frame < 5; frame++) {
@@ -418,7 +421,7 @@ test("page motion reveals content, preserves keyboard access, and respects reduc
       return { direction: 0, inert: (element as HTMLElement).inert, locked: document.body.style.overflow === "hidden" };
     });
   }
-  await openModal.click();
+  await openLandingAuth(page);
   expect((await slideDirection()).direction).toBeGreaterThan(0);
   await expect(page.getByRole("dialog")).toBeFocused();
   await page.locator(".modal-backdrop").evaluate(element => Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => {}))));
@@ -428,9 +431,9 @@ test("page motion reveals content, preserves keyboard access, and respects reduc
   expect(leaving.inert).toBe(true);
   expect(leaving.locked).toBe(true);
   await expect(page.locator(".modal-backdrop")).toHaveCount(0);
-  await expect(openModal).toBeFocused();
+  if (await openModal.isVisible()) await expect(openModal).toBeFocused();
   await expect(page.locator("body")).not.toHaveCSS("overflow", "hidden");
-  const finalAction = page.locator(".final-cta button");
+  const finalAction = page.locator(".final-cta a.button");
   await finalAction.focus();
   await expect(finalAction).toBeFocused();
   await expect(page.locator(".final-cta")).toHaveCSS("opacity", "1");
@@ -438,11 +441,11 @@ test("page motion reveals content, preserves keyboard access, and respects reduc
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
   await expect(page.locator(".center-token")).toHaveCSS("animation-name", "none");
-  await openModal.click();
+  await openLandingAuth(page);
   expect(await page.locator(".modal-backdrop").evaluate(element => element.getAnimations({ subtree: true }).length)).toBe(0);
   await page.keyboard.press("Escape");
   await expect(page.locator(".modal-backdrop")).toHaveCount(0);
-  await expect(openModal).toBeFocused();
+  if (await openModal.isVisible()) await expect(openModal).toBeFocused();
   await gotoReady(page, "/dashboard?view=settings");
   await expect(page.locator(".account-settings")).toHaveCSS("opacity", "1");
   await chooseDropdown(page, page.getByRole("combobox", { name: "Theme preference", exact: true }), "dark");

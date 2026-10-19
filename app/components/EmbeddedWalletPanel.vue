@@ -141,7 +141,7 @@ onBeforeUnmount(() => {
         <form v-else class="account-form" @submit.prevent="submit"><p>{{ dialog === 'reveal' ? t('evmWallet.confirmReveal') : t('evmWallet.createHint') }}</p><label for="evm-wallet-password">{{ t('ui.confirm_with_your_password') }}</label><input id="evm-wallet-password" ref="passwordInput" v-model="password" class="auth-input" type="password" autocomplete="current-password" required maxlength="128" :disabled="busy" /><p v-if="error" class="auth-error" role="alert">{{ tr(error) }}</p><button class="button button-orange auth-wallet-button" type="submit" :disabled="busy"><AppIcon v-if="busy" name="LoaderCircle" class="auth-loading" :size="17" />{{ busy ? t('ui.please_wait') : dialog === 'reveal' ? t('evmWallet.reveal') : t('evmWallet.create') }}</button></form>
       </div>
     </AppModal></ModalTransition>
-    <WalletSend v-if="wallet && !preview && user" :key="user.id" :open="sendOpen" @close="sendOpen = false" />
+    <WalletSend v-if="wallet && !preview && user" :key="user.id" :open="sendOpen" :show-history="compact" @close="sendOpen = false" />
   </section>
 </template>
 

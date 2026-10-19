@@ -35,6 +35,8 @@ rate limited.
 | POST | `/api/referrals/sponsor` | Connect the current account to an activated sponsor code |
 | GET | `/api/explorer/network` | Inspect an authorized referral branch |
 | GET | `/api/explorer/transactions` | Search and paginate the current account's ledger |
+| GET | `/api/platform/transactions` | Public DB-recorded transactions for the configured referral contract |
+| GET | `/api/platform/analytics` | Public aggregate account, purchase, distribution and activity statistics |
 | GET | `/api/platform-settings` | Registration/funding availability and support email |
 | POST | `/api/admin/login` | Administrator username/password login; always available, including for linked wallets |
 | GET | `/api/admin/overview` | Platform totals and recent activity |
@@ -51,6 +53,14 @@ Ownership always comes from the session, never a client-provided account or wall
 ID. Admin endpoints require an active administrator session. Anonymous requests
 to protected endpoints return 401; member access to admin endpoints returns 403.
 Validation and state conflicts use 400/409, and throttled requests use 429.
+
+## Public platform activity
+
+`GET /api/platform/transactions` backs the member and administrator Explorer transaction tab. It requires no login and returns public hashes, wallet addresses, purchase levels/amounts, status, block numbers when recorded and Amoy explorer links. It merges `referral_chain_purchases`, `referral_chain_fee_updates` and external-wallet fee operations, deduplicates hashes, and limits results to `NUXT_REFERRAL_CONTRACT_ADDRESS`. Unsigned quotes, unrelated wallet sends, private ledger records and signing payloads are excluded. Direct calls made outside the platform are not indexed by this endpoint.
+
+Query parameters are `search` (hash or address, case insensitive), `kind` (`all`, `purchase`, `fee_update`), `status` (`all`, `pending`, `confirmed`, `failed`), `period` (`all`, `7`, `30`, `90` days) and `page` (one based). The response has `{ configured, contractAddress, chainId, items, total, page, pageSize, summary }`, with 12 items per page. Summary counts and confirmed purchase volume apply to the selected filters. Amounts use USDT units; fees are not purchase volume. Missing contract configuration returns an empty response with `configured: false`.
+
+`GET /api/platform/analytics` backs FAQ → Analytics. It returns `{ configured, contractAddress, chainId, updatedAt, accounts, activeMembers, buyers, purchases, transactions, volume, distributions, daily, levels }`. Accounts includes all registered accounts; activeMembers excludes suspended users and administrators. Buyers counts distinct wallet addresses with a confirmed purchase. Purchase totals, volume and direct/bonus/platform distributions include only confirmed records for the configured contract. Transactions also includes confirmed fee updates. `daily` contains 30 calendar days using Asia/Bangkok boundaries, with registrations, purchases and volume; `levels` contains all 15 levels. No account identities or private balances are exposed. These are testnet token units.
 
 ## Polygon Amoy account wallet
 
@@ -260,11 +270,11 @@ referrals are counted separately without that cap.
 
 Network Explorer accepts `root` (account ID); administrators may use an exact
 `username` instead. Members can only open branches within their original first
-15 levels. Transaction Explorer accepts `search`, `type`, `status`, `period`
+15 levels. The legacy private ledger endpoints accept `search`, `type`, `status`, `period`
 (`all`, `7`, `30`, `90`) and `page`. Transaction types include `referral_purchase`;
 statuses are `completed`, `pending`, and `rejected`. Search returns paginated
 items and totals across all matching records.
 
-Public visitors see labeled sample data. Rank projections and matrix illustrations
+Public visitors see a labeled sample network and real recorded public contract activity. The current Transactions tab uses `/api/platform/transactions`, documented above. Rank projections and matrix illustrations
 remain separate from actual wallet receipts. This API does not invent matrix
 placement or recycling. Actual referral purchases use the allocation rules above.

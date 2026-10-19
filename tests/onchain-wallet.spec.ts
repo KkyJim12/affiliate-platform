@@ -130,6 +130,9 @@ test('members review and send POL and tokens with English/Thai on desktop and mo
   await page.getByRole('button', { name: 'Review transfer', exact: true }).click();
   await page.getByLabel('Confirm with your password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Confirm and send', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByTestId('evm-send-history')).toHaveCount(0);
+  await page.goto('/dashboard');
   await expect(page.getByTestId('evm-send-history')).toContainText('0.01 POL');
   await expect(page.getByTestId('evm-send-history')).toContainText('Confirmed');
   await page.getByRole('button', { name: 'Use dark theme', exact: true }).click();

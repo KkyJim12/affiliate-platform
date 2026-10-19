@@ -48,8 +48,8 @@ test("Thai and dark are the defaults; explicit English and light preferences per
       await expect(page.locator("html")).toHaveClass(/dark/);
       if (path === "/") {
         await page.waitForFunction(() => Boolean((document.querySelector("#__nuxt") as HTMLElement & { __vue_app__?: unknown })?.__vue_app__));
-        await page.getByRole("button", { name: thai.ui.do_i_need_a_crypto_wallet_to_get_started, exact: true }).click();
-        await expect(page.locator("#faq-1")).toContainText(external ? thai.connected.walletFaqAnswer : thai.ui.create_an_account_with_a_username_and_password_your_in_app_usdt_ledger_wallet_is_crea);
+        await page.getByRole("button", { name: thai.platformFaq.walletQuestion, exact: true }).click();
+        await expect(page.locator("#faq-1")).toContainText(external ? thai.platformFaq.walletAnswer : thai.platformFaq.embeddedAnswer);
       }
     }
     await expect(page.getByLabel(thai.ui.username, { exact: true })).toBeVisible();

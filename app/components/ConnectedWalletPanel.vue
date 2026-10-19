@@ -32,7 +32,7 @@ watch(() => user.value?.id, () => { details.value = false; sendOpen.value = fals
     <template v-else><p>{{ t('connected.signInHint') }}</p><button class="button button-orange" @click="authOpen = true">{{ t('connected.signIn') }}</button></template>
     <p v-if="walletError" class="auth-error" role="status">{{ t('connected.loadFailed') }}</p>
   </section>
-  <ConnectedWalletSend v-if="user && !preview && wallet" :key="user.id" :open="sendOpen" @close="sendOpen = false" />
+  <ConnectedWalletSend v-if="user && !preview && wallet" :key="user.id" :open="sendOpen" :show-history="compact" @close="sendOpen = false" />
   <ModalTransition><AppModal v-if="details && wallet" :title="t('evmWallet.details')" @close="details = false">
     <div class="wallet-action-modal"><h2>{{ t('evmWallet.details') }}</h2><p>{{ t('connected.walletHint') }}</p>
       <dl class="admin-details"><div><dt>{{ t('evmWallet.address') }}</dt><dd class="connected-address">{{ wallet.address }}</dd></div><div><dt>{{ t('onchain.network') }}</dt><dd>Polygon Amoy · 80002</dd></div></dl>

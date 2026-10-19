@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { EvmSendAsset, EvmSendQuote, EvmSendStatus } from "#shared/evm-send";
 
-const props = defineProps<{ open: boolean }>();
+const props = withDefaults(defineProps<{ open: boolean; showHistory?: boolean }>(), { showHistory: true });
 const emit = defineEmits<{ close: [] }>();
 const { t, tr } = useLoopI18n();
 const { user } = useAccount();
@@ -86,7 +86,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section v-if="sends.length || historyError" class="panel send-history" data-testid="evm-send-history">
+  <section v-if="showHistory && (sends.length || historyError)" class="panel send-history" data-testid="evm-send-history">
     <div class="send-history-header"><h3>{{ t('evmSend.recent') }}</h3><button class="text-action" @click="loadHistory">{{ t('evmWallet.refresh') }}</button></div>
     <p v-if="historyError" role="status">{{ t('evmSend.historyFailed') }}</p>
     <article v-for="item in sends.slice(0, 5)" :key="item.id" class="send-history-row" :data-status="item.status">

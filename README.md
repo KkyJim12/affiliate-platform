@@ -4,7 +4,7 @@ Connected wallets are now the default for members: wallet signatures for login a
 
 Administrators sign in at `/admin/login` with their username and password, including after linking a transaction wallet. Member username/password login is hidden and disabled by default. Set `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true` and restart to enable legacy member login or link an existing account; embedded member login also requires this flag.
 
-Nuxt 4 app with a three-layer binary matrix UI, 15-rank explorer, 15-level unilevel projections, wallet-signature accounts, and connected EVM wallets. The UNXO interface uses a modern gold palette with light and dark themes.
+Nuxt 4 app with a referral tree overview, 15-rank explorer, 15-level unilevel projections, wallet-signature accounts, and connected EVM wallets. The UNXO interface uses a modern gold palette with light and dark themes.
 
 Branding uses the supplied UNXO artwork from `public/logo.jpg`. The horizontal, transparent version is in `public/unxo-horizontal.webp`, with its full-resolution PNG master alongside it. `BrandLogo.vue` shares responsive sizing across navigation, account dialogs, footers, and compact decorative emblems. The original image also supplies the browser icon. See `design/unxo-logo-prompt.md` for generation details.
 
@@ -57,6 +57,12 @@ Settings persist registration/funding availability and a support email shown in 
 ## Accounts and wallet
 
 Member overview totals come from `/api/dashboard`, including completed ledger commissions and real referral counts. The Refresh action reloads the overview, wallet, and referral network. Login/logout clears account-scoped cached values, while funding requests, transfers, and referral updates refresh the relevant totals. See [API endpoints and request formats](docs/api.md) for integration details.
+
+Overview uses the same referral tree as My referrals. FAQ contains Ranks & commissions (`/faq/ranks`) and Analytics (`/faq/analytics`, also `/analytics`). Analytics reads platform account counts, confirmed contract purchases, verified distributions and 30 days of activity from PostgreSQL. The former My matrix view redirects to Overview.
+
+Explorer opens public contract transactions from `/api/platform/transactions`: purchases and fee-recipient updates recorded for `NUXT_REFERRAL_CONTRACT_ADDRESS`, with pending/confirmed/failed states, search, filters and pagination. It excludes unsigned quotes and private ledger entries. This is recorded platform activity; transactions submitted directly outside the platform need a separate chain indexer to appear. Recent sends appears on Overview; the EVM wallet page retains its indexed transaction list.
+
+Landing page Launch App links open the dashboard. Invite-code fields remain visible in the sign-in dialog and prefill from a valid `?ref=` on any page. The latest incoming code is remembered in the current browser tab.
 
 - Usernames are case-insensitive, 3–24 characters, beginning with a letter. Passwords are 12–128 characters, salted and hashed with scrypt on the server.
 - Sessions use random tokens in HttpOnly, SameSite=Strict cookies with a seven-day expiry. Only token hashes are stored. HTTPS requests receive Secure cookies. Mutating requests require a matching Origin; authentication and wallet writes are rate limited.
@@ -153,7 +159,7 @@ Open `/explorer` (also available as `/dashboard?view=explorer`) in the member wo
 
 The network explorer supports member inspection from clickable tree nodes, branch navigation, username search with ancestor context, zoom/depth controls, and self-contained SVG downloads. Members can only open branches within their own first 15 referral levels; moving to a descendant does not extend that boundary. Admins can open any account by exact username and inspect up to 15 levels from that root. Responses cap branches at 500 nodes and flag truncation. Unsigned visitors see a labeled sample network.
 
-Transaction search covers ledger IDs, descriptions, owner usernames, and settlement references, with type/status/date filters, pagination, filtered credit/debit/pending totals, and a record detail dialog. Members receive only their own wallet records, including rejection notes and their settlement references. Admins can search all wallets. This is a read-only explorer of the existing in-app ledger; payment review remains in the admin Payments page.
+The default Transactions tab searches public platform contract hashes and addresses, with kind/status/date filters, pagination, confirmed volume and transaction details. It reads submitted purchases and fee updates across accounts from PostgreSQL. Historical private ledger search remains available through the authenticated compatibility API; payment review stays in the admin Payments page.
 
 ## Database migrations
 

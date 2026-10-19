@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { normalizeReferralCode } from "#shared/referral-code";
 const { t, tr, localeTag, formatDate } = useLoopI18n();
 
 const { authOpen, notify } = useAppUI();
 const { signIn, register } = useAccount();
+const { incomingReferral } = useIncomingReferral();
 const mode = ref<"login" | "register">("login");
 const username = ref("");
 const password = ref("");
@@ -17,7 +17,7 @@ watch(authOpen, (open) => {
   password.value = "";
   confirmation.value = "";
   showPassword.value = false;
-  if (open) sponsorCode.value = normalizeReferralCode(sessionStorage.getItem("loop-incoming-referral") || "");
+  if (open) sponsorCode.value = incomingReferral();
 });
 watch(mode, () => { error.value = ""; password.value = ""; confirmation.value = ""; });
 async function submit() {
@@ -67,9 +67,9 @@ async function submit() {
         <template v-if="mode === 'register'">
           <label for="confirm-password">{{ t('ui.confirm_password') }}</label>
           <input id="confirm-password" v-model="confirmation" class="auth-input" type="password" autocomplete="new-password" :placeholder="t('ui.enter_your_password_again')" required minlength="12" maxlength="128" :disabled="loading" />
-          <label for="sponsor-code">{{ t('ui.invite_code') }} <span>{{ t('ui.optional') }}</span></label>
-          <input id="sponsor-code" v-model="sponsorCode" class="auth-input" placeholder="UNXO-XXXXXXXX" maxlength="24" :disabled="loading" />
         </template>
+        <label for="sponsor-code">{{ t('ui.invite_code') }} <span>{{ t('ui.optional') }}</span></label>
+        <input id="sponsor-code" v-model="sponsorCode" class="auth-input" placeholder="UNXO-XXXXXXXX" maxlength="24" :disabled="loading" autocomplete="off" autocapitalize="characters" spellcheck="false" />
         <p v-if="error" class="auth-error" role="alert">{{ tr(error) }}</p>
         <button class="button button-orange auth-wallet-button" type="submit" :disabled="loading"><AppIcon v-if="loading" name="LoaderCircle" class="auth-loading" :size="17" />{{ loading ? t('ui.please_wait') : mode === 'login' ? t('ui.sign_in_to_loop') : t('ui.create_account_wallet') }}<AppIcon v-if="!loading" name="ArrowRight" :size="17" /></button>
       </form>

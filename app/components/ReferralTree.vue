@@ -134,6 +134,6 @@ function downloadImage() {
       </svg>
     </div>
     <div class="referral-tree-caption"><div class="referral-tree-legend"><span><i class="tree-root-dot"></i>{{ rootLabel || t('ui.you') }}</span><span><i class="tree-qualified-dot"></i>{{ t('ui.qualified') }}</span><span><i class="tree-registered-dot"></i>{{ t('ui.registered') }}</span></div><p>{{ noMatches ? t('ui.no_matching_members') : hiddenCount ? t('ui.p0_more_members_below_increase_the_level_limit_to_see_them', { p0: hiddenCount }) : t('ui.scroll_to_explore_use_and_to_zoom') }}</p></div>
-    <p class="referral-tree-note">{{ filtered && matchingIds.length ? t('ui.matching_branches_include_their_ancestors_for_context') + " " : '' }}{{ t('ui.connections_follow_personal_invites_binary_matrix_placement_is_tracked_separately') }}</p>
+    <p class="referral-tree-note">{{ filtered && matchingIds.length ? t('ui.matching_branches_include_their_ancestors_for_context') + " " : '' }}{{ t('workspace.referralTreeNote') }}</p>
   </div>
 </template>

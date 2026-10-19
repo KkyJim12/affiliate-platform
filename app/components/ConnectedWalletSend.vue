@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { ExternalOperation } from "#shared/connected-wallet";
-defineProps<{ open: boolean }>();
+withDefaults(defineProps<{ open: boolean; showHistory?: boolean }>(), { showHistory: true });
 const emit = defineEmits<{ close: [] }>();
 const { t } = useLoopI18n();
 const { balances, refreshBalances } = useEvmWallet();
@@ -29,7 +29,7 @@ onMounted(() => { void refresh(); timer = setInterval(() => { if (history.value.
 onBeforeUnmount(() => clearInterval(timer));
 </script>
 <template>
-  <section v-if="history.some(row => row.kind === 'send' && row.transactionHash)" class="panel send-history">
+  <section v-if="showHistory && history.some(row => row.kind === 'send' && row.transactionHash)" class="panel send-history" data-testid="connected-send-history">
     <div class="send-history-header"><h3>{{ t('evmSend.recent') }}</h3><button class="text-action" @click="refresh">{{ t('evmWallet.refresh') }}</button></div>
     <article v-for="item in history.filter(row => row.kind === 'send' && row.transactionHash).slice(0,5)" :key="item.id" class="send-history-row"><strong>{{ item.amount }} {{ item.symbol }}</strong><span>{{ t(`connected.${item.status}`) }}</span><code class="connected-address">{{ item.recipient }}</code><a :href="`https://amoy.polygonscan.com/tx/${item.transactionHash}`" target="_blank" rel="noopener noreferrer">{{ t('onchain.viewTransaction') }}</a></article>
   </section>
@@ -43,3 +43,15 @@ onBeforeUnmount(() => clearInterval(timer));
     <p v-if="busy" role="status">{{ t('connected.checkWallet') }}</p><p v-if="error" class="auth-error" role="alert">{{ error }}</p>
   </div></AppModal></ModalTransition>
 </template>
+
+<style scoped>
+.send-history { padding: 22px; min-width: 0; }
+.send-history-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.send-history-header h3 { color: var(--text-primary); font-size: 15px; font-weight: 650; }
+.send-history-header button { font-size: 11px; }
+.send-history-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 9px 12px; padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--border); font-size: 12px; }
+.send-history-row strong { color: var(--text-primary); overflow-wrap: anywhere; }
+.send-history-row > span { color: var(--text-secondary); font-size: 11px; }
+.send-history-row code { grid-column: 1 / -1; color: var(--text-secondary); font-size: 11px; }
+.send-history-row a { grid-column: 1 / -1; color: var(--gold-text); font-size: 11px; text-decoration: underline; }
+</style>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const { t, tr, localeTag, formatDate } = useLoopI18n();
 
-import { ranks, matrixRates, formatUsdt } from "#shared/plan";
+import { formatUsdt } from "#shared/plan";
 import type { ReferralNode, ReferralNetwork } from "../../shared/types";
 
 const route = useRoute();
@@ -16,7 +16,7 @@ const external = config.public.walletMode !== 'embedded';
 const colorMode = useColorMode();
 const { data: platform } = await useFetch<import("../../shared/admin").PlatformSettings>("/api/platform-settings");
 const sidebarOpen = ref(false);
-const selectedRank = ref(3);
+const faqOpen = ref(true);
 const search = ref("");
 const referralStatus = ref("all");
 const members = ref<ReferralNode[]>([]);
@@ -27,27 +27,32 @@ function setReferralLayout(layout: "list" | "tree") {
 }
 const referralError = ref("");
 const request = useRequestFetch();
-const activeRank = computed(() => ranks[selectedRank.value - 1]!);
 const preview = computed(() => !authenticated.value);
 const currentView = computed(() => {
+  if (route.path === "/faq/ranks") return "ranks";
+  if (["/faq/analytics", "/analytics"].includes(route.path)) return "analytics";
+  if (route.path === "/faq") return "faq";
   if (route.path === "/explorer") return "explorer";
   if (["/referrals", "/referral"].includes(route.path)) return "referrals";
   const view = String(route.query.view || "overview");
-  return ["overview", "matrix", "referrals", "explorer", "ranks", "wallet", "settings"].includes(view) ? view : view === "rewards" ? "ranks" : "overview";
+  return ["overview", "referrals", "explorer", "ranks", "wallet", "settings", "faq", "analytics"].includes(view) ? view : view === "rewards" ? "ranks" : "overview";
 });
 usePageMotion(motionRoot, currentView);
 const navigation = [
   { view: "overview", label: "Overview", icon: "LayoutDashboard" },
-  { view: "matrix", label: "My matrix", icon: "GitFork" },
   { view: "referrals", label: "My referrals", icon: "Users" },
   { view: "explorer", label: "Explorer", icon: "Globe" },
-  { view: "ranks", label: "Ranks & commissions", icon: "Layers" },
+  { view: "faq", label: "FAQs", icon: "HelpCircle" },
   { view: "wallet", label: "EVM wallet", icon: "Wallet" },
   { view: "settings", label: "Account settings", icon: "Settings" },
 ] as const;
-const titles: Record<string, string> = { overview: "Your network, at a glance.", matrix: "Every connection has a place.", referrals: "Good people. Growing together.", ranks: "Referral levels & commissions.", wallet: "Your EVM wallet.", settings: "Your little corner of Loop." };
-const subtitles: Record<string, string> = { overview: "Your matrix, commissions, and wallet. All connected.", matrix: "A binary structure. Three layers. Fourteen positions.", referrals: "Your personal invites and 15 levels of referral commissions.", ranks: "Purchase prices, upgrade rules, and payouts from each referral purchase.", wallet: "Your EVM address, balances, and keys.", settings: "Your account, invite code, and security in one place." };
-useHead({ title: computed(() => `${currentView.value === 'wallet' ? t('evmWallet.title') : tr(navigation.find((item) => item.view === currentView.value)?.label)} — UNXO`) });
+const titles: Record<string, string> = { overview: "Your network, at a glance.", referrals: "Good people. Growing together.", ranks: "Referral levels & commissions.", wallet: "Your EVM wallet.", settings: "Your little corner of Loop." };
+const subtitles: Record<string, string> = { overview: "Your matrix, commissions, and wallet. All connected.", referrals: "Your personal invites and 15 levels of referral commissions.", ranks: "Purchase prices, upgrade rules, and payouts from each referral purchase.", wallet: "Your EVM address, balances, and keys.", settings: "Your account, invite code, and security in one place." };
+const viewLabel = computed(() => currentView.value === 'analytics' ? t('workspace.analytics') : currentView.value === 'faq' ? t('workspace.faq') : currentView.value === 'ranks' ? t('ui.ranks_commissions') : currentView.value === 'wallet' ? t('evmWallet.title') : tr(navigation.find(item => item.view === currentView.value)?.label));
+const viewHeading = computed(() => currentView.value === 'faq' ? t('workspace.faqTitle') : currentView.value === 'analytics' ? t('workspace.analyticsTitle') : currentView.value === 'explorer' ? t('explorer.heading') : currentView.value === 'wallet' ? t('evmWallet.heading') : tr(titles[currentView.value]));
+const viewDescription = computed(() => currentView.value === 'faq' ? t('workspace.faqHint') : currentView.value === 'analytics' ? t('workspace.analyticsHint') : currentView.value === 'explorer' ? t('workspace.contractScope') : currentView.value === 'overview' ? t('workspace.overviewHint') : currentView.value === 'wallet' ? t(external ? 'connected.walletHint' : 'evmWallet.subtitle') : tr(subtitles[currentView.value]));
+function destination(view: string) { return ({ overview: '/dashboard', referrals: '/referrals', explorer: '/explorer', faq: '/faq' } as Record<string,string>)[view] || '/dashboard?view=' + view; }
+useHead({ title: computed(() => viewLabel.value + ' - UNXO') });
 const origin = useRequestURL().origin;
 const referralLink = computed(() => `${String(config.public.appUrl || origin).replace(/\/$/, "")}/referrals?ref=${user.value?.referralCode || ""}`);
 const sampleMembers: ReferralNode[] = ["alex_morgan", "jamie_chen", "taylor_kim", "sam_wilson", "jordan_lee", "riley_park", "casey_brooks", "drew_miller"].map((username, index) => ({
@@ -60,9 +65,9 @@ const referralMembers = computed(() => preview.value ? sampleMembers : members.v
 const visibleMembers = computed(() => referralMembers.value.filter((item) => item.username.toLowerCase().includes(search.value.toLowerCase()) && (referralStatus.value === "all" || item.status === referralStatus.value)));
 const displayDate = useState('display-date', () => new Date().toISOString());
 const dateLabel = computed(() => formatDate(displayDate.value, { month: 'long', day: 'numeric', year: 'numeric' }));
-const counts = computed(() => preview.value ? [2, 4, 5] : [0, 0, 0]);
-const matrixGross = computed(() => counts.value.reduce((sum, count, depth) => sum + count * activeRank.value.price * matrixRates[depth]!, 0));
-watch(currentView, () => { sidebarOpen.value = false; });
+
+
+watch(currentView, () => { sidebarOpen.value = false; if (["faq", "ranks", "analytics"].includes(currentView.value)) faqOpen.value = true; });
 watch(() => user.value?.id, async () => { await loadReferrals(); });
 async function loadReferrals() {
   members.value = [];
@@ -106,7 +111,13 @@ function exportReferrals() {
       <NuxtLink to="/" class="sidebar-logo" :aria-label="t('ui.loop_home')"><BrandLogo /></NuxtLink>
       <div class="workspace-label">{{ t('ui.your_workspace') }}</div>
       <nav class="sidebar-nav" :aria-label="t('ui.dashboard_navigation')">
-        <NuxtLink v-for="item in navigation" :key="item.view" :to="item.view === 'explorer' ? '/explorer' : item.view === 'referrals' ? '/referrals' : item.view === 'overview' ? '/dashboard' : `/dashboard?view=${item.view}`" :class="{ active: currentView === item.view }" :aria-current="currentView === item.view ? 'page' : undefined"><AppIcon :name="item.icon" :size="19" />{{ item.view === 'wallet' ? t('evmWallet.title') : tr(item.label) }}<span v-if="item.view === 'referrals'" class="nav-count">{{ preview ? 8 : members.length }}</span></NuxtLink>
+        <template v-for="item in navigation" :key="item.view">
+          <div v-if="item.view === 'faq'" class="faq-nav-group">
+            <div class="faq-nav-heading" :class="{ active: ['faq','ranks','analytics'].includes(currentView) }"><NuxtLink to="/faq" :aria-current="currentView === 'faq' ? 'page' : undefined"><AppIcon name="HelpCircle" :size="19" />{{ t('workspace.faq') }}</NuxtLink><button :aria-label="t('workspace.faqMenu')" :aria-expanded="faqOpen" aria-controls="faq-subnav" @click="faqOpen = !faqOpen"><AppIcon name="ChevronDown" :size="15" /></button></div>
+            <nav v-if="faqOpen" id="faq-subnav" class="faq-subnav" :aria-label="t('workspace.faqMenu')"><NuxtLink to="/faq/ranks" :class="{ active: currentView === 'ranks' }" :aria-current="currentView === 'ranks' ? 'page' : undefined"><AppIcon name="Layers" :size="15" />{{ t('ui.ranks_commissions') }}</NuxtLink><NuxtLink to="/faq/analytics" :class="{ active: currentView === 'analytics' }" :aria-current="currentView === 'analytics' ? 'page' : undefined"><AppIcon name="TrendingUp" :size="15" />{{ t('workspace.analytics') }}</NuxtLink></nav>
+          </div>
+          <NuxtLink v-else :to="destination(item.view)" :class="{ active: currentView === item.view }" :aria-current="currentView === item.view ? 'page' : undefined"><AppIcon :name="item.icon" :size="19" />{{ item.view === 'wallet' ? t('evmWallet.title') : tr(item.label) }}<span v-if="item.view === 'referrals'" class="nav-count">{{ preview ? 8 : members.length }}</span></NuxtLink>
+        </template>
       </nav>
       <div class="sidebar-bottom">
         <NuxtLink v-if="user?.role === 'admin'" to="/admin/dashboard" class="sidebar-help"><AppIcon name="ShieldCheck" :size="17" />{{ t('admin.controlCenter') }}<AppIcon name="ArrowUpRight" :size="14" /></NuxtLink>
@@ -117,14 +128,14 @@ function exportReferrals() {
     </aside>
     <div class="dashboard-main">
       <header class="dashboard-topbar">
-        <div class="breadcrumbs"><button class="icon-button dashboard-menu" :aria-label="t('ui.open_navigation')" @click="sidebarOpen = !sidebarOpen"><AppIcon name="Menu" /></button><span>{{ t('ui.workspace') }}</span><AppIcon name="ChevronRight" :size="13" /><strong>{{ currentView === 'wallet' ? t('evmWallet.title') : tr(navigation.find((item) => item.view === currentView)?.label) }}</strong></div>
+        <div class="breadcrumbs"><button class="icon-button dashboard-menu" :aria-label="t('ui.open_navigation')" @click="sidebarOpen = !sidebarOpen"><AppIcon name="Menu" /></button><span>{{ t('ui.workspace') }}</span><AppIcon name="ChevronRight" :size="13" /><strong>{{ viewLabel }}</strong></div>
         <div class="topbar-actions"><LocaleSwitcher /><ThemeToggle /><span v-if="preview" class="demo-badge">{{ t('ui.plan_preview') }}</span><button v-if="!authenticated" class="topbar-wallet" @click="authOpen = true"><AppIcon name="LockKeyhole" :size="15" />{{ t('ui.sign_in') }}</button><ProfileMenu v-if="user" /><span v-else class="profile-avatar">LP</span></div>
       </header>
       <main ref="motionRoot" class="dashboard-content">
         <p v-if="sessionError" class="auth-error" role="alert">{{ tr(sessionError) }}</p>
-        <div class="dashboard-heading"><div><div class="dashboard-greeting">{{ user ? t('ui.welcome_back_p0', { p0: user.username.toUpperCase() }) : t('ui.a_little_connection_goes_a_long_way') }}<span>✦</span></div><h1>{{ currentView === 'explorer' ? t('explorer.heading') : currentView === 'wallet' ? t('evmWallet.heading') : tr(titles[currentView]) }}</h1><p>{{ currentView === 'explorer' ? t('explorer.memberSubtitle') : currentView === 'wallet' ? t(external ? 'connected.walletHint' : 'evmWallet.subtitle') : tr(subtitles[currentView]) }}</p></div><span class="dashboard-date"><AppIcon name="CalendarDays" :size="16" />{{ dateLabel }}</span></div>
+        <div class="dashboard-heading"><div><div class="dashboard-greeting">{{ user ? t('ui.welcome_back_p0', { p0: user.username.toUpperCase() }) : t('ui.a_little_connection_goes_a_long_way') }}<span>✦</span></div><h1>{{ viewHeading }}</h1><p>{{ viewDescription }}</p></div><span class="dashboard-date"><AppIcon name="CalendarDays" :size="16" />{{ dateLabel }}</span></div>
 
-        <section v-if="currentView === 'overview'" class="network-banner"><div><span class="banner-eyebrow">{{ t('ui.built_around_your_connections') }}</span><h2>{{ t('ui.three_layers') }}<br />{{ t('ui.one_growing_loop') }}</h2><p>{{ t('ui.a_3_layer_binary_matrix_15_referral_levels') }}<br class="desktop-break" /> {{ t('ui.and_a_wallet_that_keeps_it_all_together') }}</p><button class="button button-white" @click="invite"><AppIcon name="Link" :size="16" />{{ preview ? t('ui.create_your_loop') : t('ui.copy_invite_link') }}<AppIcon name="ArrowUpRight" :size="16" /></button></div><div class="banner-matrix-art" aria-hidden="true"><span class="banner-art-spark">✳</span><div class="art-node art-root"><BrandLogo light symbol /></div><div class="art-node art-left"><AppIcon name="Users" :size="25" /></div><div class="art-node art-right"><AppIcon name="Users" :size="25" /></div><span class="art-connector connector-left"></span><span class="art-connector connector-right"></span></div><div class="banner-plan-card"><span>{{ t('ui.the_distribution') }}</span><div><strong>80<small>%</small></strong><span>{{ t('referral.directShare') }}<br /><b>50% · 20% · 10%</b></span></div><div class="plan-split"><span><b>15%</b> {{ t('ui.unilevel') }}</span><span><b>5%</b> {{ t('ui.system') }}</span></div><p>{{ t('ui.15_ranks_starting_at_10_usdt') }}</p></div></section>
+        <section v-if="currentView === 'overview'" class="overview-banner"><div><span class="eyebrow">{{ t('ui.built_around_your_connections') }}</span><h2>{{ t('workspace.overviewTitle') }}</h2><p>{{ t('workspace.networkHint') }}</p></div><button class="button button-orange" @click="invite"><AppIcon name="Link" :size="16" />{{ preview ? t('ui.create_your_loop') : t('ui.copy_invite_link') }}</button></section>
 
         <div v-if="currentView === 'overview' && !preview" class="dashboard-activity-bar"><span>{{ t('dashboard.accountActivity') }}</span><button class="text-action" :disabled="refreshing" @click="refreshActivity"><AppIcon name="RefreshCw" :size="14" />{{ refreshing ? t('ui.please_wait') : t('admin.refresh') }}</button></div>
         <p v-if="currentView === 'overview' && dashboardError && !preview" class="auth-error" role="alert">{{ tr(dashboardError) }}</p>
@@ -133,18 +144,18 @@ function exportReferrals() {
           <article class="network-stat"><span class="stat-icon green-icon"><AppIcon name="Users" :size="19" /></span><div><p>{{ t('dashboard.directReferrals') }}</p><strong data-testid="overview-direct-referrals">{{ summary?.referrals.direct ?? '—' }}</strong><span>{{ t('dashboard.directHint') }}</span></div></article>
           <article class="network-stat"><span class="stat-icon lavender-icon"><AppIcon name="GitFork" :size="19" /></span><div><p>{{ t('dashboard.networkMembers') }}</p><strong data-testid="overview-network-members">{{ summary?.referrals.total ?? '—' }}{{ summary?.referrals.truncated ? '+' : '' }}</strong><span>{{ t('dashboard.networkHint') }}</span></div></article>
         </div>
-        <div v-else-if="currentView === 'overview' || currentView === 'matrix'" class="network-stat-grid">
-          <article class="network-stat"><span class="stat-icon peach-icon"><AppIcon name="GitFork" :size="19" /></span><div><p>{{ preview ? t('ui.example_matrix_receipts') : t('ui.matrix_commissions') }}</p><strong>{{ formatUsdt(preview ? matrixGross : (summary?.directCommissions || 0)) }}<small>USDT</small></strong><span>{{ preview ? t('ui.illustrative_rank') + " " + selectedRank : t('ui.no_qualifying_positions_yet') }}</span></div></article>
-          <article class="network-stat"><span class="stat-icon green-icon"><AppIcon name="Users" :size="19" /></span><div><p>{{ t('ui.unilevel_commissions') }}</p><strong>{{ formatUsdt(preview ? 12.8 : (summary?.bonusCommissions || 0)) }}<small>USDT</small></strong><span>{{ t('ui.1_per_level_up_to_15_levels') }}</span></div></article>
-          <article class="network-stat"><span class="stat-icon lavender-icon"><AppIcon name="Layers" :size="19" /></span><div><p>{{ t('ui.matrix_positions') }}</p><strong>{{ preview ? '11' : '0' }}<small>{{ t('ui.14_filled') }}</small></strong><span>{{ t('ui.2_4_8_positions_across_3_layers') }}</span></div></article>
+        <div v-else-if="currentView === 'overview'" class="network-stat-grid">
+          <article class="network-stat"><span class="stat-icon green-icon"><AppIcon name="Users" :size="19" /></span><div><p>{{ t('dashboard.directReferrals') }}</p><strong>{{ sampleMembers.filter(member => member.depth === 1).length }}</strong><span>{{ t('ui.sample_data') }}</span></div></article>
+          <article class="network-stat"><span class="stat-icon lavender-icon"><AppIcon name="GitFork" :size="19" /></span><div><p>{{ t('dashboard.networkMembers') }}</p><strong>{{ sampleMembers.length }}</strong><span>{{ t('ui.sample_data') }}</span></div></article>
+          <article class="network-stat"><span class="stat-icon peach-icon"><AppIcon name="Layers" :size="19" /></span><div><p>{{ t('ui.referral_level') }}</p><strong>{{ Math.max(...sampleMembers.map(member => member.depth)) }}</strong><span>{{ t('ui.sample_data') }}</span></div></article>
         </div>
 
-        <div v-if="currentView === 'overview' || currentView === 'matrix'" class="matrix-overview-grid" :class="{ 'matrix-full': currentView === 'matrix' }">
-          <section class="panel matrix-panel"><div class="section-card-header"><div><h2>{{ t('ui.your_binary_matrix') }}<span v-if="preview" class="sample-label">{{ t('ui.example') }}</span></h2><p>{{ preview ? t('ui.see_how_a_three_layer_matrix_takes_shape') : t('ui.your_matrix_begins_with_a_qualifying_rank_activation') }}</p></div><div class="rank-selector"><span>{{ t('ui.rank_dd48a') }}</span><AppDropdown v-model="selectedRank" :label="t('ui.select_matrix_rank')" compact :options="ranks.map(rank => ({ value: rank.rank, label: String(rank.rank).padStart(2, '0') + ' · ' + rank.price.toLocaleString(localeTag) + ' USDT' }))" /></div></div><div class="matrix-stage"><MatrixTree :preview="preview" :username="user?.username || tr('You')" /></div><div class="matrix-legend"><span><i class="legend-filled"></i>{{ preview ? t('ui.filled_position') : t('ui.your_position') }}</span><span><i class="legend-open"></i>{{ t('ui.open_position') }}</span><strong>{{ preview ? '11' : '0' }} {{ t('ui.of_14_filled') }}</strong></div><div class="matrix-layer-summary"><div v-for="(layer, index) in activeRank.layers" :key="layer.depth"><div><span class="layer-dot" :class="`layer-${layer.depth}`"></span><strong>{{ t('ui.layer_43436') }} {{ layer.depth }}</strong><span class="layer-rate">{{ layer.rate * 100 }}%</span></div><p>{{ counts[index] }} / {{ layer.positions }} {{ t('ui.positions_4c0bb') }}</p><strong>{{ formatUsdt((counts[index] || 0) * activeRank.price * layer.rate) }} <small>USDT</small></strong></div></div><div class="matrix-foot"><AppIcon name="Info" :size="15" /><span>{{ preview ? t('ui.sample_placement_and_receipts_actual_commissions_require_verified_qualifying_activity') : t('ui.invites_are_tracked_separately_matrix_placement_and_rank_activation_are_awaiting_sett') }}</span></div></section>
-          <WalletPanel v-if="currentView === 'overview'" compact :preview="preview" />
+        <div v-if="currentView === 'overview'" class="matrix-overview-grid overview-network-grid">
+          <section class="panel overview-tree-panel" data-testid="overview-referral-tree"><div class="section-card-header"><div><h2>{{ t('workspace.networkTitle') }}<span v-if="preview" class="sample-label">{{ t('ui.sample_data') }}</span></h2><p>{{ t('workspace.networkHint') }}</p></div><NuxtLink to="/referrals?layout=tree" class="inline-link">{{ t('workspace.fullTree') }}<AppIcon name="ArrowUpRight" :size="14" /></NuxtLink></div><p v-if="referralError" class="auth-error" role="alert">{{ tr(referralError) }}</p><ReferralTree :members="referralMembers" :root-id="user?.id || 'preview-root'" :username="user?.username || 'You'" :matching-ids="referralMembers.map(member => member.id)" :filtered="false" /></section>
+          <div class="overview-wallet-column"><WalletPanel compact :preview="preview" /></div>
         </div>
 
-        <section v-if="currentView === 'overview'" class="panel distribution-panel"><div class="section-card-header"><div><h2>{{ t('ui.a_little_clarity_on_your_commissions') }}</h2><p>{{ t('ui.one_qualifying_payment_distributed_across_the_plan') }}</p></div><NuxtLink to="/dashboard?view=ranks" class="inline-link">{{ t('ui.explore_all_ranks') }}<AppIcon name="ArrowUpRight" :size="14" /></NuxtLink></div><div class="distribution-bar" :aria-label="t('ui.80_percent_binary_matrix_15_percent_unilevel_5_percent_system')"><span></span><span></span><span></span></div><div class="distribution-labels"><span><i></i><strong>80%</strong> {{ t('referral.directShare') }}</span><span><i></i><strong>15%</strong> {{ t('ui.unilevel_1_15') }}</span><span><i></i><strong>5%</strong> {{ t('ui.system') }}</span></div></section>
+        <section v-if="currentView === 'overview'" class="panel distribution-panel"><div class="section-card-header"><div><h2>{{ t('ui.a_little_clarity_on_your_commissions') }}</h2><p>{{ t('ui.one_qualifying_payment_distributed_across_the_plan') }}</p></div><NuxtLink to="/faq/ranks" class="inline-link">{{ t('ui.explore_all_ranks') }}<AppIcon name="ArrowUpRight" :size="14" /></NuxtLink></div><div class="distribution-bar" :aria-label="t('ui.80_percent_binary_matrix_15_percent_unilevel_5_percent_system')"><span></span><span></span><span></span></div><div class="distribution-labels"><span><i></i><strong>80%</strong> {{ t('referral.directShare') }}</span><span><i></i><strong>15%</strong> {{ t('ui.unilevel_1_15') }}</span><span><i></i><strong>5%</strong> {{ t('ui.system') }}</span></div></section>
 
         <template v-if="currentView === 'referrals'">
           <ReferralAccess :key="user?.id || 'preview'" :preview="preview" @updated="referralsUpdated" />
@@ -160,6 +171,8 @@ function exportReferrals() {
         </template>
 
         <ReferralRanks v-if="currentView === 'ranks'" />
+        <PlatformFaq v-if="currentView === 'faq'" />
+        <PlatformAnalytics v-if="currentView === 'analytics'" />
 
         <PlatformExplorer v-if="currentView === 'explorer'" :key="user?.id || 'preview'" :preview="preview" :preview-members="sampleMembers" />
 
