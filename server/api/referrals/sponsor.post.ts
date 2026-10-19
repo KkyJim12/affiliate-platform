@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
     await transaction(async () => {
         // Serialize graph changes so two concurrent links cannot form a cycle.
         await db().execute("SELECT pg_advisory_xact_lock(782438, 2)");
-        const sponsor = /^LOOP-[A-Z0-9]{8}$/.test(code) ? await activeSponsor(code) : undefined;
+        const sponsor = await activeSponsor(code);
         if (!sponsor)
             throw createError({ statusCode: 400, statusMessage: "That referral code is unavailable. Check the code with your sponsor." });
         if (sponsor.id === user.id)

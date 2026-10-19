@@ -74,7 +74,7 @@ export const demoReferrals = [
 ];
 export function useReferralDemo() {
   const config = useRuntimeConfig();
-  const referralCode = "LOOP-BEN24";
+  const referralCode = "UNXO-BEN24";
   const appliedCode = useState("demo-applied-code", () => "");
   const referralLink = computed(
     () =>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { formatUsdt } from "#shared/plan";
 import { referralPrice, type ReferralProgram, type ReferralUpdate } from "#shared/referral";
+import { isReferralCode, normalizeReferralCode } from "#shared/referral-code";
 import type { ReferralChainStatus } from "#shared/referral-contract";
 
 const props = defineProps<{ preview?: boolean }>();
@@ -12,7 +13,7 @@ const { authOpen, copy, notify } = useAppUI();
 const config = useRuntimeConfig();
 const route = useRoute();
 const origin = useRequestURL().origin;
-const code = ref(typeof route.query.ref === "string" ? route.query.ref.slice(0, 24) : "");
+const code = ref(typeof route.query.ref === "string" ? normalizeReferralCode(route.query.ref.slice(0, 24)) : "");
 const purchaseOpen = ref(false);
 const password = ref("");
 const requestKey = ref("");
@@ -37,8 +38,8 @@ if (!props.preview && paymentMode.value === "ledger") await refreshWallet();
 const inviteLink = computed(() => program.value?.code ? `${String(config.public.appUrl || origin).replace(/\/$/, "")}/referrals?ref=${program.value.code}` : "");
 
 onMounted(() => {
-  if (/^LOOP-[a-z0-9]{8}$/i.test(code.value)) sessionStorage.setItem("loop-incoming-referral", code.value.toUpperCase());
-  else if (!code.value) code.value = sessionStorage.getItem("loop-incoming-referral") || "";
+  if (isReferralCode(code.value)) sessionStorage.setItem("loop-incoming-referral", normalizeReferralCode(code.value));
+  else if (!code.value) code.value = normalizeReferralCode(sessionStorage.getItem("loop-incoming-referral") || "");
 });
 function openPurchase() {
   if (props.preview) { authOpen.value = true; return; }
@@ -71,7 +72,7 @@ async function activate() {
 }
 async function connectSponsor() {
   if (props.preview) {
-    if (/^LOOP-[a-z0-9]{8}$/i.test(code.value.trim())) sessionStorage.setItem("loop-incoming-referral", code.value.trim().toUpperCase());
+    if (isReferralCode(code.value)) sessionStorage.setItem("loop-incoming-referral", normalizeReferralCode(code.value));
     authOpen.value = true;
     return;
   }
@@ -144,7 +145,7 @@ async function connectSponsor() {
           <p>{{ t('referral.sponsorHint') }}</p>
           <form class="account-form referral-sponsor-form" @submit.prevent="connectSponsor">
             <label for="referral-sponsor-code">{{ t('referral.enterCode') }}</label>
-            <input id="referral-sponsor-code" v-model="code" class="auth-input" placeholder="LOOP-XXXXXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" required :disabled="busy" />
+            <input id="referral-sponsor-code" v-model="code" class="auth-input" placeholder="UNXO-XXXXXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" required :disabled="busy" />
             <p v-if="actionError" class="auth-error" role="alert">{{ tr(actionError) }}</p>
             <button class="button button-outline" type="submit" :disabled="busy"><AppIcon v-if="busy" name="LoaderCircle" class="auth-loading" :size="16" />{{ preview ? t('ui.sign_in') : t('referral.useCode') }}<AppIcon v-if="!busy" name="ArrowRight" :size="16" /></button>
           </form>

@@ -100,16 +100,17 @@ chain purchase once, without repaying old purchases or converting credit to toke
 
 Password confirmation decrypts the existing wallet on the server and authorizes
 exact-price approvals and the purchase. USDT zero-first approvals are supported.
-The complete nonce-ordered signed batch is persisted before any broadcast. Gas
-cannot exceed the maximum POL budget confirmed by the client. No private key is
-returned to the browser.
+The complete nonce-ordered signed batch is persisted before any broadcast. No
+private key is returned to the browser.
 
-Referral purchases require at least `NUXT_REFERRAL_MIN_GAS_BALANCE=0.003` native
-POL by default. The displayed budget includes the required approval transactions
-and a 15% gas-price buffer. Higher network fees or zero-first allowance resets
-can require more than the minimum. The same balance checks apply on the server.
-Gas limits are 800,000 for the distribution and 60,000 per token approval; these
-limits are tested with all fifteen payout recipients and both token precisions.
+Referral purchases do not check native POL balances or require a client gas
+quote. Purchase status reads do not depend on native balance or gas estimates.
+Transactions use current network fees with a 15% gas-price buffer; network gas
+still costs POL. An unfunded purchase stays pending and can be broadcast again
+after funding the wallet. Gas limits are 800,000 for the distribution and 60,000
+per token approval; these limits are tested with all fifteen payout recipients
+and both token precisions. Administrative fee updates retain their gas checks
+and use `NUXT_REFERRAL_MIN_GAS_BALANCE` as a minimum displayed gas budget.
 
 Wallet locks, request keys, one-pending-purchase constraints, contract levels and
 signed IDs prevent duplicate purchases. Retrying broadcasts identical bytes.
@@ -134,14 +135,15 @@ Historical ledger payables remain separate.
 
 | Method | Endpoint | Body or response |
 | --- | --- | --- |
-| GET | `/api/referrals/chain/status` | Contract, token/gas balances, pending purchase |
+| GET | `/api/referrals/chain/status` | Contract, token balance, pending purchase; gas fields are null |
 | GET | `/api/referrals/chain/purchases` | Current account's recent purchases |
-| POST | `/api/referrals/chain/purchase` | `{ password, level, requestKey, maxGasFee }` |
+| POST | `/api/referrals/chain/purchase` | `{ password, level, requestKey }` |
 | GET | `/api/admin/referrals/status` | Admin status, totals, fee update |
 | POST | `/api/admin/referrals/fee` | `{ password, address, requestKey, maxGasFee }` |
 
-`maxGasFee` is a decimal POL string from the displayed budget. Pending writes
-return 202 with a transaction hash. Ownership comes from the session. Explicit
+For administrative fee updates, `maxGasFee` is a decimal POL string from the
+displayed budget. Pending writes return 202 with a transaction hash. Ownership
+comes from the session. Explicit
 `NUXT_REFERRAL_PAYMENT_MODE=ledger` restores compatibility with the older credit
 flow; its activation/upgrade routes reject writes in contract mode.
 

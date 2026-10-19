@@ -30,8 +30,7 @@ async function fund(address: string, amount = 100n) {
   } finally { rpc.destroy(); }
 }
 async function buy(api: APIRequestContext, level = 1, key = randomUUID()) {
-  const state = await (await api.get('/api/referrals/chain/status')).json();
-  const response = await post(api, '/api/referrals/chain/purchase', { password, level, requestKey: key, maxGasFee: state.gasBudget });
+  const response = await post(api, '/api/referrals/chain/purchase', { password, level, requestKey: key });
   expect([200, 202]).toContain(response.status());
   return await response.json();
 }
@@ -67,12 +66,10 @@ test('real contract purchases debit tokens, distribute automatically, deduplicat
     const initial = await (await root.get('/api/referrals/chain/status')).json();
     expect(initial).toMatchObject({ mode: 'contract', ready: true, balance: '100.0', chainId: 80002 });
     expect((await post(root, '/api/referrals/activate', { password, requestKey: randomUUID() })).status()).toBe(409);
-    const invalid = await post(root, '/api/referrals/chain/purchase', { password, level: 1, requestKey: randomUUID(), maxGasFee: '0.0000000001' });
-    expect(invalid.status()).toBe(409);
     const key = randomUUID(), purchase = await buy(root, 1, key); await confirmed(root, purchase.id);
     const retry = await buy(root, 1, key); expect(retry.id).toBe(purchase.id);
     const program = await (await root.get('/api/referrals/program')).json();
-    expect(program.currentLevel).toBe(1); expect(program.code).toMatch(/^LOOP-/);
+    expect(program.currentLevel).toBe(1); expect(program.code).toMatch(/^UNXO-/);
     const child = await register(member, program.code); await fund(child.wallet.address);
     const second = await buy(member); await confirmed(member, second.id);
     const token = new Contract(process.env.NUXT_EVM_TOKEN_ADDRESS!, tokenAbi, rpc);
@@ -85,10 +82,29 @@ test('real contract purchases debit tokens, distribute automatically, deduplicat
     expect((await database.one('SELECT SUM(amount) AS total FROM referral_chain_allocations WHERE purchase_id = $1', second.id))!.total).toBe(10_000_000);
     expect((await database.one('SELECT COUNT(*) AS count FROM referral_chain_purchases WHERE user_id = $1', first.user.id))!.count).toBe(1);
     expect((await root.get('/api/admin/referrals/status')).status()).toBe(403);
-    expect((await post(member, '/api/referrals/chain/purchase', { password: 'wrong', level: 2, requestKey: randomUUID(), maxGasFee: initial.gasBudget })).status()).toBe(401);
-    const forbidden = await member.post('/api/referrals/chain/purchase', { headers: { Origin: 'https://unrelated.example' }, data: { password, level: 2, requestKey: randomUUID(), maxGasFee: initial.gasBudget } });
+    expect((await post(member, '/api/referrals/chain/purchase', { password: 'wrong', level: 2, requestKey: randomUUID() })).status()).toBe(401);
+    const forbidden = await member.post('/api/referrals/chain/purchase', { headers: { Origin: 'https://unrelated.example' }, data: { password, level: 2, requestKey: randomUUID() } });
     expect(forbidden.status()).toBe(403);
   } finally { await Promise.all([root.dispose(), member.dispose()]); rpc.destroy(); await database.close(); }
+});
+
+test('purchases with zero POL stay pending and settle after funding without a gas quote', async ({ playwright }, info) => {
+  test.skip(info.project.name !== 'desktop');
+  test.setTimeout(90000);
+  const api = await playwright.request.newContext({ baseURL: origin }), rpc = provider();
+  try {
+    const account = await register(api); await fund(account.wallet.address);
+    await rpc.send('hardhat_setBalance', [account.wallet.address, '0x0']);
+    const state = await (await api.get('/api/referrals/chain/status')).json();
+    expect(state).toMatchObject({ ready: true, gasBalance: null, gasBudget: null });
+    const key = randomUUID(), purchase = await buy(api, 1, key);
+    expect(purchase.status).toBe('pending');
+    expect((await (await api.get('/api/referrals/program')).json()).currentLevel).toBe(0);
+    expect((await buy(api, 1, key)).id).toBe(purchase.id);
+    await fund(account.wallet.address, 0n);
+    await confirmed(api, purchase.id);
+    expect((await (await api.get('/api/referrals/program')).json()).currentLevel).toBe(1);
+  } finally { await api.dispose(); rpc.destroy(); }
 });
 
 test('pending signed transactions recover without an open browser and activation waits for the receipt', async ({ playwright }, info) => {
@@ -118,30 +134,23 @@ test('members buy and upgrade on-chain with English/Thai and responsive layouts'
   page.on('pageerror', error => errors.push(error.message));
   const account = await register(page.request); await fund(account.wallet.address);
   const rpc = provider();
-  try { await rpc.send('hardhat_setBalance', [account.wallet.address, toBeHex(parseEther('0.000001'))]); }
+  try { await rpc.send('hardhat_setBalance', [account.wallet.address, '0x0']); }
   finally { rpc.destroy(); }
   await page.goto('/referrals');
   await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as HTMLElement & { __vue_app__?: unknown })?.__vue_app__));
   await expect(page.getByTestId('chain-token-balance')).toContainText('100.00');
   const purchaseButton = page.getByRole('button', { name: 'Buy level 1 · 10.00 tUSDT', exact: true });
-  await expect(purchaseButton).toBeDisabled();
-  await expect(page.getByTestId('chain-gas-balance')).toHaveText('0.000001 POL');
-  await expect(page.getByTestId('chain-gas-budget')).toContainText('POL');
-  await expect(page.getByTestId('chain-insufficient-gas')).toContainText('Your balance is 0.000001 POL');
-  await expect(page.getByTestId('chain-insufficient-token')).toHaveCount(0);
-  await fund(account.wallet.address, 0n);
-  const minimumGasRpc = provider();
-  try { await minimumGasRpc.send('hardhat_setBalance', [account.wallet.address, toBeHex(parseEther('0.003'))]); }
-  finally { minimumGasRpc.destroy(); }
-  await page.getByRole('button', { name: 'Refresh blockchain status', exact: true }).click();
-  await expect(page.getByTestId('chain-gas-budget')).toHaveText('0.003 POL');
   await expect(purchaseButton).toBeEnabled();
+  await expect(page.getByTestId('chain-gas-balance')).toHaveCount(0);
+  await expect(page.getByTestId('chain-gas-budget')).toHaveCount(0);
   await expect(page.getByTestId('chain-insufficient-gas')).toHaveCount(0);
+  await expect(page.getByTestId('chain-insufficient-token')).toHaveCount(0);
   await page.getByRole('button', { name: 'Buy level 1 · 10.00 tUSDT', exact: true }).click();
-  await expect(page.getByRole('dialog')).toContainText('Maximum gas budget');
+  await expect(page.getByRole('dialog')).not.toContainText('Maximum gas budget');
+  await fund(account.wallet.address, 0n);
   await page.getByLabel('Confirm with your password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Pay 10.00 tUSDT on-chain', exact: true }).click();
-  await expect(page.getByTestId('referral-code')).toHaveText(/^LOOP-/, { timeout: 30000 });
+  await expect(page.getByTestId('referral-code')).toHaveText(/^UNXO-/, { timeout: 30000 });
   await expect(page.getByTestId('referral-level')).toHaveText('Level 1 / 15');
   await fund(account.wallet.address, 0n);
   await page.getByRole('button', { name: 'Refresh blockchain status', exact: true }).click();

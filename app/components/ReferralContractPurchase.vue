@@ -11,13 +11,12 @@ const { notify } = useAppUI();
 const { data: history } = await useFetch<ChainPurchaseStatus[]>("/api/referrals/chain/purchases", { key: `chain-purchases-${user.value?.id}` });
 const current = ref<ChainPurchaseStatus | null>(props.chain?.pending ?? history.value?.[0] ?? null);
 const confirmOpen = ref(false), busy = ref(false), refreshing = ref(false);
-const password = ref(""), requestKey = ref(""), maxGasFee = ref("");
+const password = ref(""), requestKey = ref("");
 const error = ref("");
 const symbol = computed(() => props.chain?.tokenSymbol || "USDT");
 const price = computed(() => props.program?.nextPrice ?? 10);
 const pending = computed(() => props.chain?.pending || (current.value?.status === "pending" ? current.value : null));
 const canAfford = computed(() => props.chain?.balance !== null && Number(props.chain?.balance) >= price.value);
-const hasGas = computed(() => !!props.chain?.gasBudget && Number(props.chain.gasBalance) >= Number(props.chain.gasBudget));
 let timer: ReturnType<typeof setInterval> | undefined;
 let mounted = false;
 const observed = new Set<string>();
@@ -41,7 +40,7 @@ async function refreshState() {
 function openConfirmation() {
   if (!props.program?.nextLevel || !props.chain?.ready || pending.value) return;
   error.value = ""; password.value = ""; requestKey.value = crypto.randomUUID();
-  maxGasFee.value = props.chain.gasBudget || ""; confirmOpen.value = true;
+  confirmOpen.value = true;
 }
 function closeConfirmation() { if (!busy.value) { confirmOpen.value = false; password.value = ""; } }
 async function purchase() {
@@ -49,7 +48,7 @@ async function purchase() {
   busy.value = true; error.value = "";
   try {
     current.value = await $fetch<ChainPurchaseStatus>("/api/referrals/chain/purchase", { method: "POST", body: {
-      level: props.program.nextLevel, password: password.value, requestKey: requestKey.value, maxGasFee: maxGasFee.value,
+      level: props.program.nextLevel, password: password.value, requestKey: requestKey.value,
     } });
     confirmOpen.value = false; password.value = "";
     if (current.value.status === "confirmed") { observed.add(current.value.id); emit("updated"); notify(t("onchain.confirmedNotice")); }
@@ -74,16 +73,12 @@ onBeforeUnmount(() => { mounted = false; password.value = ""; if (timer) clearIn
     <p class="referral-contract-note">{{ t('onchain.networkHint') }}</p>
     <template v-if="chain?.configured">
       <div class="referral-balance"><span>{{ t('onchain.tokenBalance') }}</span><strong data-testid="chain-token-balance">{{ formatUsdt(Number(chain.balance || 0)) }} {{ symbol }}</strong></div>
-      <div class="referral-balance"><span>{{ t('onchain.gasBalance') }}</span><strong data-testid="chain-gas-balance">{{ chain.gasBalance ?? '—' }} POL</strong></div>
-      <div class="referral-balance"><span>{{ t('onchain.maxGas') }}</span><strong data-testid="chain-gas-budget">{{ chain.gasBudget ?? '—' }} POL</strong></div>
       <a :href="`https://amoy.polygonscan.com/address/${chain.contractAddress}`" target="_blank" rel="noopener noreferrer" class="inline-link">{{ t('onchain.viewContract') }}<AppIcon name="ArrowUpRight" :size="14" /></a>
       <template v-if="program?.nextLevel">
         <p class="referral-contract-note">{{ t('referral.nextLevel', { level: program.nextLevel, amount: formatUsdt(price) }) }}</p>
-        <button class="button button-orange referral-unlock-button" :disabled="busy || !!pending || !chain.ready || !canAfford || !hasGas" @click="openConfirmation">{{ t('onchain.buy', { level: program.nextLevel, amount: formatUsdt(price), symbol }) }}</button>
+        <button class="button button-orange referral-unlock-button" :disabled="busy || !!pending || !chain.ready || !canAfford" @click="openConfirmation">{{ t('onchain.buy', { level: program.nextLevel, amount: formatUsdt(price), symbol }) }}</button>
         <p v-if="!canAfford && chain.balance !== null" class="referral-funding-hint" data-testid="chain-insufficient-token" role="status">{{ t('onchain.tokenRequired', { required: formatUsdt(price), available: formatUsdt(Number(chain.balance)), symbol }) }}</p>
-        <p v-if="!hasGas && chain.gasBudget && chain.gasBalance !== null" class="referral-funding-hint" data-testid="chain-insufficient-gas" role="status">{{ t('onchain.gasRequired', { required: chain.gasBudget, available: chain.gasBalance }) }}</p>
-        <p v-else-if="!chain.gasBudget || chain.gasBalance === null" class="referral-funding-hint" role="status">{{ t('onchain.gasUnavailable') }}</p>
-        <p v-if="!canAfford || !hasGas" class="referral-funding-hint"><NuxtLink to="/dashboard?view=wallet">{{ t('ui.open_wallet') }}</NuxtLink></p>
+        <p v-if="!canAfford" class="referral-funding-hint"><NuxtLink to="/dashboard?view=wallet">{{ t('ui.open_wallet') }}</NuxtLink></p>
         <p v-if="!chain.ready" class="referral-funding-hint">{{ t('onchain.pausedOrUnavailable') }}</p>
       </template>
       <p v-else class="referral-contract-note">{{ t('referral.maximumLevel') }}</p>
@@ -99,7 +94,7 @@ onBeforeUnmount(() => { mounted = false; password.value = ""; if (timer) clearIn
     <button class="text-action" :disabled="refreshing || busy" @click="refreshState"><AppIcon name="RefreshCw" :size="14" />{{ t('onchain.refresh') }}</button>
     <ModalTransition><AppModal v-if="confirmOpen" :title="t('onchain.confirmTitle')" @close="closeConfirmation">
       <div class="admin-dialog referral-purchase-dialog"><h2>{{ t('onchain.confirmTitle') }}</h2><p>{{ t('onchain.confirmHint') }}</p>
-        <dl class="admin-details"><div><dt>{{ t('referral.levelPrice') }}</dt><dd>{{ formatUsdt(price) }} {{ symbol }}</dd></div><div><dt>{{ t('onchain.maxGas') }}</dt><dd>{{ maxGasFee }} POL</dd></div><div><dt>{{ t('onchain.network') }}</dt><dd>Polygon Amoy · 80002</dd></div></dl>
+        <dl class="admin-details"><div><dt>{{ t('referral.levelPrice') }}</dt><dd>{{ formatUsdt(price) }} {{ symbol }}</dd></div><div><dt>{{ t('onchain.network') }}</dt><dd>Polygon Amoy · 80002</dd></div></dl>
         <p class="referral-contract-note">{{ t('onchain.approvalNotice') }}</p>
         <form class="account-form" @submit.prevent="purchase"><label for="chain-purchase-password">{{ t('ui.confirm_with_your_password') }}</label><input id="chain-purchase-password" v-model="password" class="auth-input" type="password" autocomplete="current-password" maxlength="128" required :disabled="busy" />
           <p v-if="error" class="auth-error" role="alert">{{ tr(error) }}</p>

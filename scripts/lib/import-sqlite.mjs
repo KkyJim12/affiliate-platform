@@ -1,3 +1,5 @@
+import { normalizeReferralCode } from "../../shared/referral-code.ts";
+
 // The application never uses SQLite. This one-time importer reads old installations.
 export async function importSqlite(sourcePath, database) {
   const { DatabaseSync } = await import("node:sqlite");
@@ -31,6 +33,7 @@ export async function importSqlite(sourcePath, database) {
         if (!existing.has(table)) continue;
         const rows = source.prepare(`SELECT ${columns.join(", ")} FROM ${table} ORDER BY rowid`).all();
         for (const row of rows) {
+          if (table === "users" && row.referral_code.startsWith("LOOP-")) row.referral_code = normalizeReferralCode(row.referral_code);
           if (table === "users" && row.sponsor_id) { sponsors.push([row.sponsor_id, row.id]); row.sponsor_id = null; }
           const sql = table === "platform_settings"
             ? "UPDATE platform_settings SET registration_open = $2, funding_open = $3, support_email = $4 WHERE id = $1"

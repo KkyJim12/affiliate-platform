@@ -12,7 +12,7 @@ async function fixture() {
     const hashed = await hashPassword(password);
     const db = openDb();
     const create = async (prefix: string, balance: number) => {
-        const user = { id: randomUUID(), username: `${prefix}_${suffix}`, reservedCode: `LOOP-${randomUUID().slice(0, 8).toUpperCase()}`, walletId: `LW-${randomUUID()}` };
+        const user = { id: randomUUID(), username: `${prefix}_${suffix}`, reservedCode: `UNXO-${randomUUID().slice(0, 8).toUpperCase()}`, walletId: `LW-${randomUUID()}` };
         await db.execute("INSERT INTO users VALUES ($1, $2, $3, $4, NULL, $5)", user.id, user.username, hashed, user.reservedCode, new Date().toISOString());
         await db.execute("INSERT INTO wallets (id, user_id, available) VALUES ($1, $2, $3)", user.walletId, user.id, balance * 1000000);
         if (balance)
@@ -47,7 +47,7 @@ test("referral activation charges exactly once and sponsor links enforce ownersh
         expect(purchases.map(response => response.status())).toEqual([200, 200]);
         const activated = await purchases[0]!.json();
         const code = activated.program.code;
-        expect(code).toMatch(/^LOOP-[A-F0-9]{8}$/);
+        expect(code).toMatch(/^UNXO-[A-F0-9]{8}$/);
         expect(code).not.toBe(data.owner.reservedCode);
         expect(activated.user.referralCode).toBe(code);
         expect(activated.wallet.available).toBe(15);
@@ -61,11 +61,15 @@ test("referral activation charges exactly once and sponsor links enforce ownersh
         expect(activity.total).toBe(1);
         expect(activity.summary).toEqual({ credits: 0, debits: 10, pending: 0 });
         expect((await post(owner, "/api/referrals/sponsor", { code })).status()).toBe(400);
-        const linked = await (await post(member, "/api/referrals/sponsor", { code: ` ${code.toLowerCase()} `, userId: data.other.id })).json();
+        const legacyCode = code.replace(/^UNXO-/, "LOOP-");
+        const linked = await (await post(member, "/api/referrals/sponsor", { code: ` ${legacyCode.toLowerCase()} `, userId: data.other.id })).json();
         expect(linked.program.sponsor).toEqual({ username: data.owner.username, code });
         expect(linked.wallet.available).toBe(10);
         expect((await (await owner.get("/api/referrals")).json()).network[0].id).toBe(data.member.id);
         expect((await post(member, "/api/referrals/sponsor", { code })).status()).toBe(200);
+        const registration = await post(guest, "/api/auth/register", { username: `rfr_${randomUUID().slice(0, 8)}`, password, sponsorCode: legacyCode });
+        expect(registration.status()).toBe(201);
+        expect((await registration.json()).user.sponsorCode).toBe(code);
         const memberActivated = await (await post(member, "/api/referrals/activate", { password, requestKey: randomUUID() })).json();
         expect(memberActivated.wallet.available).toBe(0);
         expect((await post(owner, "/api/referrals/sponsor", { code: memberActivated.program.code })).status()).toBe(400);
@@ -149,7 +153,7 @@ test("members buy a referral code, connect a sponsor, and retain access in Thai 
     await page.getByRole("button", { name: "Pay 10.00 USDT & activate", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     const code = (await page.getByTestId("referral-code").textContent())!;
-    expect(code).toMatch(/^LOOP-/);
+    expect(code).toMatch(/^UNXO-/);
     await page.reload();
     await expect(page.getByTestId("referral-code")).toHaveText(code);
     await page.goto("/dashboard?view=wallet");
@@ -160,8 +164,17 @@ test("members buy a referral code, connect a sponsor, and retain access in Thai 
     expect(credits.available).toBe(15);
     expect(credits.transactions.some((item: { type: string; amount: number }) => item.type === "referral_purchase" && item.amount === 10)).toBe(true);
     await post(page.request, "/api/auth/logout", {});
+    await page.goto(`/?ref=${code}`);
+    await page.waitForFunction(() => Boolean((document.querySelector("#__nuxt") as HTMLElement & { __vue_app__?: unknown })?.__vue_app__));
+    const landingMenu = page.getByRole("button", { name: "Toggle navigation", exact: true });
+    if (await landingMenu.isVisible()) await landingMenu.click();
+    await page.getByRole("button", { name: "Sign in", exact: true }).first().click();
+    await page.getByRole("button", { name: "Create account", exact: true }).click();
+    await expect(page.locator("#sponsor-code")).toHaveValue(code);
+    await expect(page.locator("#sponsor-code")).toHaveAttribute("placeholder", "UNXO-XXXXXXXX");
+    await page.getByRole("button", { name: "Close dialog", exact: true }).click();
     await post(page.request, "/api/auth/login", { username: data.other.username, password });
-    await page.goto(`/referrals?ref=${code}`);
+    await page.goto(`/referrals?ref=${code.replace(/^UNXO-/, "LOOP-")}`);
     await page.waitForFunction(() => Boolean((document.querySelector("#__nuxt") as HTMLElement & {
         __vue_app__?: unknown;
     })?.__vue_app__));

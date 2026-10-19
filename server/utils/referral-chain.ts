@@ -41,7 +41,7 @@ export function chainPurchaseStatus(row: { id: string; level: number; status: Ch
 export async function pendingChainPurchase(userId: string) {
   return await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE user_id = $1 AND status = 'pending'", userId);
 }
-export async function referralChainStatus(userId: string): Promise<ReferralChainStatus> {
+export async function referralChainStatus(userId: string, includeGas = false): Promise<ReferralChainStatus> {
   const pending = await pendingChainPurchase(userId);
   const base: ReferralChainStatus = { mode: referralPaymentMode(), configured: false, ready: false, chainId: 80002,
     contractAddress: null, tokenAddress: null, tokenSymbol: null, feeRecipient: null, owner: null, balance: null, gasBalance: null, gasBudget: null, currentLevel: null,
@@ -51,7 +51,7 @@ export async function referralChainStatus(userId: string): Promise<ReferralChain
     if (!reader) return base;
     const wallet = await db().one("SELECT address FROM evm_wallets WHERE user_id = $1", userId);
     const program = wallet ? await referralProgram(userId) : null;
-    const status = await reader.inspect(wallet?.address, program?.nextLevel);
+    const status = await reader.inspect(wallet?.address, program?.nextLevel, includeGas);
     return { ...base, configured: true, ready: !status.paused && !!wallet, contractAddress: getAddress(reader.config.contractAddress),
       tokenAddress: getAddress(reader.config.tokenAddress), feeRecipient: status.feeRecipient, owner: status.owner,
       balance: status.balance, gasBalance: status.gasBalance, gasBudget: status.gasBudget, tokenSymbol: status.tokenSymbol, currentLevel: status.currentLevel };
@@ -64,7 +64,7 @@ async function saveTransactions(userId: string, operationId: string, prepared: P
     randomUUID(), userId, operationId, item.stage, item.nonce, item.hash, item.raw, new Date().toISOString());
 }
 
-export async function submitChainPurchase(userId: string, password: string, level: number, requestKey: string, maxGasFee: bigint) {
+export async function submitChainPurchase(userId: string, password: string, level: number, requestKey: string) {
   const reader = requireChainClient();
   return withWalletLock(userId, async () => {
     const previous = await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE user_id = $1 AND request_key = $2", userId, requestKey);
@@ -79,7 +79,7 @@ export async function submitChainPurchase(userId: string, password: string, leve
     }
     await assertNoPendingWalletOperation(userId);
     const signer = await walletSigner(userId, password);
-    const state = await reader.inspect(signer.address);
+    const state = await reader.inspect(signer.address, undefined, false);
     if (state.paused) throw createError({ statusCode: 409, statusMessage: "Referral smart contract purchases are paused." });
     const purchase = await transaction(async () => {
       await db().execute("SELECT pg_advisory_xact_lock(782438, 2)");
@@ -106,7 +106,7 @@ export async function submitChainPurchase(userId: string, password: string, leve
       const quote = { id: hashId(id), buyer: signer.address, level, previousLevel: program.currentLevel,
         uplinesHash: uplineHash(uplines), feeRecipient: state.feeRecipient, configNonce: state.configNonce, deadline: block.timestamp + 3600 };
       const payload: PurchasePayload = { createdBlock: block.number, quote, uplines, recipients: recipients.map(({ userId, reason }) => ({ userId, reason })), signature: await reader.sign(quote) };
-      const prepared = await reader.preparePurchase(signer, payload, state.decimals, maxGasFee);
+      const prepared = await reader.preparePurchase(signer, payload, state.decimals);
       const hash = prepared.find(item => item.stage === "purchase")!.hash;
       await db().execute(`INSERT INTO referral_chain_purchases
         (id,user_id,request_key,level,amount,chain_id,contract_address,token_address,buyer_address,fee_recipient_address,payload,status,transaction_hash,created_at,updated_at)

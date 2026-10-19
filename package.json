@@ -23,6 +23,7 @@
     "postinstall": "nuxt prepare",
     "db:start": "node --env-file-if-exists=.env scripts/local-postgres.mjs",
     "db:migrate": "node --env-file-if-exists=.env scripts/database.mjs migrate",
+    "db:reset": "node --env-file-if-exists=.env scripts/reset-database.mjs",
     "db:status": "node --env-file-if-exists=.env scripts/database.mjs status",
     "test:db": "node scripts/test-postgres.mjs db",
     "db:import:sqlite": "node --env-file-if-exists=.env scripts/import-sqlite.mjs"

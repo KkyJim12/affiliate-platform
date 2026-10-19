@@ -174,7 +174,7 @@ Activation request:
 Sponsor request:
 
 ```json
-{"code":"LOOP-XXXXXXXX"}
+{"code":"UNXO-XXXXXXXX"}
 ```
 
 Both return `{ user, wallet, program }`. Activation debits exactly 10 USDT of
@@ -183,6 +183,9 @@ transaction. An already activated account returns the existing activation withou
 another charge, including retries with a different request key. Sponsor linking
 is free, can happen before activation, and cannot replace an established sponsor.
 Own codes, unavailable/suspended sponsors, and cycles at any depth are rejected.
+
+Referral codes use the `UNXO-` prefix. Existing `LOOP-` codes are migrated with
+their suffix preserved, and previously shared `LOOP-` invites are still accepted.
 
 Upgrade request:
 

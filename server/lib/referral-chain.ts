@@ -53,29 +53,32 @@ export class ReferralChainClient {
     this.authority = new Wallet(config.authorityPrivateKey);
   }
 
-  async inspect(buyer?: string, nextLevel?: number | null) {
+  async inspect(buyer?: string, nextLevel?: number | null, includeGas = true) {
     if ((await this.provider.getNetwork()).chainId !== 80002n) throw new Error("Referral purchases require Polygon Amoy.");
     if (await this.provider.getCode(this.config.contractAddress) === "0x") throw new Error("Referral contract is not deployed.");
     const [token, decimals, actualDecimals, feeRecipient, owner, quoteSigner, nonce, paused, symbol, gasFees] = await Promise.all([
       this.contract.getFunction("paymentToken")(), this.contract.getFunction("tokenDecimals")(), this.token.getFunction("decimals")(), this.contract.getFunction("feeRecipient")(),
       this.contract.getFunction("owner")(), this.contract.getFunction("quoteSigner")(), this.contract.getFunction("configNonce")(), this.contract.getFunction("paused")(),
-      this.token.getFunction("symbol")().catch(() => "ERC-20"), this.provider.getFeeData(),
+      this.token.getFunction("symbol")().catch(() => "ERC-20"), includeGas ? this.provider.getFeeData() : null,
     ]);
     if (getAddress(token) !== getAddress(this.config.tokenAddress) || decimals !== actualDecimals || decimals < 6n || decimals > 18n
       || getAddress(quoteSigner) !== this.authority.address) throw new Error("Referral deployment configuration does not match the contract.");
     const [balance, gasBalance, currentLevel, allowance] = buyer ? await Promise.all([
-      this.token.getFunction("balanceOf")(buyer), this.provider.getBalance(buyer), this.contract.getFunction("levelOf")(buyer),
-      this.token.getFunction("allowance")(buyer, this.config.contractAddress),
+      this.token.getFunction("balanceOf")(buyer), includeGas ? this.provider.getBalance(buyer) : null, this.contract.getFunction("levelOf")(buyer),
+      includeGas ? this.token.getFunction("allowance")(buyer, this.config.contractAddress) : null,
     ]) : [null, null, null, null];
-    const gasPrice = gasFees.maxFeePerGas ?? gasFees.gasPrice;
-    if (!gasPrice) throw new Error("Gas estimate is unavailable.");
-    const level = nextLevel ?? Math.min(Number(currentLevel || 0) + 1, 15);
-    const price = BigInt(purchaseShares(level).reduce((sum, share) => sum + share.units, 0)) * 10n ** BigInt(Number(decimals) - 6);
-    const approvals = allowance === null ? 2n : allowance >= price ? 0n : allowance > 0n ? 2n : 1n;
-    const estimatedBudget = (purchaseGasLimit + approvals * approvalGasLimit) * bufferedGasPrice(gasPrice);
-    const gasBudget = estimatedBudget > this.minimumGasBalance ? estimatedBudget : this.minimumGasBalance;
+    let gasBudget: bigint | null = null;
+    if (includeGas) {
+      const gasPrice = gasFees?.maxFeePerGas ?? gasFees?.gasPrice;
+      if (!gasPrice) throw new Error("Gas estimate is unavailable.");
+      const level = nextLevel ?? Math.min(Number(currentLevel || 0) + 1, 15);
+      const price = BigInt(purchaseShares(level).reduce((sum, share) => sum + share.units, 0)) * 10n ** BigInt(Number(decimals) - 6);
+      const approvals = allowance === null ? 2n : allowance >= price ? 0n : allowance > 0n ? 2n : 1n;
+      const estimatedBudget = (purchaseGasLimit + approvals * approvalGasLimit) * bufferedGasPrice(gasPrice);
+      gasBudget = estimatedBudget > this.minimumGasBalance ? estimatedBudget : this.minimumGasBalance;
+    }
     return { feeRecipient: getAddress(feeRecipient), owner: getAddress(owner), decimals: Number(decimals), tokenSymbol: String(symbol).slice(0, 24),
-      gasBudget: formatUnits(gasBudget, 18),
+      gasBudget: gasBudget === null ? null : formatUnits(gasBudget, 18),
       configNonce: nonce.toString(), paused: Boolean(paused), balance: balance === null ? null : formatUnits(balance, decimals),
       gasBalance: gasBalance === null ? null : formatUnits(gasBalance, 18), currentLevel: currentLevel === null ? null : Number(currentLevel) };
   }
@@ -87,7 +90,7 @@ export class ReferralChainClient {
 
   // Sign the complete nonce-ordered batch before any broadcast. Persisting these
   // exact signed bytes makes restart/retry recovery independent of passwords.
-  async preparePurchase(buyer: Wallet, payload: PurchasePayload, decimals: number, maxGasFee: bigint): Promise<PreparedChainTransaction[]> {
+  async preparePurchase(buyer: Wallet, payload: PurchasePayload, decimals: number): Promise<PreparedChainTransaction[]> {
     const price = BigInt(purchaseShares(payload.quote.level).reduce((sum, share) => sum + share.units, 0)) * 10n ** BigInt(decimals - 6);
     if (await this.token.getFunction("balanceOf")(buyer.address) < price) throw new Error("INSUFFICIENT_TOKEN");
     const allowance: bigint = await this.token.getFunction("allowance")(buyer.address, this.config.contractAddress);
@@ -98,7 +101,7 @@ export class ReferralChainClient {
       calls.push({ stage: "approval", to: this.config.tokenAddress, data: tokenInterface.encodeFunctionData("approve", [this.config.contractAddress, price]), gasLimit: approvalGasLimit });
     }
     calls.push({ stage: "purchase", to: this.config.contractAddress, data: distributorInterface.encodeFunctionData("purchase", [payload.quote, payload.uplines, payload.signature]), gasLimit: purchaseGasLimit });
-    return this.prepareBatch(buyer, calls, maxGasFee, this.minimumGasBalance);
+    return this.prepareBatch(buyer, calls);
   }
 
   async prepareFeeUpdate(owner: Wallet, recipient: string, maxGasFee: bigint) {
@@ -106,17 +109,21 @@ export class ReferralChainClient {
       data: distributorInterface.encodeFunctionData("setFeeRecipient", [getAddress(recipient)]), gasLimit: 100_000n }], maxGasFee);
   }
 
-  private async prepareBatch(wallet: Wallet, calls: { stage: string; to: string; data: string; gasLimit: bigint }[], maxGasFee: bigint, minimumBalance = 0n) {
+  private async prepareBatch(wallet: Wallet, calls: { stage: string; to: string; data: string; gasLimit: bigint }[], maxGasFee?: bigint) {
     if ((await this.provider.getNetwork()).chainId !== 80002n) throw new Error("Referral purchases require Polygon Amoy.");
-    const [nonce, fees, balance] = await Promise.all([
-      this.provider.getTransactionCount(wallet.address, "pending"), this.provider.getFeeData(), this.provider.getBalance(wallet.address),
+    const [nonce, fees] = await Promise.all([
+      this.provider.getTransactionCount(wallet.address, "pending"), this.provider.getFeeData(),
     ]);
     const fee = fees.maxFeePerGas ?? fees.gasPrice;
     if (!fee) throw new Error("Gas pricing is unavailable.");
     const feeLimit = bufferedGasPrice(fee);
-    const gasBudget = calls.reduce((sum, call) => sum + call.gasLimit, 0n) * feeLimit;
-    if (gasBudget > maxGasFee) throw new Error("GAS_PRICE_CHANGED");
-    if (balance < gasBudget || balance < minimumBalance) throw new Error("INSUFFICIENT_GAS");
+    // Administrative updates still require an approved gas budget. Purchases
+    // are signed without a native-balance precheck or a caller-supplied quote.
+    if (maxGasFee !== undefined) {
+      const gasBudget = calls.reduce((sum, call) => sum + call.gasLimit, 0n) * feeLimit;
+      if (gasBudget > maxGasFee) throw new Error("GAS_PRICE_CHANGED");
+      if (await this.provider.getBalance(wallet.address) < gasBudget) throw new Error("INSUFFICIENT_GAS");
+    }
     const result: PreparedChainTransaction[] = [];
     for (const [index, call] of calls.entries()) {
       const transaction = { to: call.to, data: call.data, gasLimit: call.gasLimit, nonce: nonce + index, chainId: 80002, value: 0n,

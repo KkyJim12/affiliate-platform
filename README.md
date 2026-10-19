@@ -130,11 +130,15 @@ Run `npm run test:contracts` for offline helper tests without a database or wall
 
 Every contract activation and upgrade collects and distributes 100% in one on-chain transaction; verified receipts are then mirrored into PostgreSQL. Sponsor ancestors 1–3 receive 50%, 20%, 10% of the whole purchase (80% total). An additional 15% is shared across ancestors 1–15 with normalized halving weights, `2^(15 − depth) / 32767`; the first three receive both kinds of commission. Largest-remainder rounding conserves the exact 15% pool in integer micro-USDT. The platform gets 5%. Missing, suspended, unactivated, or wallet-less upline shares are sent to the platform address by the contract. No ancestor is moved into another position. Binary illustrations in `shared/plan.ts` use the same direct rates; actual payouts follow the sponsor genealogy.
 
-Set the owner and initial fee recipient in `.env` before deployment. Admin Settings reads the current on-chain recipient and lets its owner submit a signed update. Purchases require configured token/contract addresses and token plus POL balances. New distributions are actual ERC-20 transfers; historical internal-ledger payables remain separate. The default contract mode never silently spends or credits internal balances.
+Set the owner and initial fee recipient in `.env` before deployment. Admin Settings reads the current on-chain recipient and lets its owner submit a signed update. Purchases require configured token/contract addresses and sufficient payment tokens. The app does not check POL balances or require a gas quote for purchases; network fees still apply. New distributions are actual ERC-20 transfers; historical internal-ledger payables remain separate. The default contract mode never silently spends or credits internal balances.
 
 The referrals page at `/referrals` (also `/referral` or `/dashboard?view=referrals`) includes activation, current level, sequential upgrades, code/link sharing, a distribution summary, and sponsor linking. Purchases verify the password, debit the wallet, record the purchase and all allocations, and credit eligible uplines atomically. Consistent wallet lock ordering prevents transfer deadlocks. Request keys and unique user/level records prevent duplicate charges and commissions. Accounts with no sponsor can enter an activated code for free; an established sponsor cannot be changed, and self-referrals, suspended sponsors, and cycles at any depth are rejected. Existing sponsor relationships are preserved; older unpaid codes require activation before they can accept new referrals. Registration and funding alone do not purchase a level or place binary matrix positions. The rank explorer remains a projection, separate from paid account levels.
 
 The referral network switches between list and tree views. The tree follows actual sponsor relationships across up to 15 levels (first 500 members), with zoom, level controls, and a self-contained SVG image download. Search and status filters preserve ancestor branches for context; matching descendants beyond the selected level limit are revealed automatically. The `layout=tree` query parameter preserves the selected view on refresh. Referral genealogy and binary matrix placement remain separate.
+
+Referral codes use `UNXO-` followed by eight characters. The next app startup
+migrates existing `LOOP-` codes while preserving their suffixes. Previously
+shared `LOOP-` invites still resolve to the same sponsor.
 
 ## Explorer
 
@@ -155,7 +159,24 @@ npm run db:migrate
 
 Both commands use `DATABASE_URL` from the environment or `.env`, matching the application and administrator setup. Status only reads migration history; neither command creates the PostgreSQL database itself. Migrate records filenames, SHA-256 checksums, and timestamps in `schema_migrations`. Pending migrations and their history entries commit as one transaction on a single pooled connection; failures roll back the entire pending batch. Concurrent runners serialize through a PostgreSQL advisory transaction lock.
 
-PostgreSQL has its own migration history. Existing SQLite files and their migration history are not used by the running application. Migration checksums normalize Windows line endings; changing an applied PostgreSQL migration or removing history files stops startup with an explicit error. Append a new numbered SQL file for future changes. Migration files contain schema/data SQL without their own transaction statements. Migrations are forward-only; there is no destructive reset or automatic rollback command.
+PostgreSQL has its own migration history. Existing SQLite files and their migration history are not used by the running application. Migration checksums normalize Windows line endings; changing an applied PostgreSQL migration or removing history files stops startup with an explicit error. Append a new numbered SQL file for future changes. Migration files contain schema/data SQL without their own transaction statements. Migrations are forward-only; rolling back an individual migration is not supported.
+
+To reset the configured database, stop the app and back up first. This deletes
+all data in the connection's selected schema (normally `public`), including
+accounts, transactions and encrypted wallet keys. Blockchain state persists
+separately. The command displays the host, database and schema, then requires
+typing `RESET <database-name>`:
+
+```powershell
+npm.cmd run db:reset
+npm.cmd run admin:create
+```
+
+Restart the app afterward. Reset recreates the schema and applies every
+migration in one transaction; a migration failure rolls back the reset. The
+database must already exist and the connecting role must have permission to
+drop and recreate its schema. For non-interactive use, supply the exact database
+name explicitly, for example `npm.cmd run db:reset -- --confirm unxo`.
 
 To move existing SQLite data, stop the old application so it cannot accept more writes, retain a backup, configure an empty PostgreSQL destination, and run this **before creating accounts or administrators in PostgreSQL**:
 

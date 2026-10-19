@@ -123,7 +123,7 @@
     "eligibilityHint": "Eligible uplines have activated referrals, an active account, and an Amoy wallet. Payouts depend on actual purchases in their referral network.",
     "missingHint": "A missing or ineligible upline's share goes to the configured platform fee address. The remaining uplines keep their original shares.",
     "settlement": "Paid through the smart contract", "settlementHint": "The purchase and all payouts execute together. Referral activation and level upgrades take effect after blockchain confirmation.",
-    "feeHint": "Confirm purchases with your account password on the referrals page. The app shows the token amount and POL gas budget before you pay.",
+    "feeHint": "Confirm purchases with your account password on the referrals page. The app shows the token amount before you pay.",
     "openPurchases": "Open referral purchases"
   },
   "explorer": {

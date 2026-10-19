@@ -19,7 +19,7 @@ async function fixture() {
     const now = new Date().toISOString();
     const create = async (prefix: string, sponsor: string | null = null) => {
         const id = randomUUID(), username = `${prefix}_${suffix}`, walletId = `LW-${randomUUID()}`;
-        await database.execute("INSERT INTO users VALUES ($1, $2, $3, $4, $5, $6)", id, username, hashed, `LOOP-${randomUUID().slice(0, 8).toUpperCase()}`, sponsor, now);
+        await database.execute("INSERT INTO users VALUES ($1, $2, $3, $4, $5, $6)", id, username, hashed, `UNXO-${randomUUID().slice(0, 8).toUpperCase()}`, sponsor, now);
         await database.execute("INSERT INTO wallets (id, user_id) VALUES ($1, $2)", walletId, id);
         return { id, username, walletId };
     };

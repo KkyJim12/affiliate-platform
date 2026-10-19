@@ -13,7 +13,7 @@ const post = (api: APIRequestContext, path: string, data: object) => api.post(pa
 async function fixture(depth: number, balance = 400000) {
   const db = openTestDatabase(), suffix = randomUUID().slice(0, 8), hash = await hashPassword(password);
   const create = async (name: string, sponsor: string | null, activated: boolean, funds = 0) => {
-    const id = randomUUID(), walletId = `LW-${randomUUID()}`, code = `LOOP-${randomUUID().slice(0, 8).toUpperCase()}`, username = `${name}_${suffix}`;
+    const id = randomUUID(), walletId = `LW-${randomUUID()}`, code = `UNXO-${randomUUID().slice(0, 8).toUpperCase()}`, username = `${name}_${suffix}`;
     await db.execute('INSERT INTO users VALUES ($1, $2, $3, $4, $5, $6)', id, username, hash, code, sponsor, new Date().toISOString());
     await db.execute('INSERT INTO wallets (id, user_id, available) VALUES ($1, $2, $3)', walletId, id, funds * ledgerScale);
     if (activated) {

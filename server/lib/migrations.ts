@@ -38,10 +38,25 @@ export async function migrationStatus(connection: Pick<PoolClient, "query">, mig
 }
 
 export async function migrate(pool: Pool, migrations: readonly Migration[]) {
+  return runMigrations(pool, migrations);
+}
+
+export async function resetDatabase(pool: Pool, migrations: readonly Migration[], schema = "public") {
+  return runMigrations(pool, migrations, schema);
+}
+
+async function runMigrations(pool: Pool, migrations: readonly Migration[], resetSchema?: string) {
   const connection = await pool.connect();
   try {
     await connection.query("BEGIN");
     await connection.query("SELECT pg_advisory_xact_lock(782438, 1)");
+    if (resetSchema !== undefined) {
+      const identifier = `"${resetSchema.replaceAll('"', '""')}"`;
+      await connection.query("SET LOCAL lock_timeout = '5s'");
+      await connection.query(`DROP SCHEMA IF EXISTS ${identifier} CASCADE`);
+      await connection.query(`CREATE SCHEMA ${identifier}`);
+      await connection.query(`SET LOCAL search_path TO ${identifier}`);
+    }
     await connection.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
       name TEXT PRIMARY KEY,
       checksum TEXT NOT NULL,

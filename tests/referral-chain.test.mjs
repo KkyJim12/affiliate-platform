@@ -26,13 +26,12 @@ async function fixture({ confirmations = 1, funds = 100n, decimals = 6 } = {}) {
   return { connection, provider, buyer, token, contract, client, payload, fee, config, close: async () => { provider.destroy(); await connection.close(); } };
 }
 
-test('signed purchase batches bind chain, spender, exact allowance, nonce order and a caller-authorized gas cap', async () => {
+test('signed purchase batches bind chain, spender, exact allowance and nonce order without a gas quote', async () => {
   const f = await fixture();
   try {
     const state = await f.client.inspect(f.buyer.address);
     assert.equal(state.balance, '100.0'); assert.equal(state.currentLevel, 0);
-    await assert.rejects(f.client.preparePurchase(f.buyer, f.payload, 6, 1n), /GAS_PRICE_CHANGED/);
-    const batch = await f.client.preparePurchase(f.buyer, f.payload, 6, parseEther('1'));
+    const batch = await f.client.preparePurchase(f.buyer, f.payload, 6);
     assert.deepEqual(batch.map(item => item.stage), ['approval', 'purchase']);
     assert.equal(batch[1].nonce, batch[0].nonce + 1);
     for (const item of batch) {
@@ -50,7 +49,7 @@ test('signed purchase batches bind chain, spender, exact allowance, nonce order 
   } finally { await f.close(); }
 });
 
-for (const decimals of [6, 18]) test(`exactly 0.003 POL funds approvals and all 15 cold payout recipients at 3 gwei for a ${decimals}-decimal token`, async () => {
+for (const decimals of [6, 18]) test(`purchases below the old POL minimum fund all 15 cold recipients for a ${decimals}-decimal token`, async () => {
   const f = await fixture({ decimals });
   try {
     const fee = parseUnits('3', 'gwei');
@@ -62,9 +61,7 @@ for (const decimals of [6, 18]) test(`exactly 0.003 POL funds approvals and all 
     f.payload.signature = await f.client.sign(f.payload.quote);
     assert.equal((await f.client.inspect(f.buyer.address)).gasBudget, '0.003');
     await f.provider.send('hardhat_setBalance', [f.buyer.address, toBeHex(parseEther('0.003') - 1n)]);
-    await assert.rejects(f.client.preparePurchase(f.buyer, f.payload, decimals, parseEther('0.003')), /INSUFFICIENT_GAS/);
-    await f.provider.send('hardhat_setBalance', [f.buyer.address, toBeHex(parseEther('0.003'))]);
-    const batch = await f.client.preparePurchase(f.buyer, f.payload, decimals, parseEther('0.003'));
+    const batch = await f.client.preparePurchase(f.buyer, f.payload, decimals);
     const decoded = batch.map(item => Transaction.from(item.raw));
     assert.deepEqual(decoded.map(tx => tx.gasLimit), [60_000n, 800_000n]);
     assert.ok(decoded.reduce((total, tx) => total + tx.gasLimit * tx.maxFeePerGas, 0n) <= parseEther('0.003'));
@@ -75,7 +72,7 @@ for (const decimals of [6, 18]) test(`exactly 0.003 POL funds approvals and all 
   } finally { await f.close(); }
 });
 
-test('fee increases and zero-first approvals can raise the live requirement above the configured minimum', async () => {
+test('purchases use current fees without checking the native balance or requiring an updated gas quote', async () => {
   const f = await fixture();
   try {
     const fee = parseUnits('30', 'gwei');
@@ -86,9 +83,12 @@ test('fee increases and zero-first approvals can raise the live requirement abov
     const higherFee = parseUnits('60', 'gwei');
     f.provider.getFeeData = async () => new FeeData(higherFee, higherFee, fee);
     assert.ok(parseEther((await f.client.inspect(f.buyer.address)).gasBudget) > parseEther('0.003'));
-    await assert.rejects(f.client.preparePurchase(f.buyer, f.payload, 6, parseEther('0.003')), /GAS_PRICE_CHANGED/);
     const configured = new ReferralChainClient({ ...f.config, minGasBalance: '0.05' }, f.provider);
     assert.equal(configured.minimumGasBalance, parseEther('0.05'));
+    await f.provider.send('hardhat_setBalance', [f.buyer.address, '0x0']);
+    f.provider.getBalance = async () => { throw new Error('Purchases must not read the native balance.'); };
+    const batch = await configured.preparePurchase(f.buyer, f.payload, 6);
+    assert.equal(Transaction.from(batch[0].raw).maxFeePerGas, higherFee * 115n / 100n);
     assert.throws(() => new ReferralChainClient({ ...f.config, minGasBalance: 'invalid' }, f.provider), /minimum POL/);
   } finally { await f.close(); }
 });
@@ -98,7 +98,7 @@ test('confirmation policy delays settlement and USDT zero-first approvals execut
   try {
     await (await f.token.setZeroFirst(true)).wait();
     await (await f.token.connect(f.buyer.connect(f.provider)).approve(await f.contract.getAddress(), 1n)).wait();
-    const batch = await f.client.preparePurchase(f.buyer, f.payload, 6, parseEther('1'));
+    const batch = await f.client.preparePurchase(f.buyer, f.payload, 6);
     assert.deepEqual(batch.map(item => item.stage), ['approval_reset', 'approval', 'purchase']);
     for (const item of batch) await f.client.broadcast(item.raw);
     assert.equal(await f.client.verifyPurchase(batch[2].hash, f.payload), null);
@@ -108,13 +108,14 @@ test('confirmation policy delays settlement and USDT zero-first approvals execut
   } finally { await f.close(); }
 });
 
-test('insufficient token/gas and invalid deployment configuration fail before signing transactions', async () => {
+test('insufficient tokens and invalid deployment configuration fail before signing; zero POL does not', async () => {
   const f = await fixture({ funds: 0n });
   try {
-    await assert.rejects(f.client.preparePurchase(f.buyer, f.payload, 6, parseEther('1')), /INSUFFICIENT_TOKEN/);
+    await assert.rejects(f.client.preparePurchase(f.buyer, f.payload, 6), /INSUFFICIENT_TOKEN/);
     await (await f.token.mint(f.buyer.address, 10_000_000n)).wait();
     await f.provider.send('hardhat_setBalance', [f.buyer.address, '0x0']);
-    await assert.rejects(f.client.preparePurchase(f.buyer, f.payload, 6, parseEther('1')), /INSUFFICIENT_GAS/);
+    const batch = await f.client.preparePurchase(f.buyer, f.payload, 6);
+    assert.deepEqual(batch.map(item => item.stage), ['approval', 'purchase']);
     assert.throws(() => new ReferralChainClient({ ...f.config, minConfirmations: 0 }, f.provider));
     assert.throws(() => new ReferralChainClient({ ...f.config, contractAddress: ZeroAddress }, f.provider));
     const wrongAuthority = new ReferralChainClient({ ...f.config, authorityPrivateKey: Wallet.createRandom().privateKey }, f.provider);
@@ -122,10 +123,31 @@ test('insufficient token/gas and invalid deployment configuration fail before si
   } finally { await f.close(); }
 });
 
+test('purchase status loads when native balance and gas-estimate RPC calls are unavailable', async () => {
+  const f = await fixture();
+  try {
+    f.provider.getBalance = async () => { throw new Error('Native balance unavailable.'); };
+    f.provider.getFeeData = async () => { throw new Error('Gas estimate unavailable.'); };
+    const state = await f.client.inspect(f.buyer.address, 1, false);
+    assert.equal(state.balance, '100.0'); assert.equal(state.currentLevel, 0);
+    assert.equal(state.paused, false);
+    assert.equal(state.gasBalance, null); assert.equal(state.gasBudget, null);
+  } finally { await f.close(); }
+});
+
+test('administrative fee updates still enforce the gas quote and native balance', async () => {
+  const f = await fixture();
+  try {
+    await assert.rejects(f.client.prepareFeeUpdate(f.buyer, f.fee.address, 1n), /GAS_PRICE_CHANGED/);
+    await f.provider.send('hardhat_setBalance', [f.buyer.address, '0x0']);
+    await assert.rejects(f.client.prepareFeeUpdate(f.buyer, f.fee.address, parseEther('1')), /INSUFFICIENT_GAS/);
+  } finally { await f.close(); }
+});
+
 test('a gas-price replacement is recovered by its signed purchase ID and verified receipt', async () => {
   const f = await fixture();
   try {
-    const batch = await f.client.preparePurchase(f.buyer, f.payload, 6, parseEther('1'));
+    const batch = await f.client.preparePurchase(f.buyer, f.payload, 6);
     await f.client.broadcast(batch[0].raw);
     const original = Transaction.from(batch[1].raw);
     const replacement = await f.buyer.signTransaction({ to: original.to, data: original.data, chainId: original.chainId,

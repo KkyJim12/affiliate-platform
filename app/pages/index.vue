@@ -2,6 +2,7 @@
 const { t, tr, localeTag, formatDate } = useLoopI18n();
 
 import { ranks, formatUsdt } from "#shared/plan";
+import { isReferralCode, normalizeReferralCode } from "#shared/referral-code";
 const { authOpen } = useAppUI();
 const { authenticated } = useAccount();
 const menuOpen = ref(false);
@@ -18,7 +19,7 @@ const faqs = [
 ];
 onMounted(() => {
   const code = useRoute().query.ref;
-  if (typeof code === "string" && /^LOOP-[A-Za-z0-9]{8}$/.test(code)) sessionStorage.setItem("loop-incoming-referral", code.toUpperCase());
+  if (typeof code === "string" && isReferralCode(code)) sessionStorage.setItem("loop-incoming-referral", normalizeReferralCode(code));
 });
 </script>
 

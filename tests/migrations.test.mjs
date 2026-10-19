@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { createDatabase } from "../server/lib/postgres.ts";
-import { migrate, migrationStatus, prepareMigrations, readMigrations } from "../server/lib/migrations.ts";
+import { migrate, migrationStatus, prepareMigrations, readMigrations, resetDatabase } from "../server/lib/migrations.ts";
 import { importSqlite } from "../scripts/lib/import-sqlite.mjs";
 
 const sources = readMigrations();
@@ -42,6 +42,20 @@ test("PostgreSQL migrations are idempotent and enforce exact money, ownership an
   await assert.rejects(db.execute("INSERT INTO users VALUES ('duplicate', 'MEMBER', 'hash', 'UNASSIGNED-duplicate', NULL, '2026-10-18')"), { code: "23505" });
 }));
 
+test("existing referral codes migrate to UNXO while preserving suffixes and sponsor relationships", () => isolated(async db => {
+  const previous = sources.filter(item => item.name < "0009_unxo_referral_codes.sql");
+  await migrate(db.pool, previous);
+  await db.execute(`INSERT INTO users VALUES
+    ('sponsor', 'sponsor', 'hash', 'LOOP-1234ABCD', NULL, '2026-10-18'),
+    ('member', 'member', 'hash', 'UNASSIGNED-member', 'sponsor', '2026-10-18'),
+    ('current', 'current', 'hash', 'UNXO-ABCDEF12', NULL, '2026-10-18')`);
+  assert.deepEqual(await migrate(db.pool, sources), ["0009_unxo_referral_codes.sql"]);
+  assert.equal((await db.one("SELECT referral_code FROM users WHERE id = 'sponsor'")).referral_code, "UNXO-1234ABCD");
+  assert.deepEqual(await db.one("SELECT referral_code, sponsor_id FROM users WHERE id = 'member'"), { referral_code: "UNASSIGNED-member", sponsor_id: "sponsor" });
+  assert.equal((await db.one("SELECT referral_code FROM users WHERE id = 'current'")).referral_code, "UNXO-ABCDEF12");
+  assert.deepEqual(await migrate(db.pool, sources), []);
+}));
+
 test("Amoy wallet schema enforces owner, address, key encryption and network constraints", () => isolated(async db => {
   await migrate(db.pool, sources);
   await db.execute("INSERT INTO users VALUES ('u', 'member', 'hash', 'UNASSIGNED-u', NULL, '2026-10-18'), ('v', 'other', 'hash', 'UNASSIGNED-v', NULL, '2026-10-18')");
@@ -72,6 +86,61 @@ test("failed PostgreSQL migration batches roll back both schema and history", ()
   assert.equal((await db.one("SELECT to_regclass('should_rollback') AS name")).name, null);
   assert.equal((await db.one("SELECT COUNT(*) AS count FROM schema_migrations")).count, sources.length);
   assert.deepEqual(await migrate(db.pool, sources), []);
+}));
+
+test("reset CLI requires exact confirmation and recreates only the selected schema with fresh migrations", () => isolated(async (db, url) => {
+  await migrate(db.pool, sources);
+  const defaults = await db.one("SELECT * FROM platform_settings WHERE id = 1");
+  await db.execute("INSERT INTO users VALUES ('u', 'member', 'hash', 'UNASSIGNED-u', NULL, '2026-10-18')");
+  await db.execute("INSERT INTO wallets (id, user_id, available) VALUES ('w', 'u', 100)");
+  await db.execute("UPDATE platform_settings SET registration_open = 0, support_email = 'old@example.com'");
+  await db.execute("CREATE TABLE obsolete_reset_fixture (id TEXT)");
+  const schema = (await db.one("SELECT current_schema() AS name")).name;
+  const name = decodeURIComponent(new URL(url).pathname.slice(1));
+  const run = (args, connectionString = url) => new Promise((done, reject) => {
+    const child = spawn(process.execPath, ["scripts/reset-database.mjs", ...args], {
+      env: { ...process.env, DATABASE_URL: connectionString }, stdio: ["ignore", "pipe", "pipe"],
+    });
+    let output = "";
+    child.stdout.on("data", data => { output += data; });
+    child.stderr.on("data", data => { output += data; });
+    child.once("error", reject);
+    child.once("exit", code => done({ code, output }));
+  });
+  const help = await run(["--help"], "not-a-database-url");
+  assert.equal(help.code, 0); assert.match(help.output, /Usage:/);
+  for (const args of [[], ["--confirm", `${name}_wrong`], ["--confirm"], ["--yes"]]) {
+    const refused = await run(args);
+    assert.equal(refused.code, 1);
+    assert.equal((await db.one("SELECT available FROM wallets WHERE id = 'w'")).available, 100);
+  }
+  const reset = await run(["--confirm", name]);
+  assert.equal(reset.code, 0, reset.output);
+  assert.match(reset.output, /Reset complete/);
+  assert.ok(reset.output.includes(`schema ${JSON.stringify(schema)}`));
+  const password = decodeURIComponent(new URL(url).password);
+  if (password) assert.ok(!reset.output.includes(password), "Reset output must not reveal the database password.");
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM users")).count, 0);
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM wallets")).count, 0);
+  assert.equal((await db.one("SELECT to_regclass('obsolete_reset_fixture') AS name")).name, null);
+  assert.deepEqual(await db.one("SELECT * FROM platform_settings WHERE id = 1"), defaults);
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM schema_migrations")).count, sources.length);
+  assert.ok((await migrationStatus(db.pool, sources)).every(item => item.status === "applied"));
+}));
+
+test("a failed reset migration restores the original data, schema and migration history", () => isolated(async db => {
+  await migrate(db.pool, sources);
+  await db.execute("INSERT INTO users VALUES ('u', 'member', 'hash', 'UNASSIGNED-u', NULL, '2026-10-18')");
+  await db.execute("INSERT INTO wallets (id, user_id, available) VALUES ('w', 'u', 100)");
+  await db.execute("CREATE TABLE preserved_reset_fixture (id TEXT)");
+  await db.execute("INSERT INTO preserved_reset_fixture VALUES ('original')");
+  const schema = (await db.one("SELECT current_schema() AS name")).name;
+  const before = await db.all("SELECT * FROM schema_migrations ORDER BY name");
+  const broken = prepareMigrations([{ name: "9999_reset_failure.sql", sql: "INSERT INTO nonexistent VALUES (1);" }]);
+  await assert.rejects(resetDatabase(db.pool, [...sources, ...broken], schema), /9999_reset_failure.sql/);
+  assert.equal((await db.one("SELECT available FROM wallets WHERE id = 'w'")).available, 100);
+  assert.equal((await db.one("SELECT id FROM preserved_reset_fixture")).id, "original");
+  assert.deepEqual(await db.all("SELECT * FROM schema_migrations ORDER BY name"), before);
 }));
 
 test("history validation rejects changed and missing files and normalizes Windows line endings", () => isolated(async db => {
@@ -146,6 +215,7 @@ test("SQLite import preserves accounts, sponsors, balances, sessions, ledger, se
     await migrate(db.pool, sources);
     const counts = await importSqlite(path, db);
     assert.equal(counts.users, 2);
+    assert.equal((await db.one("SELECT referral_code FROM users WHERE id = 'admin'")).referral_code, "UNXO-1234ABCD");
     assert.deepEqual(await db.one("SELECT sponsor_id, password_hash FROM users WHERE id = 'member'"), { sponsor_id: "admin", password_hash: "original-member-hash" });
     assert.deepEqual(await db.one("SELECT available, reserved FROM wallets WHERE id = 'w'"), { available: 25000000, reserved: 3000000 });
     assert.equal((await db.one("SELECT token_hash FROM sessions")).token_hash, "original-token-hash");

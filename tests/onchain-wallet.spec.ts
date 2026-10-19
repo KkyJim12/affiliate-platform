@@ -77,7 +77,6 @@ test('pending sends persist before broadcast, block conflicting purchases and re
   try {
     const first = await account(api), recipient = Wallet.createRandom().address;
     const q = await quote(api, recipient), unused = await quote(api, recipient, 'token', '1');
-    const state = await (await api.get('/api/referrals/chain/status')).json();
     await provider.send('evm_setAutomine', [false]);
     const response = await submit(api, q); expect(response.status()).toBe(202);
     const sent = (await response.json()).send; expect(sent.status).toBe('pending');
@@ -85,7 +84,7 @@ test('pending sends persist before broadcast, block conflicting purchases and re
     expect(Transaction.from(row!.raw_transaction).hash).toBe(sent.transactionHash);
     expect((await submit(api, unused)).status()).toBe(409);
     expect((await post(api, '/api/wallet/evm/send/quote', { recipient, asset: 'native', amount: '0.01' })).status()).toBe(409);
-    const purchase = await post(api, '/api/referrals/chain/purchase', { password, level: 1, requestKey: randomUUID(), maxGasFee: state.gasBudget });
+    const purchase = await post(api, '/api/referrals/chain/purchase', { password, level: 1, requestKey: randomUUID() });
     expect(purchase.status()).toBe(409);
     expect((await db.one('SELECT COUNT(*) AS count FROM referral_chain_purchases WHERE user_id = $1', first.user.id))!.count).toBe(0);
     await api.dispose(); await provider.send('evm_mine', []);
@@ -100,9 +99,8 @@ test('pending referral purchases block both quoting and signing new sends', asyn
   const api = await playwright.request.newContext({ baseURL: origin }), provider = rpc();
   try {
     await account(api); const recipient = Wallet.createRandom().address, q = await quote(api, recipient);
-    const state = await (await api.get('/api/referrals/chain/status')).json();
     await provider.send('evm_setAutomine', [false]);
-    expect((await post(api, '/api/referrals/chain/purchase', { password, level: 1, requestKey: randomUUID(), maxGasFee: state.gasBudget })).status()).toBe(202);
+    expect((await post(api, '/api/referrals/chain/purchase', { password, level: 1, requestKey: randomUUID() })).status()).toBe(202);
     expect((await submit(api, q)).status()).toBe(409);
     expect((await post(api, '/api/wallet/evm/send/quote', { recipient, asset: 'native', amount: '0.01' })).status()).toBe(409);
     await provider.send('evm_mine', []);

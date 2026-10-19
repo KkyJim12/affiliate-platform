@@ -1,6 +1,6 @@
 import { assertSameOrigin, rateLimit, requireUser, verifyPassword } from "../../../utils/auth";
 import { parseRequestKey } from "../../../utils/wallet";
-import { chainActionError, chainPurchaseStatus, parseGasBudget, submitChainPurchase } from "../../../utils/referral-chain";
+import { chainActionError, chainPurchaseStatus, submitChainPurchase } from "../../../utils/referral-chain";
 export default defineEventHandler(async event => {
   assertSameOrigin(event);
   const user = await requireUser(event);
@@ -12,7 +12,7 @@ export default defineEventHandler(async event => {
   if (password.length > 128 || !await verifyPassword(password, user.password_hash))
     throw createError({ statusCode: 401, statusMessage: "Your password is incorrect." });
   try {
-    const row = await submitChainPurchase(user.id, password, body.level, key, parseGasBudget(body?.maxGasFee));
+    const row = await submitChainPurchase(user.id, password, body.level, key);
     setResponseStatus(event, row.status === "pending" ? 202 : 200);
     return chainPurchaseStatus(row);
   } catch (error) { chainActionError(error); }
