@@ -16,12 +16,19 @@ and atomically consumes the challenge. Unknown wallets create member accounts;
 only active invite codes establish sponsors. Registration controls also apply to
 new wallet accounts. Sessions retain the existing HttpOnly cookie protections.
 
-Existing members and administrators should choose **Already have a username
-account?**, sign in with their existing credentials once, and link a wallet in
-the wallet page or admin contract panel. Linking also requires a wallet
-signature. It preserves the account ID, sponsor, levels and history. Once linked,
-password login is disabled for that account in external mode. A linked wallet
-cannot be replaced or shared with another account through the public API.
+Username/password login is hidden and blocked by default for both members and
+administrators (`NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=false`). MetaMask, Rabby and
+Phantom wallet signatures are the available login method. Existing linked admin
+wallets retain their administrator access; new wallets create member accounts.
+
+To enable legacy login later, set `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true` and
+restart the app. Existing members and administrators can then choose **Already
+have a username account?**, sign in with their existing credentials once, and
+link a wallet in the wallet page or admin contract panel. Linking also requires
+a wallet signature. It preserves the account ID, sponsor, levels and history.
+Once linked, password login remains disabled for that account in external mode.
+Set the flag back to `false` and restart when migration is complete. A linked
+wallet cannot be replaced or shared with another account through the public API.
 EOA message signatures are supported; contract-account/EIP-1271 login is not
 implemented.
 
@@ -29,8 +36,9 @@ Existing encrypted keystores and ledger records remain in PostgreSQL. Linking an
 external wallet does **not** move funds from an old address or convert internal
 credits to tokens. Preserve database backups and arrange any required old-wallet
 fund recovery before switching users. To intentionally restore the retained
-embedded wallet UI and server signing, set `NUXT_PUBLIC_WALLET_MODE=embedded` and
-restart. Legacy internal-credit purchases additionally require
+embedded wallet UI and server signing, set `NUXT_PUBLIC_WALLET_MODE=embedded`
+and `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true`, then restart. Legacy internal-credit
+purchases additionally require
 `NUXT_REFERRAL_PAYMENT_MODE=ledger`. External mode always uses contract payments.
 The retained embedded flow uses legacy account passwords. Wallet-only accounts
 have no usable password; offering them embedded wallets later also needs a
@@ -122,7 +130,8 @@ do not alter an already-deployed contract.
 
 All writes require a matching Origin and are rate limited. Custodial create,
 reveal and signing endpoints, internal transfers and ledger purchases are blocked
-in external mode. Set `embedded` explicitly to restore them.
+in external mode. Restoring legacy login and registration also requires the
+password-login flag described above.
 
 ## Validation
 

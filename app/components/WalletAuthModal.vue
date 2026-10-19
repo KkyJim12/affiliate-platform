@@ -1,18 +1,24 @@
 <script setup lang="ts">
 import { normalizeReferralCode } from "#shared/referral-code";
+import { passwordLoginEnabled } from "#shared/auth-mode";
+const credentialsEnabled = passwordLoginEnabled(useRuntimeConfig().public.passwordLoginEnabled);
 const { t } = useLoopI18n();
 const { authOpen } = useAppUI();
 const { signIn } = useAccount();
 const sponsorCode = ref(""), username = ref(""), password = ref(""), error = ref("");
 const legacy = ref(false), busy = ref(false);
+const inviteOpen = ref(false);
 watch(authOpen, open => { error.value = ""; password.value = ""; legacy.value = false;
-  if (open) sponsorCode.value = normalizeReferralCode(sessionStorage.getItem("loop-incoming-referral") || ""); });
+  if (open) {
+    sponsorCode.value = normalizeReferralCode(sessionStorage.getItem("loop-incoming-referral") || "");
+    inviteOpen.value = !!sponsorCode.value;
+  } });
 async function signedIn() {
   sessionStorage.removeItem("loop-incoming-referral"); authOpen.value = false; password.value = "";
   await navigateTo("/dashboard");
 }
 async function migrateAccount() {
-  if (busy.value) return;
+  if (!credentialsEnabled || busy.value) return;
   busy.value = true; error.value = "";
   try { await signIn(username.value,password.value); authOpen.value = false; password.value = ""; await navigateTo("/dashboard?view=wallet"); }
   catch (failure) { error.value = (failure as { data?: { statusMessage?: string } }).data?.statusMessage || t('connected.loginFailed'); }
@@ -20,14 +26,18 @@ async function migrateAccount() {
 }
 </script>
 <template>
-  <ModalTransition><AppModal v-if="authOpen" :title="t('connected.signIn')" @close="authOpen = false">
-    <div class="auth-modal account-auth">
-      <div class="auth-logo"><BrandLogo /></div><h2>{{ t('connected.signIn') }}</h2><p>{{ t('connected.signInHint') }}</p>
-      <label for="wallet-invite">{{ t('ui.invite_code') }} · {{ t('ui.optional') }}</label>
-      <input id="wallet-invite" v-model="sponsorCode" class="auth-input" maxlength="24" placeholder="UNXO-XXXXXXXX" />
-      <WalletConnector purpose="login" :sponsor-code="sponsorCode" @connected="signedIn" />
-      <button class="text-action" @click="legacy = !legacy">{{ t('connected.existingAccount') }}</button>
-      <form v-if="legacy" class="account-form" @submit.prevent="migrateAccount">
+  <ModalTransition><AppModal v-if="authOpen" :title="t('connected.connectTitle')" variant="wallet" @close="authOpen = false">
+    <div class="wallet-auth">
+      <div class="wallet-auth-brand"><BrandLogo /><span class="wallet-auth-network"><span aria-hidden="true"></span>Polygon Amoy</span></div>
+      <div class="wallet-auth-heading"><h2>{{ t('connected.connectTitle') }}</h2><p>{{ t('connected.connectHint') }}</p></div>
+      <WalletConnector purpose="login" :sponsor-code="sponsorCode" :show-heading="false" @connected="signedIn" />
+      <div class="wallet-invite" :class="{ 'is-open': inviteOpen }">
+        <button type="button" class="wallet-invite-toggle" :aria-expanded="inviteOpen" aria-controls="wallet-invite-field" @click="inviteOpen = !inviteOpen"><AppIcon name="Gift" :size="16" /><span>{{ t('connected.haveInvite') }}</span><AppIcon name="ChevronDown" :size="15" /></button>
+        <div v-if="inviteOpen" id="wallet-invite-field" class="wallet-invite-field"><label for="wallet-invite">{{ t('ui.invite_code') }} <span>{{ t('ui.optional') }}</span></label><input id="wallet-invite" v-model="sponsorCode" class="auth-input" maxlength="24" placeholder="UNXO-XXXXXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" /></div>
+      </div>
+      <div class="wallet-auth-security"><span class="wallet-auth-security-icon"><AppIcon name="ShieldCheck" :size="19" /></span><p><strong>{{ t('connected.yourWalletYourKeys') }}</strong><span>{{ t('connected.signatureOnly') }}</span></p></div>
+      <button v-if="credentialsEnabled" type="button" class="text-action wallet-legacy-toggle" :aria-expanded="legacy" @click="legacy = !legacy">{{ t('connected.existingAccount') }}</button>
+      <form v-if="credentialsEnabled && legacy" class="account-form" @submit.prevent="migrateAccount">
         <p>{{ t('connected.migrationHint') }}</p>
         <label for="legacy-username">{{ t('ui.username') }}</label><input id="legacy-username" v-model="username" class="auth-input" required maxlength="24" autocomplete="username" />
         <label for="legacy-password">{{ t('ui.password') }}</label><input id="legacy-password" v-model="password" type="password" class="auth-input" required maxlength="128" autocomplete="current-password" />

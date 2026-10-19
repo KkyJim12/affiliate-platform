@@ -1,14 +1,83 @@
 .connected-wallet-panel { padding: 24px; }
 .connected-wallet-panel .panel-heading { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
-.connected-wallet-panel p, .wallet-connector p { color: var(--text-muted, #7b756b); margin: 12px 0; line-height: 1.6; }
+.connected-wallet-panel p, .wallet-connector p { color: var(--text-secondary); margin: 12px 0; line-height: 1.6; }
 .connected-wallet-panel h2 { font-size: 21px; margin-bottom: 6px; }
 .connected-wallet-panel .wallet-balance { display: flex; align-items: baseline; gap: 10px; margin: 16px 0; }
 .connected-wallet-panel .wallet-balance strong { font-size: clamp(26px, 4vw, 42px); overflow-wrap: anywhere; }
-.connected-wallet-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 10px; margin: 16px 0; }
-.connected-wallet-options .button { justify-content: center; min-height: 48px; }
+.connected-wallet-options { display: grid; gap: 10px; margin: 16px 0; }
+.wallet-provider-option { display: flex; align-items: center; width: 100%; min-width: 0; min-height: 72px; gap: 14px; padding: 13px 16px; text-align: left; background: var(--surface); color: var(--text-primary); border: 1px solid var(--border); border-radius: 13px; transition: background .18s, border-color .18s, box-shadow .18s; }
+.wallet-provider-option:disabled { opacity: 1; }
+.wallet-provider-option:not(.is-available) { background: var(--surface-alt); }
+.wallet-provider-option:not(.is-available) .wallet-provider-icon { opacity: .6; }
+.wallet-provider-option.is-available:hover:not(:disabled), .wallet-provider-option.is-pending { border-color: var(--gold-border); background: var(--gold-glow); box-shadow: 0 0 0 3px var(--gold-glow); }
+.wallet-provider-icon { width: 42px; height: 42px; flex-shrink: 0; display: grid; place-items: center; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 12px; }
+.wallet-provider-icon img { display: block; width: 29px; height: 29px; object-fit: contain; }
+.wallet-provider-copy { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
+.wallet-provider-copy strong { font-size: 14px; font-weight: 650; line-height: 1.4; overflow-wrap: anywhere; }
+.wallet-provider-copy > span { font-size: 11px; line-height: 1.5; color: var(--text-tertiary); }
+.wallet-provider-option.is-available .wallet-provider-copy > span { color: var(--success); }
+.wallet-provider-arrow { color: var(--text-tertiary); margin-left: auto; }
+.wallet-provider-option:not(.is-available) .wallet-provider-arrow { opacity: .3; }
+.wallet-provider-spinner { color: var(--gold-text); animation: wallet-provider-spin 1s linear infinite; }
+.wallet-discovery-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; color: var(--text-tertiary); font-size: 11px; line-height: 1.6; }
+.wallet-discovery-actions .text-action { display: inline-flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 11px; }
+.wallet-connector .wallet-discovery-hint { font-size: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-alt); }
+.wallet-connector .wallet-connection-status { padding: 11px 14px; color: var(--gold-text); background: var(--gold-soft); border: 1px solid var(--gold-border); border-radius: 10px; font-size: 12px; }
 .connected-address { display: block; overflow-wrap: anywhere; word-break: break-word; font-size: 13px; line-height: 1.7; }
 .connected-wallet-panel .wallet-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 20px 0 12px; }
 .wallet-action-modal .inline-link { display: inline-flex; margin: 16px; }
 .wallet-action-modal .admin-details dd { max-width: 100%; }
 .account-auth > label { display: block; margin: 16px 0 8px; }
 .wallet-connector .auth-error { color: var(--danger, #c14940); }
+
+/* Wallet sign-in has its own compact card; other dialogs keep their layout. */
+.wallet-connect-backdrop { padding: 20px; }
+.wallet-connect-card { width: 472px; max-height: calc(100dvh - 40px); padding: 30px; border-radius: 24px; background: radial-gradient(ellipse at 0 0, var(--gold-glow), transparent 55%), var(--surface); }
+.wallet-connect-card .modal-close { top: 23px; right: 23px; width: 30px; height: 30px; color: var(--text-tertiary); }
+.wallet-auth-brand { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding-right: 36px; margin-bottom: 28px; }
+.wallet-auth-brand .brand-logo { --brand-height: 30px; }
+.wallet-auth-network { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 5px 8px; color: var(--gold-text); background: var(--gold-soft); border: 1px solid var(--gold-border); border-radius: 6px; font-size: 9px; font-weight: 550; line-height: 1.4; }
+.wallet-auth-network > span { width: 5px; height: 5px; border-radius: 50%; background: var(--gold); }
+.wallet-auth-heading h2 { font-family: var(--heading); color: var(--text-primary); font-size: 28px; font-weight: 750; line-height: 1.3; letter-spacing: -.9px; }
+.wallet-auth-heading p { max-width: 330px; margin: 10px 0 23px; font-size: 13px; line-height: 1.7; color: var(--text-secondary); }
+.wallet-auth .connected-wallet-options { margin: 0 0 13px; }
+.wallet-auth .wallet-provider-option { min-height: 76px; }
+.wallet-invite { margin-top: 22px; border-top: 1px solid var(--border); }
+.wallet-invite-toggle { display: flex; align-items: center; width: 100%; gap: 9px; padding: 17px 0; color: var(--text-secondary); background: transparent; text-align: left; font-size: 12px; line-height: 1.6; }
+.wallet-invite-toggle > svg:first-child { color: var(--gold-text); }
+.wallet-invite-toggle > svg:last-child { margin-left: auto; transition: transform .2s; }
+.wallet-invite-toggle:hover { color: var(--gold-text); }
+.wallet-invite.is-open .wallet-invite-toggle > svg:last-child { transform: rotate(180deg); }
+.wallet-invite-field { padding-bottom: 19px; }
+.wallet-invite-field label { display: flex; align-items: baseline; gap: 7px; margin-bottom: 8px; color: var(--text-primary); font-size: 11px; font-weight: 550; }
+.wallet-invite-field label > span { color: var(--text-tertiary); font-size: 10px; font-weight: 400; }
+.wallet-invite-field .auth-input { width: 100%; margin: 0; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--surface-alt); color: var(--text-primary); font-size: 13px; letter-spacing: .5px; }
+.wallet-invite-field .auth-input::placeholder { color: var(--text-tertiary); }
+.wallet-auth-security { display: flex; align-items: center; gap: 11px; padding: 13px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-alt); }
+.wallet-auth-security-icon { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; background: var(--gold-soft); color: var(--gold-text); border-radius: 9px; }
+.wallet-auth-security p { display: flex; flex-direction: column; gap: 3px; margin: 0; font-size: 11px; line-height: 1.6; }
+.wallet-auth-security strong { color: var(--text-primary); font-size: 12px; font-weight: 600; }
+.wallet-auth-security p > span { color: var(--text-secondary); }
+.wallet-legacy-toggle { display: block; margin: 18px auto 0; font-size: 11px; line-height: 1.6; }
+.wallet-auth .account-form > p { color: var(--text-secondary); font-size: 12px; line-height: 1.7; }
+.wallet-auth .account-form .auth-error { color: var(--danger); }
+.wallet-auth .account-form > .button { width: 100%; margin-top: 16px; }
+@keyframes wallet-provider-spin { to { transform: rotate(360deg); } }
+@media (max-width: 520px) {
+  .wallet-connect-backdrop { padding: 16px; }
+  .wallet-connect-card { max-height: calc(100dvh - 32px); padding: 24px; border-radius: 20px; }
+  .wallet-connect-card .modal-close { top: 19px; right: 18px; }
+  .wallet-auth-brand { margin-bottom: 24px; gap: 8px; padding-right: 26px; }
+  .wallet-auth-brand .brand-logo { --brand-height: 27px; }
+  .wallet-auth-network { padding-inline: 6px; font-size: 8px; }
+  .wallet-auth-heading h2 { font-size: 25px; letter-spacing: -.7px; }
+  .wallet-auth-heading p { font-size: 12px; margin-bottom: 20px; }
+  .wallet-auth .wallet-provider-option { min-height: 72px; padding: 12px; gap: 12px; }
+  .wallet-auth .wallet-discovery-actions { font-size: 10px; }
+  .wallet-auth .wallet-discovery-actions .text-action { font-size: 10px; }
+  .wallet-auth-security { padding: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wallet-provider-option, .wallet-invite-toggle > svg:last-child { transition: none; }
+  .wallet-provider-spinner { animation: none; }
+}

@@ -1,9 +1,10 @@
 import { accountFor, assertSameOrigin, createSession, findUser, rateLimit, verifyPassword } from "../../utils/auth";
 import { ensureEvmWallet } from "../../utils/evm-wallet";
-import { externalWalletMode } from "../../utils/wallet-mode";
+import { externalWalletMode, requirePasswordLoginEnabled } from "../../utils/wallet-mode";
 import { db } from "../../utils/database";
 export default defineEventHandler(async (event) => {
     assertSameOrigin(event);
+    requirePasswordLoginEnabled();
     await rateLimit(event, "admin-login", 15);
     const body = await readBody(event);
     const username = typeof body?.username === "string" ? body.username.trim().toLowerCase() : "";

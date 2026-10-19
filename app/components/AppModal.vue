@@ -1,7 +1,7 @@
 <script setup lang="ts">
 const { t, tr, localeTag, formatDate } = useLoopI18n();
 
-const props = defineProps<{ title: string }>();
+const props = defineProps<{ title: string; variant?: "wallet" }>();
 const emit = defineEmits<{ close: [] }>();
 const dialog = ref<HTMLElement | null>(null);
 function onKeydown(event: KeyboardEvent) {
@@ -35,10 +35,11 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <Teleport to="body"
-    ><div class="modal-backdrop" @click.self="emit('close')">
+    ><div class="modal-backdrop" :class="{ 'wallet-connect-backdrop': props.variant === 'wallet' }" @click.self="emit('close')">
       <section
         ref="dialog"
         class="modal-card"
+        :class="{ 'wallet-connect-card': props.variant === 'wallet' }"
         role="dialog"
         aria-modal="true"
         :aria-label="props.title"

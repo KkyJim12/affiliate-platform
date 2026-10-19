@@ -14,8 +14,8 @@ rate limited.
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
-| POST | `/api/auth/register` | Create an account and wallet; optional activated sponsor code |
-| POST | `/api/auth/login` | Sign in with username and password |
+| POST | `/api/auth/register` | Legacy account and wallet creation; requires embedded mode and password login enabled |
+| POST | `/api/auth/login` | Legacy username/password login; requires `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true` |
 | GET | `/api/auth/session` | Current account or `null` |
 | POST | `/api/auth/logout` | Revoke the current session |
 | GET | `/api/dashboard` | Own completed commissions, pending funding, transfer count and referral totals |
@@ -35,7 +35,7 @@ rate limited.
 | GET | `/api/explorer/network` | Inspect an authorized referral branch |
 | GET | `/api/explorer/transactions` | Search and paginate the current account's ledger |
 | GET | `/api/platform-settings` | Registration/funding availability and support email |
-| POST | `/api/admin/login` | Sign in as an active administrator |
+| POST | `/api/admin/login` | Legacy administrator login; requires `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true` |
 | GET | `/api/admin/overview` | Platform totals and recent activity |
 | GET | `/api/admin/users` | Search and paginate accounts |
 | PATCH | `/api/admin/users/:id` | Suspend/reactivate a member and revoke suspended sessions |

@@ -6,6 +6,7 @@ import { compileContracts } from './lib/compile-contracts.mjs';
 // All transactions in this runner stay on a fresh localhost Amoy simulation.
 const server = await network.createServer(undefined, '127.0.0.1', 0);
 const external = process.argv.includes('--external');
+const passwordLogin = process.env.NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED ?? (external ? 'false' : 'true');
 let provider;
 let testExitCode = 1;
 try {
@@ -27,7 +28,8 @@ try {
     stdio: 'inherit', env: { ...process.env, NUXT_REFERRAL_PAYMENT_MODE: 'contract', NUXT_EVM_RPC_URL: url, NUXT_EVM_CHAIN_ID: '80002',
       NUXT_EVM_TOKEN_ADDRESS: await token.getAddress(), NUXT_EVM_MIN_CONFIRMATIONS: '1', NUXT_REFERRAL_CONTRACT_ADDRESS: await contract.getAddress(),
       NUXT_REFERRAL_AUTHORITY_PRIVATE_KEY: authority.privateKey, NUXT_REFERRAL_MIN_CONFIRMATIONS: '1',
-      REFERRAL_TEST_OWNER_KEY: owner.privateKey, REFERRAL_TEST_ORIGINAL_FEE: fee, NUXT_PUBLIC_WALLET_MODE: external ? 'external' : 'embedded' },
+      REFERRAL_TEST_OWNER_KEY: owner.privateKey, REFERRAL_TEST_ORIGINAL_FEE: fee, NUXT_PUBLIC_WALLET_MODE: external ? 'external' : 'embedded',
+      NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED: passwordLogin },
   });
   testExitCode = await new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', code => resolve(code ?? 1)); });
 } finally { provider?.destroy(); await server.close(); }

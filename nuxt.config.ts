@@ -43,7 +43,7 @@ export default defineNuxtConfig({
   runtimeConfig: {
     referral: { paymentMode: "contract", contractAddress: "", authorityPrivateKey: "", minConfirmations: "2", minGasBalance: "0.003" },
     evm: { rpcUrl: "", chainId: "", tokenAddress: "", treasuryAddress: "", minConfirmations: "", explorerApiKey: "" },
-    public: { appUrl: "", walletMode: "external" },
+    public: { appUrl: "", walletMode: "external", passwordLoginEnabled: false },
   },
   app: {
     pageTransition: { name: "page", mode: "out-in" },
