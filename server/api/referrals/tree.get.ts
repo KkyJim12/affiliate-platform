@@ -10,7 +10,7 @@ export default defineEventHandler(async (event): Promise<BinaryReferralTree> => 
   const path = typeof query.path === "string" ? query.path : "";
   const levels = query.levels === undefined ? 3 : Number(query.levels);
   if (!isMemberId(id)) throw createError({ statusCode: 400, statusMessage: "Enter a valid numeric member ID." });
-  if (!/^[01]{0,15}$/.test(path) || !Number.isInteger(levels) || levels < 1 || levels > 5)
+  if (!/^[01]*$/.test(path) || path.length > binaryTreeDepth || !Number.isInteger(levels) || levels < 1 || levels > binaryTreeDepth)
     throw createError({ statusCode: 400, statusMessage: "Choose a branch within the first 15 levels." });
   const root = await db().one("SELECT id, referral_code, username FROM users WHERE referral_code = $1", id);
   if (!root) throw createError({ statusCode: 404, statusMessage: "No member was found with that ID." });

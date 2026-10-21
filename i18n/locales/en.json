@@ -19,7 +19,7 @@
     "retry": "Try again",
     "structure": "Two branches · 15 levels",
     "memberTitle": "Member ID {id}",
-    "exploreHint": "Select any box to explore its branches, including empty positions. All 15 levels are available in sections.",
+    "exploreHint": "Select any box to explore its branches, including empty positions. Show up to 15 levels at a time.",
     "allLevels": "All 15 referral levels",
     "levelCount": "Level {level}: {filled} of {total} positions filled",
     "level": "Level {level}",

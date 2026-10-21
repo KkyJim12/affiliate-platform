@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { BinaryReferralTree } from "#shared/referral-tree";
+import { binaryTreeDepth, type BinaryReferralTree } from "#shared/referral-tree";
 
 const props = defineProps<{ memberId: string }>();
 const { t, localeTag } = useLoopI18n();
@@ -7,6 +7,9 @@ const branch = ref("");
 const levels = ref(3);
 const zoom = ref(100);
 const viewport = ref<HTMLElement | null>(null);
+const scrollLeft = ref(0);
+const viewportWidth = ref(1000);
+let focusedLevel: number | undefined;
 const requestKey = useId();
 const { data: tree, status, error, refresh } = await useFetch<BinaryReferralTree>("/api/referrals/tree", {
   key: `binary-tree-${requestKey}`,
@@ -14,6 +17,7 @@ const { data: tree, status, error, refresh } = await useFetch<BinaryReferralTree
 });
 watch(() => props.memberId, () => { branch.value = ""; });
 const failed = computed(() => error.value?.statusCode === 404 ? t('publicTree.notFound') : t('publicTree.loadError'));
+const byPath = computed(() => new Map((tree.value?.members ?? []).map(member => [member.path, member])));
 const cardWidth = 132;
 const cardHeight = 78;
 const rowHeight = 120;
@@ -21,32 +25,58 @@ const layout = computed(() => {
   if (!tree.value) return { nodes: [], width: 800, height: 440 };
   const depth = tree.value.visibleDepth;
   const width = Math.max(800, 2 ** depth * 152 + 40);
-  const byPath = new Map(tree.value.members.map(member => [member.path, member]));
-  const nodes = Array.from({ length: 2 ** (depth + 1) - 1 }, (_, index) => {
-    const relativeDepth = Math.floor(Math.log2(index + 1));
-    const offset = index - (2 ** relativeDepth - 1);
-    const suffix = relativeDepth ? offset.toString(2).padStart(relativeDepth, '0') : '';
-    const path = tree.value!.path + suffix;
-    return { index, path, depth: path.length, member: byPath.get(path),
-      x: (offset + 0.5) / 2 ** relativeDepth * width, y: 22 + relativeDepth * rowHeight };
-  });
+  const left = scrollLeft.value * 100 / zoom.value;
+  const right = (scrollLeft.value + viewportWidth.value) * 100 / zoom.value;
+  // Deep trees have up to 65,535 positions. Keep adjacent positions for
+  // connecting lines, and create only the columns near the viewport.
+  const nodes = Array.from({ length: depth + 1 }, (_, relativeDepth) => {
+    const count = 2 ** relativeDepth;
+    const spacing = width / count;
+    const first = depth <= 5 ? 0 : Math.max(0, Math.floor((left - cardWidth) / spacing - 1));
+    const last = depth <= 5 ? count - 1 : Math.min(count - 1, Math.ceil((right + cardWidth) / spacing));
+    return Array.from({ length: Math.max(0, last - first + 1) }, (_, index) => {
+      const offset = first + index;
+      const suffix = relativeDepth ? offset.toString(2).padStart(relativeDepth, '0') : '';
+      const path = tree.value!.path + suffix;
+      return { path, depth: path.length, member: byPath.value.get(path),
+        x: (offset + 0.5) * spacing, y: 22 + relativeDepth * rowHeight,
+        parent: relativeDepth ? { x: (Math.floor(offset / 2) + 0.5) * spacing * 2, y: 22 + (relativeDepth - 1) * rowHeight } : null };
+    });
+  }).flat();
   return { nodes, width, height: 44 + depth * rowHeight + cardHeight };
+});
+function updateViewport() {
+  if (!viewport.value) return;
+  scrollLeft.value = viewport.value.scrollLeft;
+  viewportWidth.value = viewport.value.clientWidth;
+}
+watch(viewport, (element, _, onCleanup) => {
+  if (!element) return;
+  const observer = new ResizeObserver(updateViewport);
+  observer.observe(element);
+  onCleanup(() => observer.disconnect());
+  updateViewport();
 });
 function centerTree() {
   nextTick(() => {
     if (!viewport.value) return;
     viewport.value.scrollLeft = (layout.value.width * zoom.value / 100 - viewport.value.clientWidth) / 2;
-    viewport.value.scrollTop = 0;
+    viewport.value.scrollTop = focusedLevel === undefined ? 0 : Math.max(0, focusedLevel - (tree.value?.path.length ?? 0)) * rowHeight * zoom.value / 100;
+    focusedLevel = undefined;
+    updateViewport();
   });
 }
 watch([tree, zoom], centerTree);
 onMounted(centerTree);
 function explore(path: string) {
-  if (path.length <= 15 && path !== branch.value) branch.value = path;
+  if (path.length <= binaryTreeDepth && path !== branch.value) branch.value = path;
 }
 function showLevel(depth: number) {
   const start = Math.max(0, depth - levels.value);
-  explore(branch.value.slice(0, start).padEnd(start, '0'));
+  const path = branch.value.slice(0, start).padEnd(start, '0');
+  focusedLevel = depth;
+  if (path === branch.value) centerTree();
+  else explore(path);
 }
 const number = (value: number) => value.toLocaleString(localeTag.value);
 </script>
@@ -61,13 +91,13 @@ const number = (value: number) => value.toLocaleString(localeTag.value);
       </div>
       <div class="binary-tree-toolbar">
         <div class="binary-tree-branch-controls"><button class="button button-outline button-small" :disabled="!branch" @click="branch = ''"><AppIcon name="House" :size="14" />{{ t('publicTree.root') }}</button><button class="button button-outline button-small" :disabled="!branch" @click="branch = branch.slice(0, -1)"><AppIcon name="ArrowUp" :size="14" />{{ t('publicTree.up') }}</button><span aria-live="polite">{{ t('publicTree.showing', { from: tree.path.length, to: tree.path.length + tree.visibleDepth, max: tree.maxDepth }) }}</span></div>
-        <div class="binary-tree-options"><AppDropdown v-model="levels" :label="t('publicTree.visibleLevels')" compact :options="[3, 4, 5].map(value => ({ value, label: t('publicTree.levelWindow', { levels: value }) }))" /><div class="tree-zoom-controls" role="group" :aria-label="t('ui.tree_zoom')"><button :aria-label="t('ui.zoom_out')" :disabled="zoom <= 50" @click="zoom -= 25">−</button><span>{{ zoom }}%</span><button :aria-label="t('ui.zoom_in')" :disabled="zoom >= 150" @click="zoom += 25">+</button></div></div>
+        <div class="binary-tree-options"><AppDropdown v-model="levels" :label="t('publicTree.visibleLevels')" compact :options="[3, 4, 5, binaryTreeDepth].map(value => ({ value, label: t('publicTree.levelWindow', { levels: value }) }))" /><div class="tree-zoom-controls" role="group" :aria-label="t('ui.tree_zoom')"><button :aria-label="t('ui.zoom_out')" :disabled="zoom <= 50" @click="zoom -= 25">−</button><span>{{ zoom }}%</span><button :aria-label="t('ui.zoom_in')" :disabled="zoom >= 150" @click="zoom += 25">+</button></div></div>
       </div>
       <p v-if="branch" class="binary-tree-path">{{ t('publicTree.branch') }}: {{ branch.split('').map(slot => t(slot === '0' ? 'publicTree.left' : 'publicTree.right')).join(' › ') }}</p>
-      <div ref="viewport" class="binary-tree-viewport" tabindex="0" role="region" :aria-label="t('publicTree.scroll')">
+      <div ref="viewport" class="binary-tree-viewport" tabindex="0" role="region" :aria-label="t('publicTree.scroll')" @scroll.passive="updateViewport">
         <svg :viewBox="`0 0 ${layout.width} ${layout.height}`" :width="layout.width * zoom / 100" :height="layout.height * zoom / 100" role="group" :aria-label="t('publicTree.treeLabel')">
           <title>{{ t('publicTree.memberTitle', { id: tree.root.id }) }} · @{{ tree.root.username }}</title>
-          <g v-for="node in layout.nodes.slice(1)" :key="`edge-${node.path}`" data-tree-edge="true"><path :d="`M${layout.nodes[Math.floor((node.index - 1) / 2)]!.x},${layout.nodes[Math.floor((node.index - 1) / 2)]!.y + cardHeight} V${node.y - 22} H${node.x} V${node.y}`" fill="none" :stroke="node.member ? 'var(--tree-line)' : 'var(--border)'" :stroke-dasharray="node.member ? undefined : '4 5'" stroke-width="1.5" /></g>
+          <g v-for="node in layout.nodes.filter(node => node.parent)" :key="`edge-${node.path}`" data-tree-edge="true"><path :d="`M${node.parent!.x},${node.parent!.y + cardHeight} V${node.y - 22} H${node.x} V${node.y}`" fill="none" :stroke="node.member ? 'var(--tree-line)' : 'var(--border)'" :stroke-dasharray="node.member ? undefined : '4 5'" stroke-width="1.5" /></g>
           <g v-for="node in layout.nodes" :key="node.path" :transform="`translate(${node.x - cardWidth / 2},${node.y})`" data-tree-node="true" :data-path="node.path" :data-member-id="node.member?.id" :data-empty="!node.member" :role="node.depth < 15 && node.path !== branch ? 'button' : undefined" :tabindex="node.depth < 15 && node.path !== branch ? 0 : undefined" :aria-label="t('publicTree.nodeLabel', { level: node.depth, id: node.member?.id || '—', username: node.member?.username || t('publicTree.empty') })" :class="{ 'binary-tree-clickable': node.depth < 15 && node.path !== branch }" @click="node.depth < 15 && explore(node.path)" @keydown.enter.prevent="node.depth < 15 && explore(node.path)" @keydown.space.prevent="node.depth < 15 && explore(node.path)">
             <title>{{ t('publicTree.nodeLabel', { level: node.depth, id: node.member?.id || '—', username: node.member?.username || t('publicTree.empty') }) }}</title>
             <rect :width="cardWidth" :height="cardHeight" rx="10" :fill="node.member ? 'var(--gold-soft)' : 'var(--surface)'" :stroke="node.member ? 'var(--gold-border)' : 'var(--border)'" :stroke-dasharray="node.member ? undefined : '4 4'" />

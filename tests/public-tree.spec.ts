@@ -32,6 +32,7 @@ test('public ID lookup has empty positions through level 15 and exposes only IDs
   const result = await response.json();
   expect(result.root).toEqual({ id: root.memberId, username: root.username, path: '' });
   expect(result.members).toEqual([result.root]);
+  expect(result.visibleDepth).toBe(3);
   expect(result.levels).toHaveLength(15);
   expect(result.levels[0]).toEqual({ depth: 1, filled: 0, capacity: 2 });
   expect(result.levels[14]).toEqual({ depth: 15, filled: 0, capacity: 32768 });
@@ -40,7 +41,12 @@ test('public ID lookup has empty positions through level 15 and exposes only IDs
   expect(deep.visibleDepth).toBe(3);
   expect(deep.members).toEqual([]);
   expect((await request.get(`/api/referrals/tree?id=${root.memberId}&path=${'0'.repeat(16)}`)).status()).toBe(400);
-  expect((await request.get(`/api/referrals/tree?id=${root.memberId}&levels=6`)).status()).toBe(400);
+  for (const levels of [6, 10, 15]) {
+    const response = await request.get(`/api/referrals/tree?id=${root.memberId}&levels=${levels}`);
+    expect(response.status()).toBe(200);
+    expect((await response.json()).visibleDepth).toBe(levels);
+  }
+  for (const levels of [0, 16, 1.5, 'invalid']) expect((await request.get(`/api/referrals/tree?id=${root.memberId}&levels=${levels}`)).status()).toBe(400);
   for (const id of ['0', '-1', '1.5', 'UNXO-12345678', '9007199254740992']) expect((await request.get(`/api/referrals/tree?id=${id}`)).status()).toBe(400);
   expect((await request.get('/api/referrals/tree?id=9007199254740991')).status()).toBe(404);
   const db = openTestDatabase();
@@ -55,6 +61,8 @@ test('public ID lookup has empty positions through level 15 and exposes only IDs
     expect(filled.visibleDepth).toBe(3);
     expect(filled.members.map((member: { path: string }) => member.path.length)).toEqual([12, 13, 14, 15]);
     expect(filled.levels[14].filled).toBe(1);
+    const full = await (await request.get(`/api/referrals/tree?id=${root.memberId}&levels=15`)).json();
+    expect(full.members.map((member: { path: string }) => member.path.length)).toEqual(Array.from({ length: 16 }, (_, index) => index));
   } finally { await db.close(); }
 });
 
@@ -102,8 +110,26 @@ test('any visitor can search by ID and explore empty boxes through 15 levels on 
   const tree = page.getByTestId('binary-referral-tree');
   await expect(tree.locator('[data-tree-node]')).toHaveCount(15);
   await expect(tree.locator('[data-empty="true"]')).toHaveCount(14);
+  await tree.getByRole('combobox', { name: 'Visible levels', exact: true }).click();
+  await page.getByRole('listbox').locator('[data-value="15"]').click();
+  await expect(tree).toContainText('Showing levels 0–15 of 15');
+  await expect(tree.getByRole('combobox', { name: 'Visible levels', exact: true })).toContainText('15 levels at a time');
+  expect(await tree.locator('[data-tree-node]').count()).toBeLessThan(250);
+  const viewport = tree.locator('.binary-tree-viewport');
+  await viewport.evaluate(element => { element.scrollLeft = element.scrollWidth - element.clientWidth; element.scrollTop = element.scrollHeight; });
+  const lastPosition = tree.locator(`[data-path="${'1'.repeat(15)}"]`);
+  await expect(lastPosition).toBeVisible();
+  await expect(lastPosition).not.toHaveAttribute('role', 'button');
+  await viewport.evaluate(element => { element.scrollLeft = 0; });
+  await expect(tree.locator(`[data-path="${'0'.repeat(15)}"]`)).toBeVisible();
+  expect(await tree.locator('[data-tree-node]').count()).toBeLessThan(250);
+  await tree.getByRole('button', { name: 'Level 1: 0 of 2 positions filled', exact: true }).click();
   await expect(tree.locator('[data-member-id]')).toHaveAttribute('data-member-id', root.memberId);
   await expect(tree).toContainText('@' + root.username);
+  await tree.getByRole('combobox', { name: 'Visible levels', exact: true }).click();
+  await page.getByRole('listbox').locator('[data-value="3"]').click();
+  await expect(tree.locator('[data-tree-node]')).toHaveCount(15);
+  await expect(tree.locator('[data-empty="true"]')).toHaveCount(14);
   await tree.getByRole('button', { name: 'Level 15: 0 of 32,768 positions filled', exact: true }).click();
   await expect(tree).toContainText('Showing levels 12–15 of 15');
   await expect(tree.locator('[data-tree-node]')).toHaveCount(15);
@@ -113,6 +139,7 @@ test('any visitor can search by ID and explore empty boxes through 15 levels on 
   await expect(tree).toContainText('Showing levels 0–3 of 15');
   await page.reload();
   await expect(tree.locator('[data-member-id]')).toHaveAttribute('data-member-id', root.memberId);
+  await expect(tree).toContainText('Showing levels 0–3 of 15');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('combobox', { name: 'Language', exact: true }).click();
   await page.getByRole('listbox').locator('[data-value="th"]').click();
