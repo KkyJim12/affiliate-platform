@@ -326,13 +326,17 @@ test('browser purchase requests separate wallet approval and purchase signatures
   } finally { provider.destroy(); }
 });
 
-test('tUSDT balance and linked wallet agree across profile, referrals and wallet after reload', async ({ page }) => {
+test('tUSDT balance and linked wallet agree across profile, referrals and wallet during navigation and after reload', async ({ page }) => {
   test.setTimeout(90_000);
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (/hydration/i.test(message.text())) errors.push(message.text()); });
   const provider = rpc(), wallet = Wallet.createRandom().connect(provider);
   try {
     await fund(wallet, provider);
     await injectWallets(page, wallet, provider);
-    await page.goto('/dashboard');
+    await page.goto('/referrals');
+    await page.locator('.sidebar-nav a[href="/wallet"]').click();
     await page.getByRole('button', { name: 'Sign in', exact: true }).first().click();
     await page.getByRole('button', { name: 'Rabby', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -340,7 +344,14 @@ test('tUSDT balance and linked wallet agree across profile, referrals and wallet
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
       for (const path of ['/referrals', '/wallet']) {
-        await page.goto(path);
+        const approvals = await page.evaluate(() => (window as any).walletCalls.filter((call: { method: string }) =>
+          ['eth_requestAccounts', 'personal_sign', 'eth_sendTransaction', 'wallet_switchEthereumChain'].includes(call.method)));
+        const navigation = page.getByRole('button', { name: 'Open navigation', exact: true });
+        if (await navigation.isVisible()) await navigation.click();
+        await page.locator(`.sidebar-nav a[href="${path}"]`).click();
+        await expect(page).toHaveURL(origin + path);
+        await expect(page.locator('.profile-menu-trigger')).toBeVisible();
+        await expect(page.locator('.dashboard-topbar .topbar-wallet')).toHaveCount(0);
         await expect(page.getByTestId('connected-wallet-address')).toHaveText(wallet.address);
         await expect(page.getByTestId('account-wallet-balance')).toHaveText('100.00 tUSDT');
         await expect(page.getByTestId('profile-usdt-balance')).toHaveText('100.00 tUSDT');
@@ -353,9 +364,16 @@ test('tUSDT balance and linked wallet agree across profile, referrals and wallet
         await expect(page.getByRole('menu').getByTestId('account-wallet-balance')).toHaveText('100.00 tUSDT');
         await page.keyboard.press('Escape');
         const calls = await page.evaluate(() => (window as any).walletCalls as { name: string; method: string }[]);
-        expect(calls.filter(call => ['eth_requestAccounts', 'personal_sign', 'eth_sendTransaction', 'wallet_switchEthereumChain'].includes(call.method))).toEqual([]);
-        expect(calls.some(call => call.name === 'Rabby' && call.method === 'eth_accounts')).toBe(true);
+        expect(calls.filter(call => ['eth_requestAccounts', 'personal_sign', 'eth_sendTransaction', 'wallet_switchEthereumChain'].includes(call.method))).toEqual(approvals);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.reload();
+        await expect(page.getByTestId('connected-wallet-address')).toHaveText(wallet.address);
+        await expect(page.getByTestId('profile-usdt-balance')).toHaveText('100.00 tUSDT');
+        if (path === '/wallet') await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
+        else await expect(page.getByRole('button', { name: /Buy level 1/ })).toBeEnabled();
+        const restoredCalls = await page.evaluate(() => (window as any).walletCalls as { name: string; method: string }[]);
+        expect(restoredCalls.filter(call => ['eth_requestAccounts', 'personal_sign', 'eth_sendTransaction', 'wallet_switchEthereumChain'].includes(call.method))).toEqual([]);
+        expect(restoredCalls.some(call => call.name === 'Rabby' && call.method === 'eth_accounts')).toBe(true);
         await page.screenshot({ path: `.data/shared-wallet-${path.slice(1)}-${width}.png`, fullPage: true, animations: 'disabled' });
       }
     }
@@ -369,5 +387,81 @@ test('tUSDT balance and linked wallet agree across profile, referrals and wallet
     await expect(page.getByTestId('profile-usdt-balance')).toHaveText('100.00 tUSDT');
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Rabby', exact: true })).toBeVisible();
+    expect(errors).toEqual([]);
   } finally { provider.destroy(); }
+});
+
+test('an existing wallet session replaces a guest-rendered referral or wallet page without refreshing', async ({ page }) => {
+  test.setTimeout(90_000);
+  const provider = rpc(), wallet = Wallet.createRandom().connect(provider);
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (/hydration/i.test(message.text())) errors.push(message.text()); });
+  try {
+    const user = await login(page.request, wallet);
+    await fund(wallet, provider);
+    await injectWallets(page, wallet, provider);
+    // Cross-site entries can omit a Strict cookie from the document request
+    // while subsequent same-site API requests still have a valid session.
+    await page.route(/\/(?:referrals|wallet)(?:\?.*)?$/, async route => {
+      if (!route.request().isNavigationRequest()) return route.fallback();
+      const headers = route.request().headers();
+      headers.cookie = (headers.cookie || '').split(';').filter(cookie => !cookie.trim().startsWith('loop_session=')).join(';');
+      const response = await route.fetch({ headers });
+      expect(await response.text()).not.toContain(user.username);
+      await route.fulfill({ response });
+    });
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const path of ['/referrals', '/wallet']) {
+        await page.goto(path);
+        await expect(page.getByRole('button', { name: `Profile menu for ${user.username}`, exact: true })).toBeVisible();
+        await expect(page.locator('.dashboard-topbar .topbar-wallet')).toHaveCount(0);
+        await expect(page.getByTestId('connected-wallet-address')).toHaveText(wallet.address);
+        await expect(page.getByTestId('account-wallet-balance')).toHaveText('100.00 tUSDT');
+        const nextPath = path === '/referrals' ? '/wallet' : '/referrals';
+        const navigation = page.getByRole('button', { name: 'Open navigation', exact: true });
+        if (await navigation.isVisible()) await navigation.click();
+        await page.locator(`.sidebar-nav a[href="${nextPath}"]`).click();
+        await expect(page).toHaveURL(origin + nextPath);
+        const scope = nextPath === '/wallet' ? page.getByTestId('connected-wallet-panel') : page.getByTestId('referral-wallet-summary');
+        await expect(scope).toBeVisible();
+        await expect(scope.getByTestId('connected-wallet-address')).toHaveText(wallet.address);
+        const calls = await page.evaluate(() => (window as any).walletCalls as { method: string }[]);
+        expect(calls.filter(call => ['eth_requestAccounts', 'personal_sign', 'eth_sendTransaction', 'wallet_switchEthereumChain'].includes(call.method))).toEqual([]);
+      }
+    }
+    expect(errors).toEqual([]);
+  } finally { provider.destroy(); }
+});
+
+test('a delayed guest session read does not replace a completed wallet sign-in', async ({ page }) => {
+  test.setTimeout(90_000);
+  const provider = rpc(), wallet = Wallet.createRandom().connect(provider);
+  let releaseSession!: () => void, sessionRead!: () => void;
+  const released = new Promise<void>(resolve => { releaseSession = resolve; });
+  const started = new Promise<void>(resolve => { sessionRead = resolve; });
+  try {
+    await fund(wallet, provider);
+    await injectWallets(page, wallet, provider);
+    await page.route('**/api/auth/session', async route => {
+      const response = await route.fetch();
+      expect((await response.json()).user).toBeNull();
+      sessionRead();
+      await released;
+      await route.fulfill({ response });
+    }, { times: 1 });
+    await page.goto('/dashboard');
+    await started;
+    await page.getByRole('button', { name: 'Sign in', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Rabby', exact: true }).click();
+    await expect(page.getByTestId('profile-usdt-balance')).toHaveText('100.00 tUSDT');
+    const finished = page.waitForEvent('requestfinished', request => request.url().endsWith('/api/auth/session'));
+    releaseSession();
+    await finished;
+    await page.locator('.sidebar-nav a[href="/wallet"]').click();
+    await expect(page.getByTestId('connected-wallet-panel').getByTestId('connected-wallet-address')).toHaveText(wallet.address);
+    await expect(page.locator('.profile-menu-trigger')).toBeVisible();
+    await expect(page.locator('.dashboard-topbar .topbar-wallet')).toHaveCount(0);
+  } finally { releaseSession(); provider.destroy(); }
 });

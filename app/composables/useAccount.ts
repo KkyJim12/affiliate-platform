@@ -18,11 +18,14 @@ export function useAccount() {
   }
 
   async function restoreSession() {
+    const account = user.value;
     try {
       const result = await request<{ user: Account | null }>("/api/auth/session");
+      if (user.value !== account) return;
       user.value = result.user;
       sessionError.value = "";
     } catch {
+      if (user.value !== account) return;
       sessionError.value = "Your account could not be loaded. Please refresh to try again.";
     }
   }
