@@ -47,7 +47,7 @@ test("referral activation charges exactly once and sponsor links enforce ownersh
         expect(purchases.map(response => response.status())).toEqual([200, 200]);
         const activated = await purchases[0]!.json();
         const code = activated.program.code;
-        expect(code).toMatch(/^UNXO-[A-F0-9]{8}$/);
+        expect(code).toMatch(/^[1-9][0-9]*$/);
         expect(code).not.toBe(data.owner.reservedCode);
         expect(activated.user.referralCode).toBe(code);
         expect(activated.wallet.available).toBe(15);
@@ -153,7 +153,7 @@ test("members buy a referral code, connect a sponsor, and retain access in Thai 
     await page.getByRole("button", { name: "Pay 10.00 USDT & activate", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     const code = (await page.getByTestId("referral-code").textContent())!;
-    expect(code).toMatch(/^UNXO-/);
+    expect(code).toMatch(/^[1-9][0-9]*$/);
     await page.reload();
     await expect(page.getByTestId("referral-code")).toHaveText(code);
     await page.goto("/dashboard?view=wallet");
@@ -171,7 +171,7 @@ test("members buy a referral code, connect a sponsor, and retain access in Thai 
     await page.getByRole("button", { name: "Sign in", exact: true }).first().click();
     await page.getByRole("button", { name: "Create account", exact: true }).click();
     await expect(page.locator("#sponsor-code")).toHaveValue(code);
-    await expect(page.locator("#sponsor-code")).toHaveAttribute("placeholder", "UNXO-XXXXXXXX");
+    await expect(page.locator("#sponsor-code")).toHaveAttribute("placeholder", "e.g. 1");
     await page.getByRole("button", { name: "Close dialog", exact: true }).click();
     await post(page.request, "/api/auth/login", { username: data.other.username, password });
     await page.goto(`/referrals?ref=${code.replace(/^UNXO-/, "LOOP-")}`);

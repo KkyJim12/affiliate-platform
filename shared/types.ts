@@ -1,5 +1,6 @@
 export interface Account {
   id: string;
+  memberId: string;
   username: string;
   referralCode: string | null;
   sponsorCode: string | null;

@@ -29,6 +29,7 @@ rate limited.
 | POST | `/api/wallet/deposit` | Submit a funding request; does not credit the balance |
 | POST | `/api/wallet/transfer` | Password-confirmed transfer to another active member |
 | GET | `/api/referrals` | Own direct members and referral tree |
+| GET | `/api/referrals/tree?id=1&path=01&levels=3` | Public binary placement tree by numeric member ID; no session required |
 | GET | `/api/referrals/program` | Own activation status, code and sponsor |
 | POST | `/api/referrals/activate` | Pay the one-time 10 USDT activation fee |
 | POST | `/api/referrals/upgrade` | Purchase the next level, through level 15 |
@@ -187,18 +188,31 @@ Activation request:
 Sponsor request:
 
 ```json
-{"code":"UNXO-XXXXXXXX"}
+{"code":"1"}
 ```
 
 Both return `{ user, wallet, program }`. Activation debits exactly 10 USDT of
-available funds, records one `referral_purchase`, and generates the code in one
+available funds, records one `referral_purchase`, and activates the member's numeric ID in one
 transaction. An already activated account returns the existing activation without
 another charge, including retries with a different request key. Sponsor linking
 is free, can happen before activation, and cannot replace an established sponsor.
 Own codes, unavailable/suspended sponsors, and cycles at any depth are rejected.
 
-Referral codes use the `UNXO-` prefix. Existing `LOOP-` codes are migrated with
-their suffix preserved, and previously shared `LOOP-` invites are still accepted.
+Member IDs are decimal strings starting at `1`, assigned consecutively at
+registration. Account responses include `memberId` even before activation;
+`referralCode` is that same ID after activation and otherwise `null`. Internal
+`user.id` UUIDs remain unchanged. Previously shared `UNXO-` and `LOOP-` invites
+continue to resolve to the same account through aliases.
+
+`GET /api/referrals/tree?id=1` is public. It returns `root`, `path`, `maxDepth: 15`,
+`visibleDepth`, sparse `members` with numeric `id`, `username`, binary `path`, and
+counts/capacities for all 15 descendant `levels`. The client fills missing
+positions with empty boxes. `path` contains at most 15 zero/one digits (left/right);
+empty branches are valid. `levels` defaults to 3 and accepts 1–5, clamped at the
+15-level boundary. Invalid parameters return 400; an unknown numeric ID returns
+404. No wallet data, internal UUIDs, timestamps, account status or credentials are
+included. Binary placement is breadth first under the original sponsor and is
+independent of commission ancestry.
 
 Upgrade request:
 

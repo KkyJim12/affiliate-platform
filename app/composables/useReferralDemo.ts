@@ -74,7 +74,7 @@ export const demoReferrals = [
 ];
 export function useReferralDemo() {
   const config = useRuntimeConfig();
-  const referralCode = "UNXO-BEN24";
+  const referralCode = "1";
   const appliedCode = useState("demo-applied-code", () => "");
   const referralLink = computed(
     () =>

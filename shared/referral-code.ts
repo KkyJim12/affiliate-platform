@@ -3,5 +3,10 @@ export function normalizeReferralCode(code: string) {
 }
 
 export function isReferralCode(code: string) {
-  return /^UNXO-[A-Z0-9]{8}$/.test(normalizeReferralCode(code));
+  const normalized = normalizeReferralCode(code);
+  return isMemberId(normalized) || /^UNXO-[A-Z0-9]{8}$/.test(normalized);
+}
+
+export function isMemberId(value: string) {
+  return /^[1-9][0-9]{0,15}$/.test(value) && Number.isSafeInteger(Number(value));
 }

@@ -66,7 +66,7 @@ Landing page Launch App links open the dashboard. Invite-code fields remain visi
 
 - Usernames are case-insensitive, 3–24 characters, beginning with a letter. Passwords are 12–128 characters, salted and hashed with scrypt on the server.
 - Sessions use random tokens in HttpOnly, SameSite=Strict cookies with a seven-day expiry. Only token hashes are stored. HTTPS requests receive Secure cookies. Mutating requests require a matching Origin; authentication and wallet writes are rate limited.
-- Each registration atomically creates a user, zero-balance ledger wallet and password-encrypted Polygon Amoy wallet. Personal referral codes are generated after a confirmed level 1 contract purchase using the configured Amoy token. Only activated codes from active accounts can establish a sponsor, at registration or later on the referral page. Account, referral, and wallet APIs resolve ownership from the session.
+- Each registration atomically creates a user, zero-balance ledger wallet and password-encrypted Polygon Amoy wallet. Numeric member IDs are assigned at registration and become eligible referral codes after a confirmed level 1 contract purchase using the configured Amoy token. Only activated codes from active accounts can establish a sponsor, at registration or later on the referral page. Account, referral, and wallet APIs resolve ownership from the session.
 - PostgreSQL persists accounts, hashed credentials, sessions, wallet balances, and transaction records. Set `DATABASE_URL`; there is no SQLite fallback. Use the Node server build with a reachable PostgreSQL database; static generation cannot serve the account APIs.
 - Money is stored as BIGINT integer millionths of USDT with nonnegative, safe-integer balance constraints. Historical internal transfers verify the sender's password and atomically debit/credit the two wallets with matching ledger entries. Wallet row locks use consistent ordering to protect concurrent transfers. Request keys prevent duplicate transfers; insufficient balances and self-transfers are rejected. Contract purchases use signed transactions, receipt verification and a durable transaction outbox.
 - Historical funding requests create pending records and never increase the available balance. Only an authenticated administrator can credit a request after confirming receipt and recording a unique settlement reference. General funding settlement and withdrawals remain separate from automatic referral contract payments. Do not send funds to an internal wallet ID; it is not a blockchain address.
@@ -149,11 +149,28 @@ Set the owner and initial fee recipient in `.env` before deployment. Admin Setti
 
 The referrals page at `/referrals` (also `/referral` or `/dashboard?view=referrals`) includes activation, current level, sequential upgrades, code/link sharing, a distribution summary, and sponsor linking. Purchases require the connected wallet to sign approval and payment; the contract transfers all allocations atomically, and the backend mirrors confirmed receipts. Consistent wallet lock ordering prevents transfer deadlocks. Request keys and unique user/level records prevent duplicate charges and commissions. Accounts with no sponsor can enter an activated code for free; an established sponsor cannot be changed, and self-referrals, suspended sponsors, and cycles at any depth are rejected. Existing sponsor relationships are preserved; older unpaid codes require activation before they can accept new referrals. Registration and funding alone do not purchase a level or place binary matrix positions. The rank explorer remains a projection, separate from paid account levels.
 
-The referral network switches between list and tree views. The tree follows actual sponsor relationships across up to 15 levels (first 500 members), with zoom, level controls, and a self-contained SVG image download. Search and status filters preserve ancestor branches for context; matching descendants beyond the selected level limit are revealed automatically. The `layout=tree` query parameter preserves the selected view on refresh. Referral genealogy and binary matrix placement remain separate.
+Public member IDs are consecutive numbers (`1`, `2`, `3`, …), assigned atomically
+at registration and retained through activation and upgrades. The next startup
+migrates existing accounts in registration order while preserving their internal
+UUIDs, sponsor links, wallets and history. Previously shared `UNXO-` and `LOOP-`
+invites still resolve through aliases. An ID becomes an eligible invite after
+the existing level 1 activation requirement is met.
 
-Referral codes use `UNXO-` followed by eight characters. The next app startup
-migrates existing `LOOP-` codes while preserving their suffixes. Previously
-shared `LOOP-` invites still resolve to the same sponsor.
+Anyone can open `/search` (also `/tree`), enter an ID, and view that member's
+binary placement tree without signing in. Each position has two children across
+15 descendant levels, including empty boxes that display the ID and username
+as members register. New referrals take the first open position under their
+sponsor, breadth first and left to right. Concurrent registrations cannot claim
+the same position. Overview and the signed-in My referrals tree use this same
+stored structure. Trees display 3–5 levels at a time; selecting any occupied or
+empty box, or a level indicator, explores the remaining levels without rendering
+all 65,534 descendant boxes at once. Public responses expose only numeric IDs,
+usernames, positions and level counts.
+
+The My referrals list and the Network explorer retain sponsor genealogy,
+including the existing 500-member limit and search/status filters. Commission
+ancestry continues to follow original sponsor links rather than binary spillover.
+The `layout=tree` and `layout=list` parameters preserve the selected view.
 
 ## Explorer
 

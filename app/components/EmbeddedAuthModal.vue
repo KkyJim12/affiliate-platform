@@ -69,7 +69,7 @@ async function submit() {
           <input id="confirm-password" v-model="confirmation" class="auth-input" type="password" autocomplete="new-password" :placeholder="t('ui.enter_your_password_again')" required minlength="12" maxlength="128" :disabled="loading" />
         </template>
         <label for="sponsor-code">{{ t('ui.invite_code') }} <span>{{ t('ui.optional') }}</span></label>
-        <input id="sponsor-code" v-model="sponsorCode" class="auth-input" placeholder="UNXO-XXXXXXXX" maxlength="24" :disabled="loading" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+        <input id="sponsor-code" v-model="sponsorCode" class="auth-input" :placeholder="t('publicTree.placeholder')" maxlength="24" :disabled="loading" autocomplete="off" autocapitalize="characters" spellcheck="false" />
         <p v-if="error" class="auth-error" role="alert">{{ tr(error) }}</p>
         <button class="button button-orange auth-wallet-button" type="submit" :disabled="loading"><AppIcon v-if="loading" name="LoaderCircle" class="auth-loading" :size="17" />{{ loading ? t('ui.please_wait') : mode === 'login' ? t('ui.sign_in_to_loop') : t('ui.create_account_wallet') }}<AppIcon v-if="!loading" name="ArrowRight" :size="17" /></button>
       </form>

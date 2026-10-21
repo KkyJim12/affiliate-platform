@@ -30,7 +30,7 @@ async function migrateAccount() {
       <div class="wallet-auth-heading"><h2>{{ t('connected.connectTitle') }}</h2><p>{{ t('connected.connectHint') }}</p></div>
       <WalletConnector purpose="login" :sponsor-code="sponsorCode" :show-heading="false" @connected="signedIn" />
       <div class="wallet-invite is-open">
-        <div id="wallet-invite-field" class="wallet-invite-field"><label for="wallet-invite"><AppIcon name="Gift" :size="16" />{{ t('ui.invite_code') }} <span>{{ t('ui.optional') }}</span></label><input id="wallet-invite" v-model="sponsorCode" class="auth-input" maxlength="24" placeholder="UNXO-XXXXXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" /></div>
+        <div id="wallet-invite-field" class="wallet-invite-field"><label for="wallet-invite"><AppIcon name="Gift" :size="16" />{{ t('ui.invite_code') }} <span>{{ t('ui.optional') }}</span></label><input id="wallet-invite" v-model="sponsorCode" class="auth-input" maxlength="24" :placeholder="t('publicTree.placeholder')" autocomplete="off" autocapitalize="characters" spellcheck="false" /></div>
       </div>
       <div class="wallet-auth-security"><span class="wallet-auth-security-icon"><AppIcon name="ShieldCheck" :size="19" /></span><p><strong>{{ t('connected.yourWalletYourKeys') }}</strong><span>{{ t('connected.signatureOnly') }}</span></p></div>
       <button v-if="credentialsEnabled" type="button" class="text-action wallet-legacy-toggle" :aria-expanded="legacy" @click="legacy = !legacy">{{ t('connected.existingAccount') }}</button>

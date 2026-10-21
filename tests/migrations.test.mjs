@@ -43,17 +43,59 @@ test("PostgreSQL migrations are idempotent and enforce exact money, ownership an
 }));
 
 test("existing referral codes migrate to UNXO while preserving suffixes and sponsor relationships", () => isolated(async db => {
+  const unxoSources = sources.filter(item => item.name < "0010_");
   const previous = sources.filter(item => item.name < "0009_unxo_referral_codes.sql");
   await migrate(db.pool, previous);
   await db.execute(`INSERT INTO users VALUES
     ('sponsor', 'sponsor', 'hash', 'LOOP-1234ABCD', NULL, '2026-10-18'),
     ('member', 'member', 'hash', 'UNASSIGNED-member', 'sponsor', '2026-10-18'),
     ('current', 'current', 'hash', 'UNXO-ABCDEF12', NULL, '2026-10-18')`);
-  assert.deepEqual(await migrate(db.pool, sources), sources.filter(source => source.name >= "0009_").map(source => source.name));
+  assert.deepEqual(await migrate(db.pool, unxoSources), unxoSources.filter(source => source.name >= "0009_").map(source => source.name));
   assert.equal((await db.one("SELECT referral_code FROM users WHERE id = 'sponsor'")).referral_code, "UNXO-1234ABCD");
   assert.deepEqual(await db.one("SELECT referral_code, sponsor_id FROM users WHERE id = 'member'"), { referral_code: "UNASSIGNED-member", sponsor_id: "sponsor" });
   assert.equal((await db.one("SELECT referral_code FROM users WHERE id = 'current'")).referral_code, "UNXO-ABCDEF12");
-  assert.deepEqual(await migrate(db.pool, sources), []);
+  assert.deepEqual(await migrate(db.pool, unxoSources), []);
+}));
+
+test("numeric referral migration preserves accounts and legacy invites, and allocates consecutive IDs transactionally", () => isolated(async db => {
+  await migrate(db.pool, sources.filter(item => item.name < "0012_"));
+  await db.execute(`INSERT INTO users VALUES
+    ('a', 'first', 'hash', 'UNXO-1234ABCD', NULL, '2026-10-17'),
+    ('b', 'second', 'hash', 'UNASSIGNED-b', 'a', '2026-10-18')`);
+  await migrate(db.pool, sources);
+  assert.deepEqual(await db.all("SELECT id, referral_code, sponsor_id FROM users ORDER BY referral_code::BIGINT"), [
+    { id: 'a', referral_code: '1', sponsor_id: null }, { id: 'b', referral_code: '2', sponsor_id: 'a' },
+  ]);
+  assert.equal((await db.one("SELECT user_id FROM referral_code_aliases WHERE code = 'UNXO-1234ABCD'")).user_id, 'a');
+  await assert.rejects(db.transaction(async () => {
+    await db.execute("INSERT INTO users VALUES ('failed', 'failed', 'hash', 'UNASSIGNED-failed', NULL, '2026-10-19')");
+    throw new Error('rollback registration');
+  }), /rollback registration/);
+  await Promise.all(Array.from({ length: 12 }, (_, i) => db.execute(
+    "INSERT INTO users VALUES ($1,$1,'hash',$1,NULL,'2026-10-19')", `concurrent_${i}`)));
+  assert.deepEqual((await db.all("SELECT referral_code::INTEGER AS id FROM users ORDER BY id")).map(row => row.id), Array.from({ length: 14 }, (_, i) => i + 1));
+  assert.equal((await db.one("SELECT last_id FROM referral_id_counter")).last_id, 14);
+  assert.equal(await db.one("SELECT id FROM users WHERE id = 'failed'"), undefined);
+}));
+
+test("binary placements fill breadth first with two slots, survive rollback and attach existing branches without cycles", () => isolated(async db => {
+  await migrate(db.pool, sources);
+  const insert = (id, sponsor = null) => db.execute("INSERT INTO users VALUES ($1,$1,'hash',$1,$2,'2026-10-19')", id, sponsor);
+  await insert('root');
+  await Promise.all(['a', 'b', 'c', 'd', 'e', 'f'].map(id => insert(id, 'root')));
+  const placements = await db.all(`SELECT p.parent_id, p.slot, u.referral_code::INTEGER AS member FROM referral_placements p
+    JOIN users u ON u.id = p.user_id ORDER BY member`);
+  const byNumber = await db.all("SELECT id FROM users ORDER BY referral_code::BIGINT");
+  assert.deepEqual(placements.map(row => [row.parent_id, row.slot]), [
+    ['root', 0], ['root', 1], [byNumber[1].id, 0], [byNumber[1].id, 1], [byNumber[2].id, 0], [byNumber[2].id, 1],
+  ]);
+  await insert('late_root');
+  await db.execute("UPDATE users SET sponsor_id = 'late_root' WHERE id = 'root'");
+  assert.deepEqual(await db.one("SELECT parent_id, slot FROM referral_placements WHERE user_id = 'root'"), { parent_id: 'late_root', slot: 0 });
+  await assert.rejects(db.execute("UPDATE users SET sponsor_id = 'a' WHERE id = 'late_root'"), { code: '23514' });
+  assert.equal((await db.one("SELECT sponsor_id FROM users WHERE id = 'late_root'")).sponsor_id, null);
+  await assert.rejects(db.transaction(async () => { await insert('rollback', 'root'); throw new Error('rollback'); }), /rollback/);
+  assert.equal(await db.one("SELECT user_id FROM referral_placements WHERE user_id = 'rollback'"), undefined);
 }));
 
 test("Amoy wallet schema enforces owner, address, key encryption and network constraints", () => isolated(async db => {
@@ -215,7 +257,8 @@ test("SQLite import preserves accounts, sponsors, balances, sessions, ledger, se
     await migrate(db.pool, sources);
     const counts = await importSqlite(path, db);
     assert.equal(counts.users, 2);
-    assert.equal((await db.one("SELECT referral_code FROM users WHERE id = 'admin'")).referral_code, "UNXO-1234ABCD");
+    assert.equal((await db.one("SELECT referral_code FROM users WHERE id = 'admin'")).referral_code, "2");
+    assert.equal((await db.one("SELECT user_id FROM referral_code_aliases WHERE code = 'UNXO-1234ABCD'")).user_id, "admin");
     assert.deepEqual(await db.one("SELECT sponsor_id, password_hash FROM users WHERE id = 'member'"), { sponsor_id: "admin", password_hash: "original-member-hash" });
     assert.deepEqual(await db.one("SELECT available, reserved FROM wallets WHERE id = 'w'"), { available: 25000000, reserved: 3000000 });
     assert.equal((await db.one("SELECT token_hash FROM sessions")).token_hash, "original-token-hash");

@@ -30,7 +30,10 @@ export default defineEventHandler(async (event) => {
       SELECT id, sponsor_id FROM users WHERE id = $1
       UNION SELECT u.id, u.sponsor_id FROM users u JOIN ancestors a ON u.id = a.sponsor_id
     ) SELECT id FROM ancestors WHERE id = $2`, sponsor.id, user.id);
-        if (cycle)
+        const placementCycle = await db().one(`WITH RECURSIVE ancestors(id) AS (
+          SELECT $1::TEXT UNION SELECT p.parent_id FROM referral_placements p JOIN ancestors a ON p.user_id = a.id
+        ) SELECT id FROM ancestors WHERE id = $2`, sponsor.id, user.id);
+        if (cycle || placementCycle)
             throw createError({ statusCode: 400, statusMessage: "This referral would create a circular network. Choose another sponsor." });
         await db().execute("UPDATE users SET sponsor_id = $1 WHERE id = $2 AND sponsor_id IS NULL", sponsor.id, user.id);
     });

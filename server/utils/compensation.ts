@@ -2,7 +2,6 @@ import { createError } from "h3";
 import { ledgerScale, levelPrice, maxReferralLevel, purchaseShares, shareRecipientDepth } from "../../shared/compensation";
 import { db, transaction } from "./database";
 import { randomUUID } from "./auth";
-import { newReferralCode } from "./referral";
 import { walletRow } from "./wallet";
 import { referralPaymentMode } from "./referral-chain";
 import { requireEmbeddedWalletMode } from "./wallet-mode";
@@ -58,7 +57,6 @@ export async function buyReferralLevel(userId: string, level: number, requestKey
     await db().execute(`INSERT INTO referral_purchases (id, user_id, level, amount, transaction_id, fee_recipient_address, created_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7)`, id, userId, level, price, transactionId, settings.fee_recipient_address, timestamp);
     if (level === 1) {
-      await db().execute("UPDATE users SET referral_code = $1 WHERE id = $2", await newReferralCode(), userId);
       await db().execute("INSERT INTO referral_activations (user_id, transaction_id, created_at) VALUES ($1, $2, $3)", userId, transactionId, timestamp);
     }
     for (const share of purchaseShares(level)) {

@@ -146,7 +146,7 @@ async function connectSponsor() {
           <p>{{ t('referral.sponsorHint') }}</p>
           <form class="account-form referral-sponsor-form" @submit.prevent="connectSponsor">
             <label for="referral-sponsor-code">{{ t('referral.enterCode') }}</label>
-            <input id="referral-sponsor-code" v-model="code" class="auth-input" placeholder="UNXO-XXXXXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" required :disabled="busy" />
+            <input id="referral-sponsor-code" v-model="code" class="auth-input" :placeholder="t('publicTree.placeholder')" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" required :disabled="busy" />
             <p v-if="actionError" class="auth-error" role="alert">{{ tr(actionError) }}</p>
             <button class="button button-outline" type="submit" :disabled="busy"><AppIcon v-if="busy" name="LoaderCircle" class="auth-loading" :size="16" />{{ preview ? t('ui.sign_in') : t('referral.useCode') }}<AppIcon v-if="!busy" name="ArrowRight" :size="16" /></button>
           </form>

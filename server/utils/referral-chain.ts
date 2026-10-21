@@ -7,7 +7,7 @@ import { ledgerScale, levelPrice } from "../../shared/compensation";
 import { polygonTestnet } from "../../shared/evm-wallet";
 import { db, transaction } from "./database";
 import { randomUUID } from "./auth";
-import { newReferralCode, referralProgram } from "./referral";
+import { referralProgram } from "./referral";
 import { audit } from "./admin";
 import { evmWalletFor } from "./evm-wallet";
 import { externalWalletMode } from "./wallet-mode";
@@ -167,7 +167,6 @@ export async function reconcileChainPurchase(purchase: ChainPurchaseRow): Promis
           allocation.kind === "platform" ? "platform_fee" : allocation.recipientDepth ? allocation.redirected ? "highest_upline" : "upline" : purchase.payload.recipients[allocation.depth - 1]!.reason, allocation.logIndex);
       }
       if (!await db().one("SELECT user_id FROM referral_activations WHERE user_id = $1", purchase.user_id)) {
-        await db().execute("UPDATE users SET referral_code = $1 WHERE id = $2", await newReferralCode(), purchase.user_id);
         await db().execute("INSERT INTO referral_activations (user_id, chain_purchase_id, created_at) VALUES ($1,$2,$3)", purchase.user_id, purchase.id, new Date().toISOString());
       }
     }

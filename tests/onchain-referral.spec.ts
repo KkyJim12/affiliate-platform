@@ -69,7 +69,7 @@ test('real contract purchases debit tokens, distribute automatically, deduplicat
     const key = randomUUID(), purchase = await buy(root, 1, key); await confirmed(root, purchase.id);
     const retry = await buy(root, 1, key); expect(retry.id).toBe(purchase.id);
     const program = await (await root.get('/api/referrals/program')).json();
-    expect(program.currentLevel).toBe(1); expect(program.code).toMatch(/^UNXO-/);
+    expect(program.currentLevel).toBe(1); expect(program.code).toMatch(/^[1-9][0-9]*$/);
     const child = await register(member, program.code); await fund(child.wallet.address);
     const second = await buy(member); await confirmed(member, second.id);
     const token = new Contract(process.env.NUXT_EVM_TOKEN_ADDRESS!, tokenAbi, rpc);
@@ -150,7 +150,7 @@ test('members buy and upgrade on-chain with English/Thai and responsive layouts'
   await fund(account.wallet.address, 0n);
   await page.getByLabel('Confirm with your password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Pay 10.00 tUSDT on-chain', exact: true }).click();
-  await expect(page.getByTestId('referral-code')).toHaveText(/^UNXO-/, { timeout: 30000 });
+  await expect(page.getByTestId('referral-code')).toHaveText(/^[1-9][0-9]*$/, { timeout: 30000 });
   await expect(page.getByTestId('referral-level')).toHaveText('Level 1 / 15');
   await fund(account.wallet.address, 0n);
   await page.getByRole('button', { name: 'Refresh blockchain status', exact: true }).click();

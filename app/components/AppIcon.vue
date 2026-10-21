@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   ArrowUpRight,
+  House,
   ArrowRight,
   ArrowLeft,
   ChevronDown,
@@ -51,6 +52,7 @@ import {
 } from "@lucide/vue";
 const icons = {
   ArrowUpRight,
+  House,
   ArrowRight,
   ArrowLeft,
   ChevronDown,

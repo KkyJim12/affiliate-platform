@@ -38,13 +38,14 @@ export async function rateLimit(event: H3Event, scope: string, limit = 12) {
     }
 }
 export async function accountFor(user: UserRow): Promise<Account> {
+    const identity = await db().one("SELECT referral_code FROM users WHERE id = $1", user.id);
     const activation = await db().one("SELECT user_id FROM referral_activations WHERE user_id = $1", user.id);
     const sponsor = user.sponsor_id
         ? await db().one("SELECT referral_code FROM users WHERE id = $1", user.sponsor_id) as {
             referral_code: string;
         } | undefined
         : undefined;
-    return { id: user.id, username: user.username, referralCode: activation ? user.referral_code : null, sponsorCode: sponsor?.referral_code || null, createdAt: user.created_at, role: user.role || "member" };
+    return { id: user.id, memberId: identity!.referral_code, username: user.username, referralCode: activation ? identity!.referral_code : null, sponsorCode: sponsor?.referral_code || null, createdAt: user.created_at, role: user.role || "member" };
 }
 export async function currentUser(event: H3Event): Promise<UserRow | undefined> {
     const token = getCookie(event, cookieName);

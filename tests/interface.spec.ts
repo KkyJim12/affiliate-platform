@@ -85,6 +85,7 @@ test("referral overview, corrected ranks, referrals, and wallet preview on deskt
   await chooseDropdown(page, page.getByLabel(thai.ui.language, { exact: true }), "en");
   await page.getByRole("button", { name: "Use light theme", exact: true }).click();
   await navigate(page, "My referrals");
+  await page.getByRole("button", { name: "List view", exact: true }).click();
   await page.getByLabel("Search referrals").fill("jamie");
   await expect(page.locator("tbody tr")).toHaveCount(1);
   await expect(page.locator("tbody")).toContainText("jamie_chen");
@@ -155,8 +156,9 @@ test("create account and EVM wallet, restore session, and sign back in", async (
   await expect(page.getByTestId("wallet-balance")).toContainText("0.00");
   await navigate(page, "My referrals");
   await page.getByRole("button", { name: "Tree view", exact: true }).click();
-  await expect(page.locator("[data-tree-node]")).toHaveCount(1);
-  await expect(page.locator(".referral-network-image")).toContainText("Your next connection starts this tree.");
+  await expect(page.locator("[data-tree-node]")).toHaveCount(15);
+  await expect(page.locator('[data-empty="true"]')).toHaveCount(14);
+  await expect(page.getByTestId("binary-referral-tree")).toContainText(username);
   await navigate(page, "EVM wallet");
   await expect(page.getByTestId("wallet-balance")).toContainText("0.00");
   const address = (await page.getByTestId("evm-address").textContent())!;

@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import type { ReferralProgram } from "../../shared/referral";
 import { referralPrice } from "../../shared/referral";
 import { ledgerScale, levelPrice, maxReferralLevel } from "../../shared/compensation";
@@ -10,17 +9,12 @@ export async function activeSponsor(code: string) {
     return await db().one(`SELECT u.id, u.username FROM users u
     JOIN referral_activations r ON r.user_id = u.id
     LEFT JOIN user_access a ON a.user_id = u.id
-    WHERE u.referral_code IN ($1, $2) AND COALESCE(a.status, 'active') = 'active'`, code, code.replace(/^UNXO-/, "LOOP-")) as {
+    WHERE (u.referral_code = $1 OR EXISTS (
+      SELECT 1 FROM referral_code_aliases alias WHERE alias.user_id = u.id AND alias.code = $1
+    )) AND COALESCE(a.status, 'active') = 'active'`, code) as {
         id: string;
         username: string;
     } | undefined;
-}
-export async function newReferralCode() {
-    let code: string;
-    do {
-        code = `UNXO-${randomBytes(4).toString("hex").toUpperCase()}`;
-    } while (await db().one("SELECT id FROM users WHERE referral_code IN ($1, $2)", code, code.replace(/^UNXO-/, "LOOP-")));
-    return code;
 }
 export async function referralProgram(userId: string): Promise<ReferralProgram> {
     const row = await db().one(`SELECT CASE WHEN r.user_id IS NOT NULL THEN u.referral_code END AS code,

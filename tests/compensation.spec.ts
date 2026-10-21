@@ -21,7 +21,7 @@ async function fixture(depth: number, balance = 400000) {
       await db.execute("INSERT INTO wallet_transactions VALUES ($1, $2, 'referral_purchase', 10000000, 'completed', 'Historic test activation', $3, $4)", transactionId, walletId, randomUUID(), new Date().toISOString());
       await db.execute('INSERT INTO referral_activations (user_id, transaction_id, created_at) VALUES ($1, $2, $3)', id, transactionId, new Date().toISOString());
     }
-    return { id, username, walletId, code };
+    return { id, username, walletId, code: (await db.one('SELECT referral_code FROM users WHERE id = $1', id))!.referral_code as string };
   };
   try {
     const uplines: Awaited<ReturnType<typeof create>>[] = [];
