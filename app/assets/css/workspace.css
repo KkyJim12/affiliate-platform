@@ -7,6 +7,13 @@
 .overview-tree-panel .inline-link { flex-shrink: 0; }
 .overview-tree-panel .auth-error { padding: 0 22px; }
 .overview-network-grid > * { min-width: 0; }
+.overview-tree-panel > .binary-referral-tree { padding: 0 24px 24px; }
+.member-panel > .binary-referral-tree { padding: 24px; }
+.member-panel .member-identity { max-width: 280px; }
+.member-panel .member-identity strong { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
+.member-panel .table-avatar { flex-shrink: 0; }
+.dashboard-heading > div { min-width: 0; }
+.dashboard-greeting { overflow-wrap: anywhere; }
 .sidebar-nav-divider { flex-shrink: 0; margin: 14px 0 8px; border: 0; border-top: 1px solid var(--border); }
 .referral-wallet-summary { grid-column: 1 / -1; min-width: 0; padding: 24px; }
 .referral-wallet-summary .panel-heading { padding: 0 0 18px; }
@@ -26,4 +33,9 @@
 .wallet-invite-field > label > span { margin-left: auto; }
 .admin-status.confirmed { color: var(--success); background: var(--success-soft); }
 .admin-status.failed { color: var(--danger); background: var(--danger-soft); }
-@media(max-width:650px) { .overview-banner { padding: 22px 18px; } .faq-nav-heading > a, .dashboard-sidebar .faq-subnav > a { font-size: 13px; } }
+@media(max-width:650px) {
+  .overview-banner { padding: 22px 18px; }
+  .overview-tree-panel > .binary-referral-tree { padding: 0 18px 18px; }
+  .member-panel > .binary-referral-tree { padding: 22px 18px 18px; }
+  .faq-nav-heading > a, .dashboard-sidebar .faq-subnav > a { font-size: 13px; }
+}
