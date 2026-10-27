@@ -3,6 +3,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "docs:summary:pdf": "node scripts/generate-doc-summary.mjs",
     "typecheck": "nuxt typecheck",
     "admin:create": "node --env-file-if-exists=.env scripts/create-admin.mjs",
     "test:ui": "node scripts/test-postgres.mjs ui",

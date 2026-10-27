@@ -1,5 +1,9 @@
 # UNXO — matrix and referral workspace
 
+เอกสารระบบฉบับภาษาไทยและภาษาอังกฤษ: [สารบัญ / Documentation index](docs/README.md). Covers the full system, all 52 API routes, installation/operations, fifteen-level prices, payment flows, commission eligibility and implemented conditions. Start with [ภาษาไทย](docs/th/system-guide.md) or [English](docs/en/system-guide.md); see [การจ่ายเงินและเงื่อนไข](docs/th/payments-and-conditions.md) / [Payments and conditions](docs/en/payments-and-conditions.md).
+
+PDF สรุป / Summary PDFs: [ภาษาไทย · 4 หน้า](docs/pdf/UNXO-summary-th.pdf) · [English · 4 pages](docs/pdf/UNXO-summary-en.pdf) · [รวมสองภาษา / Bilingual · 8 pages](docs/pdf/UNXO-summary-bilingual.pdf). Regenerate with `npm run docs:summary:pdf`.
+
 Connected wallets are now the default for members: wallet signatures for login and every on-chain write, with 1% bonuses at each of 15 depths. See [connected wallet setup, existing-account linking and distributor replacement](docs/connected-wallets.md). In-app key management and password-authorized transactions below apply only when `NUXT_PUBLIC_WALLET_MODE=embedded` is explicitly enabled.
 
 Administrators sign in at `/admin/login` with their username and password, including after linking a transaction wallet. Member username/password login is hidden and disabled by default. Set `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true` and restart to enable legacy member login or link an existing account; embedded member login also requires this flag.
@@ -66,7 +70,7 @@ Landing page Launch App links open the dashboard. Invite-code fields remain visi
 
 - Usernames are case-insensitive, 3–24 characters, beginning with a letter. Passwords are 12–128 characters, salted and hashed with scrypt on the server.
 - Sessions use random tokens in HttpOnly, SameSite=Strict cookies with a seven-day expiry. Only token hashes are stored. HTTPS requests receive Secure cookies. Mutating requests require a matching Origin; authentication and wallet writes are rate limited.
-- Each registration atomically creates a user, zero-balance ledger wallet and password-encrypted Polygon Amoy wallet. Numeric member IDs are assigned at registration and become eligible referral codes after a confirmed level 1 contract purchase using the configured Amoy token. Only activated codes from active accounts can establish a sponsor, at registration or later on the referral page. Account, referral, and wallet APIs resolve ownership from the session.
+- Connected-wallet registration atomically creates a user, zero-balance legacy ledger wallet and external wallet link, without generating an embedded private key or usable member password. Explicit embedded registration instead creates a password-encrypted Polygon Amoy wallet. Numeric member IDs are assigned at registration and become eligible referral codes after a confirmed level 1 purchase in the selected payment mode. Only activated codes from active accounts can establish a sponsor, at registration or later on the referral page. Account, referral, and wallet APIs resolve ownership from the session.
 - PostgreSQL persists accounts, hashed credentials, sessions, wallet balances, and transaction records. Set `DATABASE_URL`; there is no SQLite fallback. Use the Node server build with a reachable PostgreSQL database; static generation cannot serve the account APIs.
 - Money is stored as BIGINT integer millionths of USDT with nonnegative, safe-integer balance constraints. Historical internal transfers verify the sender's password and atomically debit/credit the two wallets with matching ledger entries. Wallet row locks use consistent ordering to protect concurrent transfers. Request keys prevent duplicate transfers; insufficient balances and self-transfers are rejected. Contract purchases use signed transactions, receipt verification and a durable transaction outbox.
 - Historical funding requests create pending records and never increase the available balance. Only an authenticated administrator can credit a request after confirming receipt and recording a unique settlement reference. General funding settlement and withdrawals remain separate from automatic referral contract payments. Do not send funds to an internal wallet ID; it is not a blockchain address.
@@ -147,7 +151,7 @@ Every contract activation and upgrade collects and distributes 100% in one on-ch
 
 Set the owner and initial fee recipient in `.env` before deployment. Admin Settings reads the current on-chain recipient and lets its owner submit a signed update. Purchases require configured token/contract addresses and sufficient payment tokens. The app does not check POL balances or require a gas quote for purchases; network fees still apply. New distributions are actual ERC-20 transfers; historical internal-ledger payables remain separate. The default contract mode never silently spends or credits internal balances.
 
-The referrals page at `/referrals` (also `/referral` or `/dashboard?view=referrals`) includes activation, current level, sequential upgrades, code/link sharing, a distribution summary, and sponsor linking. Purchases require the connected wallet to sign approval and payment; the contract transfers all allocations atomically, and the backend mirrors confirmed receipts. Consistent wallet lock ordering prevents transfer deadlocks. Request keys and unique user/level records prevent duplicate charges and commissions. Accounts with no sponsor can enter an activated code for free; an established sponsor cannot be changed, and self-referrals, suspended sponsors, and cycles at any depth are rejected. Existing sponsor relationships are preserved; older unpaid codes require activation before they can accept new referrals. Registration and funding alone do not purchase a level or place binary matrix positions. The rank explorer remains a projection, separate from paid account levels.
+The referrals page at `/referrals` (also `/referral` or `/dashboard?view=referrals`) includes activation, current level, sequential upgrades, code/link sharing, a distribution summary, and sponsor linking. Purchases require the connected wallet to sign approval and payment; the contract transfers all allocations atomically, and the backend mirrors confirmed receipts. Consistent wallet lock ordering prevents transfer deadlocks. Request keys and unique user/level records prevent duplicate charges and commissions. Accounts with no sponsor can enter an activated code for free; an established sponsor cannot be changed, and self-referrals, suspended sponsors, and cycles at any depth are rejected. Existing sponsor relationships are preserved; older unpaid codes require activation before they can accept new referrals. Registration and funding alone do not purchase a level or trigger a commission. The rank explorer remains a projection, separate from paid account levels.
 
 Public member IDs are consecutive numbers (`1`, `2`, `3`, …), assigned atomically
 at registration and retained through activation and upgrades. The next startup
@@ -157,19 +161,18 @@ invites still resolve through aliases. An ID becomes an eligible invite after
 the existing level 1 activation requirement is met.
 
 Anyone can open `/search` (also `/tree`), enter an ID, and view that member's
-binary placement tree without signing in. Each position has two children across
-15 descendant levels, including empty boxes that display the ID and username
-as members register. New referrals take the first open position under their
-sponsor, breadth first and left to right. Concurrent registrations cannot claim
-the same position. Overview and the signed-in My referrals tree use this same
-stored structure. Trees display 3–5 levels at a time; selecting any occupied or
-empty box, or a level indicator, explores the remaining levels without rendering
-all 65,534 descendant boxes at once. Public responses expose only numeric IDs,
-usernames, positions and level counts.
+actual sponsor tree without signing in. All direct referrals stay beneath their
+sponsor, including a third or later child, ordered by registration time and ID.
+Empty previews use two branches. Paths use sibling indices separated by `/`,
+such as `0/2/1`, across at most 15 descendant levels. Overview and My referrals
+use the same endpoint. The UI offers 3, 4, 5 or 15 visible levels with branch
+navigation and viewport rendering; the API accepts `levels=1..15`, default 3.
+Public responses expose numeric IDs, usernames, parent/path links and level counts.
 
-The My referrals list and the Network explorer retain sponsor genealogy,
-including the existing 500-member limit and search/status filters. Commission
-ancestry continues to follow original sponsor links rather than binary spillover.
+The schema retains binary `referral_placements` and registration triggers, but
+the current displayed tree reads `users.sponsor_id`. Commission ancestry also
+follows original sponsor links. The My referrals list and private Network
+explorer retain their 500-member limit and search/status filters.
 The `layout=tree` and `layout=list` parameters preserve the selected view.
 
 ## Explorer

@@ -1,5 +1,7 @@
 # UNXO API
 
+For the complete current inventory of all 52 method/route combinations, access and mode checks, request formats and rate limits, see the [English API reference](en/api-reference.md) or [คู่มือ API ภาษาไทย](th/api-reference.md). The [bilingual documentation index](README.md) also covers payments, conditions and operations. The integration notes below retain additional legacy context.
+
 Connected wallets are now the default for members: wallet signatures for login and every on-chain write, with 1% bonuses at each of 15 depths. See [connected wallet setup, existing-account linking and distributor replacement](connected-wallets.md). In-app key management and password-authorized transactions below apply only when `NUXT_PUBLIC_WALLET_MODE=embedded` is explicitly enabled.
 
 The member and administrator interfaces use the same-origin Nuxt API under `/api`.
@@ -29,7 +31,7 @@ rate limited.
 | POST | `/api/wallet/deposit` | Submit a funding request; does not credit the balance |
 | POST | `/api/wallet/transfer` | Password-confirmed transfer to another active member |
 | GET | `/api/referrals` | Own direct members and referral tree |
-| GET | `/api/referrals/tree?id=1&path=01&levels=3` | Public binary placement tree by numeric member ID; no session required |
+| GET | `/api/referrals/tree?id=1&path=0/1&levels=3` | Public actual sponsor tree by numeric member ID; no session required |
 | GET | `/api/referrals/program` | Own activation status, code and sponsor |
 | POST | `/api/referrals/activate` | Pay the one-time 10 USDT activation fee |
 | POST | `/api/referrals/upgrade` | Purchase the next level, through level 15 |
@@ -65,7 +67,7 @@ Query parameters are `search` (hash or address, case insensitive), `kind` (`all`
 
 ## Polygon Amoy account wallet
 
-Registration atomically creates the user, internal ledger wallet and a random
+In embedded mode, registration atomically creates the user, internal ledger wallet and a random
 Ethers wallet pinned to Polygon Amoy (chain ID `80002`). Existing members and
 administrators get a wallet on their next successful password sign-in. An older
 active session can provision one with `POST /api/wallet/evm`. Existing keys are
@@ -205,14 +207,17 @@ registration. Account responses include `memberId` even before activation;
 continue to resolve to the same account through aliases.
 
 `GET /api/referrals/tree?id=1` is public. It returns `root`, `path`, `maxDepth: 15`,
-`visibleDepth`, sparse `members` with numeric `id`, `username`, binary `path`, and
-counts/capacities for all 15 descendant `levels`. The client fills missing
-positions with empty boxes. `path` contains at most 15 zero/one digits (left/right);
-empty branches are valid. `levels` defaults to 3 and accepts 1–5, clamped at the
+`visibleDepth`, sparse `members` with numeric `id`, `username`, `path`, `parentId`, and
+`{depth,filled}` counts for all 15 descendant `levels`. The client fills missing
+positions with empty boxes. `path` contains at most 15 sibling indices separated
+by `/`, for example `0/2/1`; indices can exceed 1 and empty branches are valid.
+`levels` defaults to 3 and accepts 1–15, clamped at the
 15-level boundary. Invalid parameters return 400; an unknown numeric ID returns
 404. No wallet data, internal UUIDs, timestamps, account status or credentials are
-included. Binary placement is breadth first under the original sponsor and is
-independent of commission ancestry.
+included. The endpoint traverses `users.sponsor_id`, keeping every direct referral
+under the real sponsor, ordered by registration time and ID. Retained binary
+placement tables are not used for this response; commission ancestry also follows
+the original sponsor chain.
 
 Upgrade request:
 
@@ -240,9 +245,11 @@ Every new activation and upgrade atomically debits the buyer and allocates 100%:
 - 5% payable to the configured platform fee address.
 
 Amounts use integer micro-USDT; each bonus is exactly 1% at every price. Each ancestor must have an activated
-referral code, an active account and an internal wallet. Missing/ineligible shares
-become payable to the platform fee address, preserving their kind/depth and reason;
-the system never shifts another ancestor into a missing position.
+referral code, an active account and an internal wallet. Missing/ineligible direct shares
+and bonus gaps below the highest eligible upline become payable to the platform
+fee address, preserving their kind/depth and reason. Trailing bonus depths instead
+credit the highest eligible upline. The system does not move another ancestor
+into a missing direct position.
 
 Admin settings accept `feeRecipientAddress` as a checksummed or lowercase nonzero
 EVM address. Leaving it empty disables new purchases. Each purchase snapshots the
