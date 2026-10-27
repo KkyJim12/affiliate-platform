@@ -1,3 +1,4 @@
+import { createTestAdmin, memberIdFor } from "./member-fixtures";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { openTestDatabase } from "./database";
 import { execFileSync } from "node:child_process";
@@ -9,10 +10,9 @@ const password = "An explorer test password 42!";
 const post = (api: APIRequestContext, path: string, data: object) => api.post(path, { headers: { Origin: origin }, data });
 async function fixture() {
     const suffix = Date.now().toString(36) + randomUUID().slice(0, 3);
-    const adminName = `exa_${suffix}`;
-    execFileSync(process.execPath, ["scripts/create-admin.mjs"], { env: { ...process.env, DATABASE_URL: process.env.TEST_DATABASE_URL, LOOP_ADMIN_USERNAME: adminName, LOOP_ADMIN_PASSWORD: password, NODE_NO_WARNINGS: "1" }, stdio: "pipe" });
+    const adminName = createTestAdmin(password);
     const database = openTestDatabase();
-    const admin = await database.one("SELECT id FROM users WHERE username = $1", adminName) as {
+    const admin = await database.one("SELECT id FROM users WHERE referral_code = $1", adminName) as {
         id: string;
     };
     const hashed = await hashPassword(password);
@@ -21,7 +21,7 @@ async function fixture() {
         const id = randomUUID(), username = `${prefix}_${suffix}`, walletId = `LW-${randomUUID()}`;
         await database.execute("INSERT INTO users VALUES ($1, $2, $3, $4, $5, $6)", id, username, hashed, `UNXO-${randomUUID().slice(0, 8).toUpperCase()}`, sponsor, now);
         await database.execute("INSERT INTO wallets (id, user_id) VALUES ($1, $2)", walletId, id);
-        return { id, username, walletId };
+        return { id, username, walletId, memberId: await memberIdFor(id) };
     };
     const owner = await create("exo");
     const outsider = await create("exz");
@@ -77,15 +77,15 @@ test("explorer APIs enforce network boundaries and wallet ownership with accurat
             expect((await guest.get(`/api/admin/explorer/${part}`)).status()).toBe(401);
         }
         expect((await guest.get("/api/dashboard")).status()).toBe(401);
-        expect((await post(member, "/api/auth/login", { username: data.owner.username, password })).status()).toBe(200);
-        expect((await post(admin, "/api/admin/login", { username: data.adminName, password })).status()).toBe(200);
+        expect((await post(member, "/api/auth/login", { memberId: data.owner.memberId, password })).status()).toBe(200);
+        expect((await post(admin, "/api/admin/login", { memberId: data.adminName, password })).status()).toBe(200);
         const overview = await (await member.get(`/api/dashboard?userId=${data.outsider.id}`)).json();
         expect(overview).toEqual({ commissions: 3.15, directCommissions: 0, bonusCommissions: 0, pendingFunding: 3.25, completedTransfers: 1, referrals: { direct: 1, total: 15, depth: 15, truncated: false } });
         for (const part of ["network", "transactions"])
             expect((await member.get(`/api/admin/explorer/${part}`)).status()).toBe(403);
         const network = await (await member.get("/api/explorer/network")).json();
         expect(network.members).toHaveLength(15);
-        expect(network.root.username).toBe(data.owner.username);
+        expect(network.root.memberId).toBe(data.owner.memberId);
         expect(network.members.at(-1).depth).toBe(15);
         expect(JSON.stringify(network)).not.toContain(data.outsider.username);
         expect(JSON.stringify(network)).not.toContain("password_hash");
@@ -94,15 +94,15 @@ test("explorer APIs enforce network boundaries and wallet ownership with accurat
         const branch = await (await member.get(`/api/explorer/network?root=${data.descendants[0]!.id}`)).json();
         expect(branch.remainingDepth).toBe(14);
         expect(branch.members).toHaveLength(14);
-        const adminBranch = await (await admin.get(`/api/admin/explorer/network?username=${data.descendants[0]!.username}`)).json();
+        const adminBranch = await (await admin.get(`/api/admin/explorer/network?memberId=${data.descendants[0]!.memberId}`)).json();
         expect(adminBranch.members).toHaveLength(15);
         expect(adminBranch.remainingDepth).toBe(15);
         const activity = await (await member.get(`/api/explorer/transactions?userId=${data.outsider.id}&admin=true`)).json();
         expect(activity.total).toBe(19);
         expect(activity.items).toHaveLength(12);
         expect(activity.items.every((item: {
-            username: string;
-        }) => item.username === data.owner.username)).toBe(true);
+            memberId: string;
+        }) => item.memberId === data.owner.memberId)).toBe(true);
         expect(activity.summary).toEqual({ credits: 15.65, debits: 2.5, pending: 3.25 });
         expect((await (await member.get("/api/explorer/transactions?page=2")).json()).items).toHaveLength(7);
         expect((await (await member.get(`/api/explorer/transactions?search=${data.outsiderId}`)).json()).total).toBe(0);
@@ -114,7 +114,7 @@ test("explorer APIs enforce network boundaries and wallet ownership with accurat
         expect(reference.items[0].id).toBe(data.settledId);
         expect((await member.get("/api/explorer/transactions?status=invalid")).status()).toBe(400);
         const global = await (await admin.get(`/api/admin/explorer/transactions?search=${data.outsiderId}`)).json();
-        expect(global.items[0]).toMatchObject({ id: data.outsiderId, username: data.outsider.username, amount: 99 });
+        expect(global.items[0]).toMatchObject({ id: data.outsiderId, memberId: data.outsider.memberId, amount: 99 });
         // Totals must include records older than the wallet's 200-item activity window.
         const database = openTestDatabase();
         try {
@@ -147,7 +147,7 @@ test("member and admin explorers support branch navigation, transaction details,
     page.on("pageerror", error => errors.push(error.message));
     page.on("console", message => { if (message.type() === "warning" && /i18n|hydration/i.test(message.text()))
         errors.push(message.text()); });
-    await post(page.request, "/api/auth/login", { username: data.owner.username, password });
+    await post(page.request, "/api/auth/login", { memberId: data.owner.memberId, password });
     await ready(page, "/dashboard");
     await expect(page.getByTestId("overview-commissions")).toContainText("3.15");
     await expect(page.getByTestId("overview-direct-referrals")).toHaveText("1");
@@ -157,17 +157,17 @@ test("member and admin explorers support branch navigation, transaction details,
     await ready(page, "/explorer?tab=network");
     await expect(page.getByRole("tab", { name: "Network", exact: true })).toHaveAttribute("aria-selected", "true");
     const child = data.descendants[0]!;
-    await page.getByRole("button", { name: `Inspect ${child.username}`, exact: true }).click();
+    await page.getByRole("button", { name: `Inspect ${child.memberId}`, exact: true }).click();
     await page.getByRole("button", { name: "Explore this branch", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`root=${child.id}`));
-    await expect(page.locator('.explorer-panel-heading h2')).toHaveText(`@${child.username}`);
+    await expect(page.locator('.explorer-panel-heading h2')).toHaveText(`ID ${child.memberId}`);
     await page.reload();
     await page.waitForFunction(() => Boolean((document.querySelector("#__nuxt") as HTMLElement & {
         __vue_app__?: unknown;
     })?.__vue_app__));
-    await expect(page.locator('.explorer-panel-heading h2')).toHaveText(`@${child.username}`);
+    await expect(page.locator('.explorer-panel-heading h2')).toHaveText(`ID ${child.memberId}`);
     await page.getByRole("button", { name: "My network", exact: true }).click();
-    await expect(page.locator('.explorer-panel-heading h2')).toHaveText(`@${data.owner.username}`);
+    await expect(page.locator('.explorer-panel-heading h2')).toHaveText(`ID ${data.owner.memberId}`);
     const download = page.waitForEvent("download");
     await page.getByRole("button", { name: "Download image", exact: true }).click();
     expect((await download).suggestedFilename()).toContain(".svg");
@@ -197,13 +197,13 @@ test("member and admin explorers support branch navigation, transaction details,
     await expect(page.getByTestId("contract-explorer")).toBeVisible();
     await expect(page.locator(".explorer-table tbody")).not.toContainText(data.outsider.username);
     await page.getByRole("tab", { name: thai.explorer.network, exact: true }).click();
-    await page.getByLabel(thai.explorer.accountRoot, { exact: true }).fill(data.owner.username);
+    await page.getByLabel(thai.explorer.accountRoot, { exact: true }).fill(data.owner.memberId);
     await page.getByRole("button", { name: thai.explorer.openNetwork, exact: true }).click();
-    await expect(page.locator('.explorer-panel-heading h2')).toHaveText(`@${data.owner.username}`);
-    await page.getByRole("textbox", { name: thai.explorer.searchNetwork, exact: true }).fill(child.username);
+    await expect(page.locator('.explorer-panel-heading h2')).toHaveText(`ID ${data.owner.memberId}`);
+    await page.getByRole("textbox", { name: thai.explorer.searchNetwork, exact: true }).fill(child.memberId);
     await expect(page.locator("[data-tree-node]")).toHaveCount(2);
-    await page.getByRole("button", { name: thai.explorer.inspectMember.replace("{username}", child.username), exact: true }).press("Enter");
-    await expect(page.locator(".explorer-member-detail h2")).toHaveText(`@${child.username}`);
+    await page.getByRole("button", { name: thai.explorer.inspectMember.replace("{memberId}", child.memberId), exact: true }).press("Enter");
+    await expect(page.locator(".explorer-member-detail h2")).toHaveText(`ID ${child.memberId}`);
     await page.screenshot({ path: `test-results/explorer-admin-${testInfo.project.name}.png`, animations: "disabled" });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     expect(errors).toEqual([]);

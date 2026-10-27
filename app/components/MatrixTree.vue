@@ -1,12 +1,12 @@
 <script setup lang="ts">
 const { t, tr, localeTag, formatDate } = useLoopI18n();
 
-const props = withDefaults(defineProps<{ preview?: boolean; username?: string }>(), { preview: false, username: "You" });
-const sampleNames = ["AM", "JC", "TK", "SW", "JL", "RP", "CB", "DM", "KL", "AJ", "MT"];
+const props = withDefaults(defineProps<{ preview?: boolean; memberId?: string }>(), { preview: false, memberId: "1000" });
+const sampleNames = Array.from({ length: 11 }, (_, index) => String(1001 + index));
 const nodes = computed(() => Array.from({ length: 15 }, (_, index) => {
   const depth = Math.floor(Math.log2(index + 1));
   const offset = index - (2 ** depth - 1);
-  return { index, depth, x: (offset + 0.5) / 2 ** depth * 800, y: 30 + depth * 76, filled: index === 0 || (props.preview && index <= 11), name: index === 0 ? props.username.slice(0, 2).toUpperCase() : sampleNames[index - 1] };
+  return { index, depth, x: (offset + 0.5) / 2 ** depth * 800, y: 30 + depth * 76, filled: index === 0 || (props.preview && index <= 11), name: index === 0 ? props.memberId : sampleNames[index - 1] };
 }));
 </script>
 
@@ -17,7 +17,7 @@ const nodes = computed(() => Array.from({ length: 15 }, (_, index) => {
     </svg>
     <div v-for="node in nodes" :key="node.index" class="matrix-node" :class="{ filled: node.filled, root: node.index === 0, open: !node.filled }" :style="{ left: `${node.x / 8}%`, top: `${node.y}px`, '--node-depth': node.depth }">
       <span v-if="node.filled">{{ node.name }}</span><AppIcon v-else name="Plus" :size="15" />
-      <small v-if="node.index === 0">{{ username }}</small>
+      <small v-if="node.index === 0">{{ memberId }}</small>
     </div>
   </div>
 </template>

@@ -17,9 +17,9 @@ rate limited.
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | POST | `/api/auth/register` | Legacy account and wallet creation; requires embedded mode and password login enabled |
-| POST | `/api/auth/login` | Legacy username/password login; requires `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true` |
+| POST | `/api/auth/login` | Legacy member ID/password login; requires `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true` |
 | GET | `/api/auth/session` | Current account or `null` |
-| PATCH | `/api/auth/profile` | Rename the current account using `{ username }`; authenticated, same-origin and rate limited |
+| PATCH | `/api/auth/profile` | Protected compatibility endpoint returning 409; member IDs are immutable |
 | POST | `/api/auth/logout` | Revoke the current session |
 | GET | `/api/dashboard` | Own completed commissions, pending funding, transfer count and referral totals |
 | GET | `/api/wallet` | Historic ledger balance and recent transactions (compatibility) |
@@ -41,10 +41,10 @@ rate limited.
 | GET | `/api/platform/transactions` | Public DB-recorded transactions for the configured referral contract |
 | GET | `/api/platform/analytics` | Public aggregate account, purchase, distribution and activity statistics |
 | GET | `/api/platform-settings` | Registration/funding availability and support email |
-| POST | `/api/admin/login` | Administrator username/password login; always available, including for linked wallets |
+| POST | `/api/admin/login` | Administrator member ID/password login; always available, including for linked wallets |
 | GET | `/api/admin/overview` | Platform totals and recent activity |
 | GET | `/api/admin/users` | Search and paginate accounts |
-| PATCH | `/api/admin/users/:id` | Rename an account using `{ username }` and/or suspend/reactivate a member using `{ status }`; changes commit atomically |
+| PATCH | `/api/admin/users/:id` | Suspend/reactivate a member using `{ status }`; IDs are immutable |
 | GET | `/api/admin/payments` | Search funding requests and settlements |
 | POST | `/api/admin/payments/:id` | Approve or reject a funding request |
 | GET, PUT | `/api/admin/settings` | Read/update operational settings |
@@ -207,7 +207,7 @@ registration. Account responses include `memberId` even before activation;
 continue to resolve to the same account through aliases.
 
 `GET /api/referrals/tree?id=1` is public. It returns `root`, `path`, `maxDepth: 15`,
-`visibleDepth`, sparse `members` with numeric `id`, `username`, `path`, `parentId`, and
+`visibleDepth`, sparse `members` with numeric `id`, `path`, `parentId`, and
 `{depth,filled}` counts for all 15 descendant `levels`. The client fills missing
 positions with empty boxes. `path` contains at most 15 sibling indices separated
 by `/`, for example `0/2/1`; indices can exceed 1 and empty branches are valid.
@@ -290,7 +290,7 @@ returned count at 500; `truncated: true` makes the count a lower bound. Direct
 referrals are counted separately without that cap.
 
 Network Explorer accepts `root` (account ID); administrators may use an exact
-`username` instead. Members can only open branches within their original first
+`memberId` instead. Members can only open branches within their original first
 15 levels. The legacy private ledger endpoints accept `search`, `type`, `status`, `period`
 (`all`, `7`, `30`, `90`) and `page`. Transaction types include `referral_purchase`;
 statuses are `completed`, `pending`, and `rejected`. Search returns paginated

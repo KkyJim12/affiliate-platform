@@ -38,14 +38,14 @@ export async function rateLimit(event: H3Event, scope: string, limit = 12) {
     }
 }
 export async function accountFor(user: UserRow): Promise<Account> {
-    const identity = await db().one("SELECT referral_code FROM users WHERE id = $1", user.id);
+    const identity = await db().one("SELECT referral_code, sponsor_id FROM users WHERE id = $1", user.id);
     const activation = await db().one("SELECT user_id FROM referral_activations WHERE user_id = $1", user.id);
-    const sponsor = user.sponsor_id
-        ? await db().one("SELECT referral_code FROM users WHERE id = $1", user.sponsor_id) as {
+    const sponsor = identity!.sponsor_id
+        ? await db().one("SELECT referral_code FROM users WHERE id = $1", identity!.sponsor_id) as {
             referral_code: string;
         } | undefined
         : undefined;
-    return { id: user.id, memberId: identity!.referral_code, username: user.username, referralCode: activation ? identity!.referral_code : null, sponsorCode: sponsor?.referral_code || null, createdAt: user.created_at, role: user.role || "member" };
+    return { id: user.id, memberId: identity!.referral_code, referralCode: activation ? identity!.referral_code : null, sponsorCode: sponsor?.referral_code || null, createdAt: user.created_at, role: user.role || "member" };
 }
 export async function currentUser(event: H3Event): Promise<UserRow | undefined> {
     const token = getCookie(event, cookieName);
@@ -64,10 +64,10 @@ export async function requireUser(event: H3Event) {
         throw createError({ statusCode: 401, statusMessage: "Sign in to access your account." });
     return user;
 }
-export async function findUser(username: string) {
+export async function findUserByMemberId(memberId: string) {
     return await db().one(`SELECT users.*, COALESCE(user_access.role, 'member') AS role,
     COALESCE(user_access.status, 'active') AS status FROM users
-    LEFT JOIN user_access ON user_access.user_id = users.id WHERE lower(users.username) = lower($1)`, username) as UserRow | undefined;
+    LEFT JOIN user_access ON user_access.user_id = users.id WHERE users.referral_code = $1`, memberId) as UserRow | undefined;
 }
 export async function requireAdmin(event: H3Event) {
     const user = await requireUser(event);

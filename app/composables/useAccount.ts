@@ -30,15 +30,15 @@ export function useAccount() {
     }
   }
 
-  async function signIn(username: string, password: string) {
-    const result = await $fetch<{ user: Account }>("/api/auth/login", { method: "POST", body: { username, password } });
+  async function signIn(memberId: string, password: string) {
+    const result = await $fetch<{ user: Account }>("/api/auth/login", { method: "POST", body: { memberId, password } });
     clearWalletState();
     user.value = result.user;
     sessionError.value = "";
   }
 
-  async function register(username: string, password: string, sponsorCode: string) {
-    const result = await $fetch<{ user: Account }>("/api/auth/register", { method: "POST", body: { username, password, sponsorCode } });
+  async function register(password: string, sponsorCode: string) {
+    const result = await $fetch<{ user: Account }>("/api/auth/register", { method: "POST", body: { password, sponsorCode } });
     clearWalletState();
     user.value = result.user;
     sessionError.value = "";
@@ -51,10 +51,5 @@ export function useAccount() {
     useAppUI().notify("You have signed out of Loop.");
   }
 
-  async function updateUsername(username: string) {
-    const result = await $fetch<{ user: Account }>("/api/auth/profile", { method: "PATCH", body: { username } });
-    user.value = result.user;
-  }
-
-  return { user, authenticated, sessionError, restoreSession, signIn, register, logout, updateUsername };
+  return { user, authenticated, sessionError, restoreSession, signIn, register, logout };
 }

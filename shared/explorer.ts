@@ -1,14 +1,14 @@
 import type { ReferralNode, WalletTransaction } from "./types";
 
 export interface ExplorerNetwork {
-  root: { id: string; username: string; joinedAt: string };
+  root: { id: string; memberId: string; joinedAt: string };
   members: ReferralNode[];
   truncated: boolean;
   remainingDepth: number;
 }
 
 export interface ExplorerTransaction extends WalletTransaction {
-  username: string;
+  memberId: string;
   walletId: string;
   reference: string | null;
   note: string | null;

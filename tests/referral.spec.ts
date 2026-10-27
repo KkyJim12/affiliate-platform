@@ -1,3 +1,4 @@
+import { createTestAdmin, memberIdFor } from "./member-fixtures";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { openTestDatabase } from "./database";
 import { randomUUID } from "node:crypto";
@@ -17,7 +18,7 @@ async function fixture() {
         await db.execute("INSERT INTO wallets (id, user_id, available) VALUES ($1, $2, $3)", user.walletId, user.id, balance * 1000000);
         if (balance)
             await db.execute("INSERT INTO wallet_transactions VALUES ($1, $2, 'deposit', $3, 'completed', 'Test-only settled funding', $4, $5)", randomUUID(), user.walletId, balance * 1000000, randomUUID(), new Date().toISOString());
-        return user;
+        return { ...user, memberId: await memberIdFor(user.id) };
     };
     const owner = await create("rfo", 25), member = await create("rfm", 10), other = await create("rfx", 0);
     await db.close();
@@ -34,7 +35,7 @@ test("referral activation charges exactly once and sponsor links enforce ownersh
         expect((await guest.get("/api/referrals/program")).status()).toBe(401);
         expect((await post(guest, "/api/referrals/activate", { password, requestKey: randomUUID() })).status()).toBe(401);
         for (const [api, user] of [[owner, data.owner], [member, data.member], [other, data.other]] as const) {
-            const session = await post(api, "/api/auth/login", { username: user.username, password });
+            const session = await post(api, "/api/auth/login", { memberId: user.memberId, password });
             expect((await session.json()).user.referralCode).toBeNull();
         }
         expect((await (await owner.get("/api/referrals/program")).json()).code).toBeNull();
@@ -63,7 +64,7 @@ test("referral activation charges exactly once and sponsor links enforce ownersh
         expect((await post(owner, "/api/referrals/sponsor", { code })).status()).toBe(400);
         const legacyCode = code.replace(/^UNXO-/, "LOOP-");
         const linked = await (await post(member, "/api/referrals/sponsor", { code: ` ${legacyCode.toLowerCase()} `, userId: data.other.id })).json();
-        expect(linked.program.sponsor).toEqual({ username: data.owner.username, code });
+        expect(linked.program.sponsor).toEqual({ code });
         expect(linked.wallet.available).toBe(10);
         expect((await (await owner.get("/api/referrals")).json()).network[0].id).toBe(data.member.id);
         expect((await post(member, "/api/referrals/sponsor", { code })).status()).toBe(200);
@@ -103,7 +104,7 @@ test("members purchase sequential upgrades and see their paid level in both lang
     const db = openDb();
     try { await db.execute("UPDATE wallets SET available = 70000000 WHERE user_id = $1", data.owner.id); }
     finally { await db.close(); }
-    await post(page.request, "/api/auth/login", { username: data.owner.username, password });
+    await post(page.request, "/api/auth/login", { memberId: data.owner.memberId, password });
     await post(page.request, "/api/referrals/activate", { password, requestKey: randomUUID() });
     await page.goto("/referrals");
     await page.waitForFunction(() => Boolean((document.querySelector("#__nuxt") as HTMLElement & { __vue_app__?: unknown })?.__vue_app__));
@@ -133,7 +134,7 @@ test("members buy a referral code, connect a sponsor, and retain access in Thai 
     page.on("pageerror", error => errors.push(error.message));
     page.on("console", message => { if (message.type() === "warning" && /i18n|hydration/i.test(message.text()))
         errors.push(message.text()); });
-    await post(page.request, "/api/auth/login", { username: data.owner.username, password });
+    await post(page.request, "/api/auth/login", { memberId: data.owner.memberId, password });
     await page.goto("/dashboard");
     await page.waitForFunction(() => Boolean((document.querySelector("#__nuxt") as HTMLElement & {
         __vue_app__?: unknown;
@@ -173,7 +174,7 @@ test("members buy a referral code, connect a sponsor, and retain access in Thai 
     await expect(page.locator("#sponsor-code")).toHaveValue(code);
     await expect(page.locator("#sponsor-code")).toHaveAttribute("placeholder", "e.g. 1");
     await page.getByRole("button", { name: "Close dialog", exact: true }).click();
-    await post(page.request, "/api/auth/login", { username: data.other.username, password });
+    await post(page.request, "/api/auth/login", { memberId: data.other.memberId, password });
     await page.goto(`/referrals?ref=${code.replace(/^UNXO-/, "LOOP-")}`);
     await page.waitForFunction(() => Boolean((document.querySelector("#__nuxt") as HTMLElement & {
         __vue_app__?: unknown;
@@ -181,7 +182,7 @@ test("members buy a referral code, connect a sponsor, and retain access in Thai 
     await expect(page.getByRole("button", { name: "Activate for 10.00 USDT", exact: true })).toBeDisabled();
     await expect(page.getByLabel("Sponsor referral code", { exact: true })).toHaveValue(code);
     await page.getByRole("button", { name: "Use referral code", exact: true }).click();
-    await expect(page.getByTestId("referral-sponsor")).toHaveText("@" + data.owner.username);
+    await expect(page.getByTestId("referral-sponsor")).toHaveText("ID " + data.owner.memberId);
     await expect(page.getByLabel("Sponsor referral code", { exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "Use dark theme", exact: true }).click();
     await page.getByRole("combobox", { name: "Language", exact: true }).click();
@@ -189,7 +190,7 @@ test("members buy a referral code, connect a sponsor, and retain access in Thai 
     await expect(page.getByRole("heading", { name: thai.referral.sponsorTitle, exact: true })).toBeVisible();
     await expect(page.locator("html")).toHaveClass(/dark/);
     await page.reload();
-    await expect(page.getByTestId("referral-sponsor")).toHaveText("@" + data.owner.username);
+    await expect(page.getByTestId("referral-sponsor")).toHaveText("ID " + data.owner.memberId);
     await page.screenshot({ path: `test-results/referral-${testInfo.project.name}.png`, fullPage: true, animations: "disabled" });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     expect(errors).toEqual([]);

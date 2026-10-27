@@ -29,6 +29,13 @@ export default defineEventHandler(async (event) => {
         accounts: users.total, active: users.active || 0, pendingCount: pending.count, pendingAmount: pending.amount / moneyScale,
         walletBalance: balance.amount / moneyScale, settledAmount: settled.amount / moneyScale, growth,
         payments: paymentRows(await db().all(`${paymentSelect} WHERE t.type = 'deposit' ORDER BY t.created_at DESC, t.sequence DESC LIMIT 5`)),
-        audit: await db().all("SELECT a.id, u.username, a.action, a.target, a.created_at AS \"createdAt\" FROM admin_audit a JOIN users u ON u.id = a.admin_id ORDER BY a.created_at DESC, a.id DESC LIMIT 8"),
+        audit: await db().all(`SELECT a.id, u.referral_code AS "memberId", a.action,
+          CASE WHEN a.action = 'user_username_changed' THEN '---'
+            WHEN a.action IN ('admin_created','user_suspended','user_activated','payment_approved','payment_rejected') THEN
+              COALESCE((SELECT 'ID ' || target.referral_code FROM users target
+                WHERE target.id = a.target OR target.referral_code = regexp_replace(a.target, '^ID ', '') OR target.username = a.target LIMIT 1), '---')
+            ELSE a.target END AS target,
+          a.created_at AS "createdAt" FROM admin_audit a JOIN users u ON u.id = a.admin_id
+          ORDER BY a.created_at DESC, a.id DESC LIMIT 8`),
     } as AdminOverview;
 });

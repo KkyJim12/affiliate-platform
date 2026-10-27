@@ -1,6 +1,12 @@
 import type { WalletSummary, WalletTransaction } from "../../shared/types";
 import { db } from "./database";
 export const moneyScale = 1000000;
+// Preserve historical rows while exposing member IDs in older transfer descriptions.
+export const ledgerDescriptionSql = `CASE WHEN t.description ~ '^Transfer (to|from) @' THEN
+  regexp_replace(t.description, ' @.*$', ' ID ' || COALESCE((SELECT legacy.referral_code FROM users legacy
+    WHERE lower(legacy.username) = lower(substring(t.description from '^Transfer (?:to|from) @(.+)$'))), '---'))
+  ELSE t.description END`;
+
 export interface WalletRow {
     id: string;
     user_id: string;
@@ -28,7 +34,7 @@ export function parseRequestKey(value: unknown) {
 }
 export async function walletFor(userId: string): Promise<WalletSummary> {
     const wallet = await walletRow(userId);
-    const rows = await db().all(`SELECT t.*, CASE WHEN r.decision = 'rejected' THEN 'rejected' ELSE t.status END AS display_status FROM wallet_transactions t LEFT JOIN payment_reviews r ON r.transaction_id = t.id WHERE t.wallet_id = $1 ORDER BY t.created_at DESC, t.sequence DESC LIMIT 200`, wallet.id) as {
+    const rows = await db().all(`SELECT t.id, t.type, t.amount, t.created_at, ${ledgerDescriptionSql} AS description, CASE WHEN r.decision = 'rejected' THEN 'rejected' ELSE t.status END AS display_status FROM wallet_transactions t LEFT JOIN payment_reviews r ON r.transaction_id = t.id WHERE t.wallet_id = $1 ORDER BY t.created_at DESC, t.sequence DESC LIMIT 200`, wallet.id) as {
         id: string;
         type: WalletTransaction["type"];
         amount: number;

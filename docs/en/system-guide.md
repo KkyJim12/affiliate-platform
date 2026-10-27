@@ -64,7 +64,7 @@ Runtime dependencies include Nuxt/Vue, PostgreSQL (`pg`), Ethers and Viem. Solid
 | --- | --- |
 | Visitor | Public pages, sample workspace, search by member ID, recorded platform transactions and aggregate analytics |
 | Active member | Own account, linked wallet, referrals, purchases and wallet sends; authorized private network branches |
-| Administrator | Username/password admin login, user management, operational settings, reporting and legacy settlement APIs |
+| Administrator | Member ID/password admin login, user management, operational settings, reporting and legacy settlement APIs |
 | Contract owner | On-chain fee recipient/signer changes, pause/unpause and two-step ownership transfer |
 | Quote authority | Signs eligibility, ancestry and previous-level attestations; cannot sign the buyer's transaction |
 | Fee recipient | Receives the base platform fee and shares redirected under the payout rules |
@@ -86,10 +86,10 @@ Suspension deletes sessions and blocks application access, sign-in and legacy tr
 | `/faq` | Platform FAQ |
 | `/faq/ranks` | Fifteen prices, payout rates and projections |
 | `/faq/analytics` (`/analytics`) | Aggregate account and confirmed contract activity |
-| `/dashboard?view=settings` | Username, language, theme, wallet link, member ID, invite, sponsor and session controls |
+| `/dashboard?view=settings` | Read-only member ID, language, theme, wallet link, invite, sponsor and session controls |
 | `/admin/login` | Administrator credentials login |
 | `/admin`, `/admin/dashboard` | Admin entry/overview, growth and audit activity |
-| `/admin/users` | Search, filter, paginate, inspect, rename, suspend/reactivate accounts |
+| `/admin/users` | Search by member ID, filter, paginate, inspect and suspend/reactivate accounts |
 | `/admin/explorer` | Platform transactions and administrator network exploration |
 | `/admin/settings` | Registration/funding flags, support email, contract status and fee-recipient management |
 
@@ -114,7 +114,7 @@ Member password login is hidden and rejected by default. Temporarily enabling `N
 
 One linked address belongs to one account, and public APIs cannot replace it with another address. After linking, an external-mode member uses wallet sign-in. Admin credential login remains available. Old embedded keys and credits stay in the database; linking does not migrate their assets.
 
-Embedded registration requires both `walletMode=embedded` and password login enabled. It atomically creates a credential account, ledger wallet and password-encrypted Amoy wallet. Usernames use 3–24 ASCII letters/numbers/underscores, start with a letter and are unique case-insensitively. Passwords use 12–128 characters. Username changes preserve identity and history; admin changes are audited.
+Embedded registration requires both `walletMode=embedded` and password login enabled. The member chooses a 12–128 character password; the server atomically assigns a numeric member ID and creates the ledger and encrypted Amoy wallet. Existing credentials use the assigned member ID plus password. IDs cannot be changed by members or administrators; public responses expose no username. See the [identity migration](../member-id-update.md).
 
 ### Sessions and protection
 
@@ -134,7 +134,7 @@ Current public/member tree rendering follows **actual sponsor relationships**, o
 
 The schema still contains `referral_placements` and binary-placement triggers from migration 0012. These are retained data; the current tree endpoint reads `users.sponsor_id`, and payment ancestry also follows the sponsor chain. A binary-looking diagram does not establish a separate binary payout engine.
 
-Authenticated referral lists and private network explorers cover up to fifteen generations and return at most 500 members with a `truncated` flag. Direct-count totals are separate. The public tree exposes numeric IDs, usernames, parent links and paths; it excludes internal UUIDs, credentials, balances, wallet addresses and account status. It does not require activation or a session merely to search an existing member ID.
+Authenticated referral lists and private network explorers cover up to fifteen generations and return at most 500 members with a `truncated` flag. Direct-count totals are separate. The public tree exposes numeric IDs, parent links and paths; it excludes names, internal UUIDs, credentials, balances, wallet addresses and account status. It does not require activation or a session merely to search an existing member ID.
 
 ## 7. Wallet, reporting and interface behavior
 

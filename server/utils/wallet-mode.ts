@@ -14,7 +14,7 @@ export function walletAuthOrigin(event: H3Event) {
 export const externalWalletMode = () => useRuntimeConfig().public.walletMode !== "embedded";
 export function requirePasswordLoginEnabled() {
   if (!passwordLoginEnabled(useRuntimeConfig().public.passwordLoginEnabled))
-    throw createError({ statusCode: 403, statusMessage: "Username and password login is disabled. Sign in with your external wallet." });
+    throw createError({ statusCode: 403, statusMessage: "Member ID and password login is disabled. Sign in with your external wallet." });
 }
 export function requireEmbeddedWalletMode() {
   if (externalWalletMode()) throw createError({ statusCode: 403, statusMessage: "In-app wallets are disabled. Connect your wallet to sign this action." });

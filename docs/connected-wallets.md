@@ -16,14 +16,14 @@ and atomically consumes the challenge. Unknown wallets create member accounts;
 only active invite codes establish sponsors. Registration controls also apply to
 new wallet accounts. Sessions retain the existing HttpOnly cookie protections.
 
-Member username/password login is hidden and blocked by default
+Member member ID/password login is hidden and blocked by default
 (`NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=false`). Members sign in with MetaMask,
-Rabby or Phantom. Administrators always use username/password at `/admin/login`;
+Rabby or Phantom. Administrators always use member ID/password at `/admin/login`;
 their linked wallets sign transactions rather than admin sign-in messages.
 
 To enable legacy login later, set `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true` and
 restart the app. Existing members can then choose **Already
-have a username account?**, sign in with their existing credentials once, and
+have a member ID account?**, sign in with their existing credentials once, and
 link a wallet in the wallet page or admin contract panel. Linking also requires
 a wallet signature. It preserves the account ID, sponsor, levels and history.
 Once linked, member password login remains disabled for that account in external mode.

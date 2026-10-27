@@ -14,7 +14,7 @@ export interface ReferralProgram {
   nextPrice: number | null;
   feeConfigured: boolean;
   latestPurchase: { level: number; amount: number; commissions: number; platformPayable: number } | null;
-  sponsor: { username: string; code: string } | null;
+  sponsor: { code: string } | null;
 }
 
 export interface ReferralUpdate {

@@ -1,3 +1,4 @@
+import { createTestAdmin, memberIdFor } from "./member-fixtures";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -8,14 +9,7 @@ const origin = "http://127.0.0.1:3100";
 const password = "An admin integration password 42!";
 const post = (api: APIRequestContext, path: string, data: object) => api.post(path, { headers: { Origin: origin }, data });
 
-function provisionAdmin(username: string) {
-  const output = execFileSync(process.execPath, ["scripts/create-admin.mjs"], {
-    cwd: resolve("."), encoding: "utf8",
-    env: { ...process.env, DATABASE_URL: process.env.TEST_DATABASE_URL, LOOP_ADMIN_USERNAME: username, LOOP_ADMIN_PASSWORD: password, NODE_NO_WARNINGS: "1" },
-  });
-  expect(output).toContain(`Administrator @${username} created`);
-  expect(output).not.toContain(password);
-}
+function provisionAdmin() { return createTestAdmin(password); }
 
 async function navigate(page: Page, label: string) {
   const toggle = page.getByRole("button", { name: "Open admin navigation", exact: true });
@@ -31,23 +25,23 @@ async function gotoReady(page: Page, path: string) {
 test("admin authorization, settlement idempotency, rejection, suspension, and persisted controls", async ({ playwright }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "API coverage is shared between desktop and mobile.");
   const suffix = Date.now().toString(36);
-  const adminName = `ops_${suffix}`;
-  provisionAdmin(adminName);
+  const adminName = provisionAdmin();
   const admin = await playwright.request.newContext({ baseURL: origin });
   const member = await playwright.request.newContext({ baseURL: origin });
   const guest = await playwright.request.newContext({ baseURL: origin });
   let original: Record<string, unknown> | undefined;
   try {
     for (const path of ["overview", "users", "payments", "settings"]) expect((await guest.get(`/api/admin/${path}`)).status()).toBe(401);
-    const memberName = `member_${suffix}`;
-    const registered = await post(member, "/api/auth/register", { username: memberName, password, role: "admin" });
+    let memberName = `member_${suffix}`;
+    const registered = await post(member, "/api/auth/register", { memberId: memberName, password, role: "admin" });
     expect(registered.status()).toBe(201);
     const user = (await registered.json()).user;
+    memberName = user.memberId;
     expect(user.role).toBe("member");
     for (const path of ["overview", "users", "payments", "settings"]) expect((await member.get(`/api/admin/${path}`)).status()).toBe(403);
-    expect((await post(member, "/api/admin/login", { username: memberName, password })).status()).toBe(401);
-    expect((await post(admin, "/api/admin/login", { username: adminName, password: "incorrect" })).status()).toBe(401);
-    const signedIn = await post(admin, "/api/admin/login", { username: adminName.toUpperCase(), password });
+    expect((await post(member, "/api/admin/login", { memberId: memberName, password })).status()).toBe(401);
+    expect((await post(admin, "/api/admin/login", { memberId: adminName, password: "incorrect" })).status()).toBe(401);
+    const signedIn = await post(admin, "/api/admin/login", { memberId: adminName.toUpperCase(), password });
     expect(signedIn.status()).toBe(200);
     expect((await signedIn.json()).user.role).toBe("admin");
     expect(signedIn.headers()["set-cookie"]).toContain("HttpOnly");
@@ -82,9 +76,9 @@ test("admin authorization, settlement idempotency, rejection, suspension, and pe
     expect((await member.patch(`/api/admin/users/${user.id}`, { headers: { Origin: origin }, data: { status: "suspended" } })).status()).toBe(403);
     expect((await setStatus("suspended")).status()).toBe(200);
     expect((await member.get("/api/wallet")).status()).toBe(401);
-    expect((await post(member, "/api/auth/login", { username: memberName, password })).status()).toBe(401);
+    expect((await post(member, "/api/auth/login", { memberId: memberName, password })).status()).toBe(401);
     expect((await setStatus("active")).status()).toBe(200);
-    expect((await post(member, "/api/auth/login", { username: memberName, password })).status()).toBe(200);
+    expect((await post(member, "/api/auth/login", { memberId: memberName, password })).status()).toBe(200);
     const adminId = (await (await admin.get(`/api/admin/users?search=${adminName}`)).json()).items[0].id;
     expect((await admin.patch(`/api/admin/users/${adminId}`, { headers: { Origin: origin }, data: { status: "suspended" } })).status()).toBe(403);
     const controls = { registrationOpen: false, fundingOpen: false, supportEmail: "support@example.com" };
@@ -107,32 +101,33 @@ test("admin authorization, settlement idempotency, rejection, suspension, and pe
 test("admin login and all management pages work in English, Thai, light and dark", async ({ page, playwright }, testInfo) => {
   test.setTimeout(60000);
   const suffix = Date.now().toString(36);
-  const adminName = `uiops_${suffix}`;
-  const memberName = `uimember_${suffix}`;
+  const adminName = provisionAdmin();
+  let memberName = `uimember_${suffix}`;
   const supportEmail = `help+${suffix}@example.com`;
-  provisionAdmin(adminName);
   const member = await playwright.request.newContext({ baseURL: origin });
   const errors: string[] = [];
   page.on("pageerror", error => errors.push(error.message));
   page.on("console", message => { if (message.type() === "warning" && /i18n|hydration/i.test(message.text())) errors.push(message.text()); });
   let original: Record<string, unknown> | undefined;
   try {
-    expect((await post(member, "/api/auth/register", { username: memberName, password })).status()).toBe(201);
+    const registered = await post(member, "/api/auth/register", { password });
+    expect(registered.status()).toBe(201);
+    memberName = (await registered.json()).user.memberId;
     expect((await post(member, "/api/wallet/deposit", { amount: "42.123456", requestKey: randomUUID() })).status()).toBe(200);
     await gotoReady(page, "/admin/users");
     await expect(page).toHaveURL(/\/admin\/login\?redirect=/);
     await expect(page.getByRole("heading", { name: "Admin login", exact: true })).toBeVisible();
     await page.screenshot({ path: `test-results/admin-login-${testInfo.project.name}.png`, fullPage: true, animations: "disabled" });
-    await page.getByLabel("Username", { exact: true }).fill(adminName);
+    await page.getByLabel("Member ID", { exact: true }).fill(adminName);
     await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Sign in to admin", exact: true }).click();
     await expect(page).toHaveURL(`${origin}/admin/users`);
     const settingsResponse = await page.request.get("/api/admin/settings");
     expect(settingsResponse.ok()).toBe(true);
     original = await settingsResponse.json();
-    await page.getByRole("textbox", { name: "Search by username", exact: true }).fill(memberName);
-    await page.getByRole("textbox", { name: "Search by username", exact: true }).press("Enter");
-    const row = page.getByRole("row").filter({ hasText: `@${memberName}` });
+    await page.getByRole("textbox", { name: "Search by member ID", exact: true }).fill(memberName);
+    await page.getByRole("textbox", { name: "Search by member ID", exact: true }).press("Enter");
+    const row = page.getByRole("row").filter({ hasText: `ID ${memberName}` });
     await expect(row).toHaveCount(1);
     await row.getByRole("button", { name: "Manage", exact: true }).click();
     await page.getByRole("button", { name: "Suspend member", exact: true }).click();
@@ -141,7 +136,7 @@ test("admin login and all management pages work in English, Thai, light and dark
     await row.getByRole("button", { name: "Manage", exact: true }).click();
     await page.getByRole("button", { name: "Reactivate member", exact: true }).click();
     await expect(row).toContainText("Active");
-    await post(member, "/api/auth/login", { username: memberName, password });
+    await post(member, "/api/auth/login", { memberId: memberName, password });
     await navigate(page, "Dashboard");
     await expect(page.getByRole("heading", { name: "The bigger picture.", exact: true })).toBeVisible();
     await page.screenshot({ path: `test-results/admin-dashboard-${testInfo.project.name}.png`, fullPage: true, animations: "disabled" });
@@ -182,7 +177,7 @@ test("admin login and all management pages work in English, Thai, light and dark
     expect(errors).toEqual([]);
   } finally {
     if (original) {
-      await post(page.request, "/api/admin/login", { username: adminName, password });
+      await post(page.request, "/api/admin/login", { memberId: adminName, password });
       await page.request.put("/api/admin/settings", { headers: { Origin: origin }, data: original });
     }
     await member.dispose();

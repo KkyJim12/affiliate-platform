@@ -1,7 +1,6 @@
 export const referralTreeDepth = 15;
 export interface ReferralTreeMember {
   id: string;
-  username: string;
   path: string;
   parentId: string | null;
 }

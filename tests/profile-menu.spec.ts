@@ -1,3 +1,4 @@
+import { createTestAdmin, memberIdFor } from "./member-fixtures";
 import { expect, test, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -22,6 +23,7 @@ test("signed-in navbar shows the owner's wallet, supports keyboard dismissal, an
   const username = `profile_${randomUUID().slice(0, 8)}`;
   const registration = await page.request.post("/api/auth/register", { headers: { Origin: origin }, data: { username, password } });
   expect(registration.status()).toBe(201);
+  const memberId = (await (await page.request.get("/api/auth/session")).json()).user.memberId;
   const address = (await (await page.request.get("/api/wallet/evm")).json()).wallet.address;
   let balanceReads = 0;
   await page.route("**/api/wallet/evm/balance", route => {
@@ -31,7 +33,7 @@ test("signed-in navbar shows the owner's wallet, supports keyboard dismissal, an
       token: { address: "0x1111111111111111111111111111111111111111", symbol: "USDT", decimals: 6, balance: "1234.567891", balanceUnits: "1234567891" } } });
   });
   await gotoReady(page, "/dashboard");
-  const trigger = page.getByRole("button", { name: `Profile menu for ${username}`, exact: true });
+  const trigger = page.getByRole("button", { name: `Profile menu for ID ${memberId}`, exact: true });
   const menu = page.getByRole("menu");
   await expect(trigger.getByTestId("profile-usdt-balance")).toContainText("1,234.57");
   await expect(trigger.getByTestId("profile-usdt-balance")).toContainText("USDT");
@@ -87,18 +89,15 @@ test("signed-in navbar shows the owner's wallet, supports keyboard dismissal, an
 });
 
 test("administrator profile menu links to admin settings and signs out to admin login", async ({ page }) => {
-  const username = `profile_ops_${randomUUID().slice(0, 8)}`;
-  execFileSync(process.execPath, ["scripts/create-admin.mjs"], {
-    env: { ...process.env, DATABASE_URL: process.env.TEST_DATABASE_URL, LOOP_ADMIN_USERNAME: username, LOOP_ADMIN_PASSWORD: password },
-    stdio: "pipe",
-  });
-  const login = await page.request.post("/api/admin/login", { headers: { Origin: origin }, data: { username, password } });
+  const adminMemberId = createTestAdmin(password);
+  const memberId = adminMemberId;
+  const login = await page.request.post("/api/admin/login", { headers: { Origin: origin }, data: { memberId: adminMemberId, password } });
   expect(login.status()).toBe(200);
   const address = (await (await page.request.get("/api/wallet/evm")).json()).wallet.address;
   await page.route("**/api/wallet/evm/balance", route => route.fulfill({ json: { address, chainId: 80002, blockNumber: "100",
     native: { symbol: "POL", decimals: 18, balance: "0.5", balanceUnits: "500000000000000000" }, token: null } }));
   await gotoReady(page, "/admin/dashboard");
-  const trigger = page.getByRole("button", { name: `Profile menu for ${username}`, exact: true });
+  const trigger = page.getByRole("button", { name: `Profile menu for ID ${memberId}`, exact: true });
   const menu = page.getByRole("menu");
   await expect(trigger.getByTestId("profile-usdt-balance")).toContainText("—");
   await trigger.click();

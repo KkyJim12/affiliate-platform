@@ -1,3 +1,4 @@
+import { createTestAdmin, memberIdFor } from "./member-fixtures";
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { Contract, JsonRpcProvider, Wallet, getBytes, parseEther, toBeHex, type BaseWallet } from 'ethers';
@@ -105,7 +106,7 @@ test('wallet-only mode rejects member credentials while retaining administrator 
         await database.execute('INSERT INTO wallets (id,user_id) VALUES ($1,$2)',`LW-${id}`,id);
         if (role === 'admin') await database.execute("INSERT INTO user_access (user_id,role) VALUES ($1,'admin')",id);
         const path = role === 'admin' ? '/api/admin/login' : '/api/auth/login';
-        const response = await post(api,path,{ username,password });
+        const response = await post(api,path,{ memberId: await memberIdFor(id),password });
         expect(response.status(),await response.text()).toBe(role === 'admin' ? 200 : 403);
         const session = (await (await api.get('/api/auth/session')).json()).user;
         if (role === 'admin') expect(session).toMatchObject({ id,role });
@@ -130,11 +131,11 @@ for (const role of ['member','admin']) test(`existing accounts link once as ${ro
     await database.execute('INSERT INTO users VALUES ($1,$2,$3,$4,NULL,$5)',id,username,await hashPassword(password),`UNASSIGNED-${id}`,new Date().toISOString());
     await database.execute('INSERT INTO wallets (id,user_id,available) VALUES ($1,$2,123000000)',`LW-${id}`,id);
     if (role === 'admin') await database.execute("INSERT INTO user_access (user_id,role) VALUES ($1,'admin')",id);
-    expect((await post(api,path,{ username,password })).status()).toBe(200);
+    expect((await post(api,path,{ memberId: await memberIdFor(id),password })).status()).toBe(200);
     const challenge = await (await post(api,'/api/auth/wallet/challenge',{ address: wallet.address,purpose: 'link' })).json();
     expect((await post(api,'/api/auth/wallet/verify',{ id: challenge.id,signature: await wallet.signMessage(challenge.message) })).status()).toBe(200);
     expect((await database.one('SELECT available FROM wallets WHERE user_id = $1',id))!.available).toBe(123000000);
-    expect((await post(api,path,{ username,password })).status()).toBe(role === 'admin' ? 200 : 403);
+    expect((await post(api,path,{ memberId: await memberIdFor(id),password })).status()).toBe(role === 'admin' ? 200 : 403);
     if (role === 'member') expect(await login(api,wallet)).toMatchObject({ id,role });
     else {
       const loginChallenge = await (await post(api,'/api/auth/wallet/challenge',{ address: wallet.address })).json();
@@ -219,12 +220,12 @@ test('wallet-only members see wallet choices and administrators see credentials'
     const member = page.getByRole('dialog');
     for (const name of ['MetaMask','Rabby','Phantom']) await expect(member.getByRole('button',{ name,exact: true })).toBeVisible();
     await expect(member.locator('input[autocomplete="username"], input[type="password"], input[autocomplete="current-password"]')).toHaveCount(0);
-    await expect(member.getByRole('button',{ name: 'Already have a username account?',exact: true })).toHaveCount(0);
+    await expect(member.getByRole('button',{ name: 'Already have a member ID account?',exact: true })).toHaveCount(0);
     await page.goto('/admin/login');
     for (const name of ['MetaMask','Rabby','Phantom']) await expect(page.getByRole('button',{ name,exact: true })).toHaveCount(0);
-    await expect(page.getByLabel('Username',{ exact: true })).toBeVisible();
+    await expect(page.getByLabel('Member ID',{ exact: true })).toBeVisible();
     await expect(page.getByLabel('Password',{ exact: true })).toBeVisible();
-    await expect(page.getByRole('button',{ name: 'Already have a username account?',exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button',{ name: 'Already have a member ID account?',exact: true })).toHaveCount(0);
   } finally { provider.destroy(); }
 });
 
@@ -235,11 +236,11 @@ test('member migration is opt-in while administrators always have a password for
     await injectWallets(page,wallet,provider); await page.goto('/dashboard');
     await page.getByRole('button',{ name: /^Sign in$/ }).first().click();
     const member = page.getByRole('dialog');
-    await member.getByRole('button',{ name: 'Already have a username account?',exact: true }).click();
-    await expect(member.getByLabel('Username',{ exact: true })).toBeVisible();
+    await member.getByRole('button',{ name: 'Already have a member ID account?',exact: true }).click();
+    await expect(member.getByLabel('Member ID',{ exact: true })).toBeVisible();
     await expect(member.getByLabel('Password',{ exact: true })).toBeVisible();
     await page.goto('/admin/login');
-    await expect(page.getByLabel('Username',{ exact: true })).toBeVisible();
+    await expect(page.getByLabel('Member ID',{ exact: true })).toBeVisible();
     await expect(page.getByLabel('Password',{ exact: true })).toBeVisible();
   } finally { provider.destroy(); }
 });
@@ -252,7 +253,7 @@ test('administrator browser login uses credentials with a linked wallet',async (
     await database.execute('UPDATE users SET password_hash = $1 WHERE id = $2',await hashPassword(password),user.id);
     await database.execute("INSERT INTO user_access (user_id,role) VALUES ($1,'admin')",user.id);
     await injectWallets(page,wallet,provider); await page.goto('/admin/login');
-    await page.getByLabel('Username',{ exact: true }).fill(user.username);
+    await page.getByLabel('Member ID',{ exact: true }).fill(user.memberId);
     await page.getByLabel('Password',{ exact: true }).fill(password);
     await page.getByRole('button',{ name: 'Sign in to admin',exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/dashboard$/);
@@ -408,14 +409,14 @@ test('an existing wallet session replaces a guest-rendered referral or wallet pa
       const headers = route.request().headers();
       headers.cookie = (headers.cookie || '').split(';').filter(cookie => !cookie.trim().startsWith('loop_session=')).join(';');
       const response = await route.fetch({ headers });
-      expect(await response.text()).not.toContain(user.username);
+      expect(await response.text()).not.toContain(user.id);
       await route.fulfill({ response });
     });
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
       for (const path of ['/referrals', '/wallet']) {
         await page.goto(path);
-        await expect(page.getByRole('button', { name: `Profile menu for ${user.username}`, exact: true })).toBeVisible();
+        await expect(page.getByRole('button', { name: `Profile menu for ID ${user.memberId}`, exact: true })).toBeVisible();
         await expect(page.locator('.dashboard-topbar .topbar-wallet')).toHaveCount(0);
         await expect(page.getByTestId('connected-wallet-address')).toHaveText(wallet.address);
         await expect(page.getByTestId('account-wallet-balance')).toHaveText('100.00 tUSDT');

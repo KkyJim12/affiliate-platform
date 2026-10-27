@@ -47,7 +47,7 @@ test('purchases pay 15 uplines, upgrades double through level 15, retries never 
     await db.execute('UPDATE platform_settings SET fee_recipient_address = $1 WHERE id = 1', firstAddress);
     expect((await post(api, '/api/referrals/upgrade', { password, requestKey: randomUUID(), level: 2 })).status()).toBe(401);
     expect((await api.get('/api/admin/referral-accounting')).status()).toBe(401);
-    expect((await post(api, '/api/auth/login', { username: data.buyer.username, password })).status()).toBe(200);
+    expect((await post(api, '/api/auth/login', { memberId: data.buyer.code, password })).status()).toBe(200);
     const purchase = await post(api, '/api/referrals/activate', { password, requestKey: randomUUID(), amount: 0, userId: data.uplines[0]!.id });
     expect(purchase.status()).toBe(200);
     const activated = await purchase.json();
@@ -97,8 +97,8 @@ test('missing and ineligible shares accrue to the configured address and address
   try {
     await db.execute('UPDATE platform_settings SET fee_recipient_address = $1 WHERE id = 1', firstAddress);
     await db.execute("INSERT INTO user_access VALUES ($1, 'member', 'suspended')", data.uplines[0]!.id);
-    await post(buyer, '/api/auth/login', { username: data.buyer.username, password });
-    await post(admin, '/api/admin/login', { username: data.admin.username, password });
+    await post(buyer, '/api/auth/login', { memberId: data.buyer.code, password });
+    await post(admin, '/api/admin/login', { memberId: data.admin.code, password });
     expect((await buyer.get('/api/admin/referral-accounting')).status()).toBe(403);
     const original = await (await admin.get('/api/admin/settings')).json();
     const save = (address: unknown) => admin.put('/api/admin/settings', { headers: { Origin: origin }, data: { ...original, feeRecipientAddress: address } });
@@ -132,7 +132,7 @@ test('insufficient credit and conflicting request keys roll back all allocations
   const api = await playwright.request.newContext({ baseURL: origin });
   try {
     await db.execute('UPDATE platform_settings SET fee_recipient_address = $1 WHERE id = 1', firstAddress);
-    await post(api, '/api/auth/login', { username: data.buyer.username, password });
+    await post(api, '/api/auth/login', { memberId: data.buyer.code, password });
     const key = randomUUID();
     await db.execute("INSERT INTO wallet_transactions VALUES ($1, $2, 'deposit', 1, 'pending', 'Conflicting key', $3, $4)", randomUUID(), data.buyer.walletId, key, new Date().toISOString());
     expect((await post(api, '/api/referrals/activate', { password, requestKey: key })).status()).toBe(409);
@@ -155,7 +155,7 @@ test('legacy paid activations upgrade without changing the code or repaying hist
     const transactionId = randomUUID();
     await db.execute("INSERT INTO wallet_transactions VALUES ($1, $2, 'referral_purchase', 10000000, 'completed', 'Historic activation', $3, $4)", transactionId, data.buyer.walletId, randomUUID(), new Date().toISOString());
     await db.execute('INSERT INTO referral_activations (user_id, transaction_id, created_at) VALUES ($1, $2, $3)', data.buyer.id, transactionId, new Date().toISOString());
-    await post(api, '/api/auth/login', { username: data.buyer.username, password });
+    await post(api, '/api/auth/login', { memberId: data.buyer.code, password });
     const before = await (await api.get('/api/referrals/program')).json();
     expect(before.currentLevel).toBe(1);
     expect(before.latestPurchase).toBeNull();

@@ -41,7 +41,7 @@ export default defineEventHandler(async event => {
       await db().execute("INSERT INTO wallets (id,user_id) VALUES ($1,$2)", `LW-${randomUUID()}`, owner.id);
     }
     if (owner.role === "admin" && challenge.purpose !== "link")
-      throw createError({ statusCode: 403, statusMessage: "Sign in to admin with your username and password." });
+      throw createError({ statusCode: 403, statusMessage: "Sign in to admin with your member ID and password." });
     if (owner.status === "suspended") throw createError({ statusCode: 403, statusMessage: "This account is suspended." });
     await db().execute("INSERT INTO connected_wallets (user_id,address,created_at) VALUES ($1,$2,$3) ON CONFLICT (user_id) DO NOTHING", owner.id, challenge.address, new Date().toISOString());
     await db().execute("UPDATE wallet_challenges SET consumed_at = $1 WHERE id = $2", Date.now(), body.id);

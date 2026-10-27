@@ -24,17 +24,17 @@
 | GET | `/api/auth/session` | P / ทุกโหมด | `{user: Account หรือ null}` |
 | POST | `/api/auth/wallet/challenge` | P เมื่อ login, M เมื่อ link / X | `{address,purpose?,sponsorCode?}` → `{id,message}`; purpose เริ่มต้น `login` หรือ `link`; อายุ 5 นาที |
 | POST | `/api/auth/wallet/verify` | ลายเซ็น; M เมื่อ link / X | `{id,signature}` → `{user}` และ session cookie; กระเป๋าสมาชิกใหม่สร้างบัญชีเมื่อเปิดสมัคร |
-| POST | `/api/auth/register` | P / E+C | `{username,password,sponsorCode?}` → `{user}`, HTTP 201 และ session; สร้าง credential account/embedded wallet เข้ารหัส |
-| POST | `/api/auth/login` | P / C | `{username,password}` → `{user}` และ session; external ที่ผูกแล้วต้องใช้ wallet login |
-| PATCH | `/api/auth/profile` | M / ทุกโหมด | `{username}` → `{user}`; เปลี่ยนชื่อโดยตัวตนเดิม |
+| POST | `/api/auth/register` | P / E+C | `{password,sponsorCode?}` → `{user}`, HTTP 201/session; ระบบสร้าง `memberId` และกระเป๋าเข้ารหัส |
+| POST | `/api/auth/login` | P / C | `{memberId,password}` → `{user}` และ session; external ที่ผูกแล้วต้องใช้ wallet login |
+| PATCH | `/api/auth/profile` | M / ทุกโหมด | Route เดิมที่ตรวจสิทธิ์ คืน 409 เพราะ ID ที่ระบบกำหนดแก้ไม่ได้ |
 | POST | `/api/auth/logout` | P / ทุกโหมด | ไม่บังคับ body → `{success:true}`; ยกเลิก session ปัจจุบันที่ส่งมา |
-| POST | `/api/admin/login` | P พร้อมข้อมูลผู้ดูแล active / ทุกโหมด | `{username,password}` → `{user}` และ session; ไม่ขึ้นกับ member password-login flag |
+| POST | `/api/admin/login` | P พร้อมข้อมูลผู้ดูแล active / ทุกโหมด | `{memberId,password}` → `{user}` และ session; ไม่ขึ้นกับ member password-login flag |
 | GET | `/api/platform-settings` | P / ทุกโหมด | `{registrationOpen,fundingOpen,supportEmail,feeRecipientAddress}` |
 | GET | `/api/referrals/tree` | P / ทุกโหมด | Query `id`, `path?`, `levels?` → ผังสายผู้แนะนำสาธารณะ |
 | GET | `/api/platform/transactions` | P / ทุกโหมด | ธุรกรรม distributor ปัจจุบันที่บันทึกไว้ มีตัวกรองด้านล่าง |
 | GET | `/api/platform/analytics` | P / ทุกโหมด | บัญชีรวม การซื้อ/แบ่งจ่ายที่ confirmed และกิจกรรม 30 วัน |
 
-`Account` มี `id` เป็น UUID ภายใน, `memberId` เป็น numeric string, `username`, `referralCode` ซึ่งเป็น null ก่อนเปิด, `sponsorCode`, `createdAt`, `role` ผังสาธารณะไม่เปิด UUID ภายใน ผู้ดูแลใช้ wallet challenge มาแทน admin credential login ไม่ได้
+`Account` มี `id` เป็น UUID ภายใน, `memberId` เป็น numeric string, `referralCode` ซึ่งเป็น null ก่อนเปิด, `sponsorCode`, `createdAt`, `role` ผังสาธารณะไม่เปิด UUID ภายใน ผู้ดูแลใช้ wallet challenge มาแทน admin credential login ไม่ได้
 
 ## 3. สมาชิก กระเป๋า และธุรกรรม connected — 18 routes
 
@@ -42,7 +42,7 @@
 | --- | --- | --- | --- |
 | GET | `/api/dashboard` | M / ทุกโหมด | แยกคอมมิชชัน pending funding เดิม จำนวนโอนภายใน และยอดเครือข่าย |
 | GET | `/api/referrals` | M / ทุกโหมด | `{members,network,truncated}`; ลูกตรงและเครือข่ายไม่เกิน 15 ชั้น ส่ง network สูงสุด 500 คน |
-| GET | `/api/referrals/program` | M / ทุกโหมด | Activation/code/sponsor ระดับปัจจุบัน/ถัดไป ราคา และสรุปการซื้อ ledger ล่าสุด |
+| GET | `/api/referrals/program` | M / ทุกโหมด | Activation/code/sponsor เลเวล (Level) ปัจจุบัน/ถัดไป ราคา และสรุปการซื้อ ledger ล่าสุด |
 | POST | `/api/referrals/sponsor` | M / ทุกโหมด | `{code}` → `{user,wallet,program}`; ผูก sponsor ที่ active/activated ครั้งเดียว ปฏิเสธ pending purchase วงจร และตนเอง |
 | GET | `/api/referrals/chain/status` | M / ทุกโหมด | `ReferralChainStatus`; พยายามตรวจรายการซื้อค้างของเจ้าของ |
 | GET | `/api/referrals/chain/purchases` | M / ทุกโหมด | Array `ChainPurchaseStatus` ล่าสุด 20 รายการ |
@@ -73,9 +73,9 @@ Indexed history มี hash/from/to, direction (`sent`,`received`,`self`), kind 
 | POST | `/api/wallet/evm/send` | M / E | `{id,quoteHash,requestKey,password}` → `{send}`; pending คืน 202 มิฉะนั้น 200 |
 | POST | `/api/referrals/chain/purchase` | M / E และ contract payment | `{password,level,requestKey}` → `ChainPurchaseStatus`; pending คืน 202 มิฉะนั้น 200 |
 | POST | `/api/wallet/deposit` | M / E และเปิด funding | `{amount,requestKey}` → `WalletSummary`; สร้างคำขอ pending โดยไม่เพิ่มเครดิต |
-| POST | `/api/wallet/transfer` | M / E | `{amount,recipient,password,requestKey}` → `WalletSummary`; `recipient` คือ username ที่ active |
+| POST | `/api/wallet/transfer` | M / E | `{amount,recipient,password,requestKey}` → `WalletSummary`; `recipient` คือ ID สมาชิกที่ active |
 | POST | `/api/referrals/activate` | M / L | `{password,requestKey}` → `{user,wallet,program}`; ซื้อ level 1 ด้วยเครดิตครั้งเดียว |
-| POST | `/api/referrals/upgrade` | M / L | `{password,requestKey,level}` → `{user,wallet,program}`; เฉพาะระดับถัดไป 2–15 |
+| POST | `/api/referrals/upgrade` | M / L | `{password,requestKey,level}` → `{user,wallet,program}`; เฉพาะเลเวล (Level) ถัดไป 2–15 |
 
 บาง route ตรวจ mode ภายใน utility ไม่ใช่ใน handler โดยตรง การมี session ไม่ยกเลิกการตรวจรหัสผ่านของ embedded write ที่อ่อนไหว หน้าจอซ่อน embedded private key หลัง 30 วินาที และเมื่อปิด เปลี่ยนหน้า ซ่อน tab หรือเปลี่ยนบัญชี External mode ปิดฟีเจอร์เปิดเผย key นี้
 
@@ -87,7 +87,7 @@ Admin login ถูกนับในข้อ 2 แล้ว ทุก route ด
 | --- | --- | --- | --- |
 | GET | `/api/admin/overview` | ทุกโหมด | จำนวนบัญชี ledger/funding เดิม การเติบโต 7 วัน UTC payment และ audit ล่าสุด |
 | GET | `/api/admin/users` | ทุกโหมด | Query `page,search,status` → `{items,total,page,pageSize}` |
-| PATCH | `/api/admin/users/:id` | ทุกโหมด | `{username?,status?}` อย่างน้อยหนึ่ง field; status `active`/`suspended` → `{ok:true}`; ห้ามระงับ admin |
+| PATCH | `/api/admin/users/:id` | ทุกโหมด | `{status}` (`active`/`suspended`) → `{ok:true}`; แก้ ID ไม่ได้และป้องกันบัญชี admin |
 | GET | `/api/admin/settings` | ทุกโหมด | `PlatformSettings` |
 | PUT | `/api/admin/settings` | ทุกโหมด | `{registrationOpen,fundingOpen,supportEmail,feeRecipientAddress?}` → settings; contract mode ห้ามเปลี่ยน chain recipient ทางนี้ |
 | GET | `/api/admin/referrals/status` | ทุกโหมด | `{chain,canManageFee,feeUpdate,totals}`; reconcile chain; totals อาจรวม distributor เก่าที่บันทึกไว้ |
@@ -96,7 +96,7 @@ Admin login ถูกนับในข้อ 2 แล้ว ทุก route ด
 | GET | `/api/admin/referral-accounting` | ทุกโหมด อ่าน ledger เดิม | `{credited,payables}` รวมตาม legacy fee address ไม่ใช่หลักฐาน settle บนเชน |
 | GET | `/api/admin/payments` | ทุกโหมด อ่าน funding เดิม | Query `page,search,status` → คำขอเติมและ review แบบแบ่งหน้า |
 | POST | `/api/admin/payments/:id` | ทุกโหมด ตรวจ funding เดิม | `{decision,reference?,note?,verified?}` → `{ok:true}`; approve/reject ตามกติกาตรวจรับ |
-| GET | `/api/admin/explorer/network` | ทุกโหมด | Query `root?` หรือ `username?` ตรงตัว → สาขาส่วนตัวของบัญชีใดก็ได้ |
+| GET | `/api/admin/explorer/network` | ทุกโหมด | Query `root?` หรือ `memberId?` ตรงตัว → สาขาส่วนตัวของบัญชีใดก็ได้ |
 | GET | `/api/admin/explorer/transactions` | ทุกโหมด | ค้นหา/กรอง/แบ่งหน้า ledger ข้ามบัญชี |
 
 API ตรวจรับ funding ยังใช้ได้สำหรับผู้ดูแลที่มีสิทธิ์ แม้หน้าตรวจ payment ส่งต่อไป dashboard Approve ต้อง `verified:true` และ reference ไม่ซ้ำยาว 6–160 ตัว Reject ต้อง note 3–500 ตัว Retry รายละเอียดเดิมไม่เพิ่มรายการซ้ำ `supportEmail` เว้นว่างได้ มิฉะนั้นต้องผ่านรูปแบบอีเมลและไม่เกิน 254 ตัว Fee address ต้องเป็น EVM ไม่ใช่ศูนย์ และ chain fee preparation ห้ามใช้ที่อยู่ distributor เอง
@@ -111,7 +111,7 @@ GET /api/referrals/tree?id=1&path=0/2&levels=3
 
 `id` เป็น numeric string จำนวนเต็มบวกที่เป็น safe integer ยาวไม่เกิน 16 หลัก `path` ว่างได้หรือเป็นเลขลำดับลูกคั่น `/` เลขเกิน 1 ได้เพราะลูกตรงทุกคนอยู่ใต้ sponsor จริง แต่ละช่วงเป็น `0` หรือจำนวนเต็มบวกไม่เกิน 9 หลัก รวมไม่เกิน 15 ช่วง `levels` รับจำนวนเต็ม 1–15 เริ่มต้น 3 และจำกัดตามความลึกที่เหลือ
 
-คืน `{root,path,maxDepth:15,visibleDepth,members,levels}` สมาชิกมี `{id,username,path,parentId}` ใช้ ID สาธารณะตัวเลข ส่วนจำนวนรายชั้นเป็น `{depth,filled}` ไม่มี binary capacities ข้อมูลกระเป๋าส่วนตัว หรือสถานะบัญชี ไม่พบ ID คืน 404 Query ผิดคืน 400 ข้อมูล binary placements ไม่ใช่สายที่ endpoint ปัจจุบันใช้
+คืน `{root,path,maxDepth:15,visibleDepth,members,levels}` สมาชิกมี `{id,path,parentId}` ใช้ ID สาธารณะตัวเลข ส่วนจำนวนรายชั้นเป็น `{depth,filled}` ไม่มี binary capacities ข้อมูลกระเป๋าส่วนตัว หรือสถานะบัญชี ไม่พบ ID คืน 404 Query ผิดคืน 400 ข้อมูล binary placements ไม่ใช่สายที่ endpoint ปัจจุบันใช้
 
 ### กิจกรรมและ analytics สาธารณะ
 
@@ -131,7 +131,7 @@ GET /api/referrals/tree?id=1&path=0/2&levels=3
 
 ### Private explorer และรายการแบ่งหน้า
 
-Private network ใช้ query `root` เป็น UUID ภายใน สมาชิกดู root ตนเองหรือลูกใน 15 ชั้นเดิมได้ ไม่มีสิทธิ์/ไม่พบใช้ 404 เดียวกัน ผู้ดูแลใช้ `username` ตรงตัวได้ คืน `{root,members,truncated,remainingDepth}` สูงสุด 500 คน
+Private network ใช้ query `root` เป็น UUID ภายใน สมาชิกดู root ตนเองหรือลูกใน 15 ชั้นเดิมได้ ไม่มีสิทธิ์/ไม่พบใช้ 404 เดียวกัน ผู้ดูแลใช้ `memberId` ตัวเลขได้ คืน `{root,members,truncated,remainingDepth}` สูงสุด 500 คน
 
 Ledger explorer รับ `search`, `type`, `status`, `period`, `page` ประเภทคือ `all`, `deposit`, `withdrawal`, `transfer_in`, `transfer_out`, `commission`, `referral_purchase` สถานะ `all`, `pending`, `completed`, `rejected` ช่วง `all`, `7`, `30`, `90` ส่งหน้าละ 12 พร้อม `{items,total,page,pageSize,summary}` สรุป credit/debit/pending การมีตัวกรอง `withdrawal` ไม่ได้หมายความว่ามี endpoint สร้างคำขอถอน
 
@@ -175,7 +175,7 @@ type ReferralChainStatus = {
 {"id":"<challenge ID>","signature":"<wallet signature>"}
 ```
 
-เมื่อมี session แล้ว เตรียมซื้อระดับถัดไป:
+เมื่อมี session แล้ว เตรียมซื้อเลเวล (Level) ถัดไป:
 
 ```json
 {"level":1,"requestKey":"e46f9527-450d-4b22-a087-ecb482c5aac1"}
@@ -233,7 +233,7 @@ type ReferralChainStatus = {
 | 401 | Session ไม่มี/หมดอายุ credentials/signature/password ไม่ถูกต้อง |
 | 403 | Role/origin/mode ผิด ระงับบัญชี หรือปิดการทำงานนั้น |
 | 404 | ไม่พบรายการของตน กระเป๋า สมาชิก หรือสาขาส่วนตัวที่เข้าถึงได้ |
-| 409 | สถานะขัดแย้ง มีงานค้าง ระดับไม่ตรง quote เก่า หรือใช้ intent/reference ซ้ำ |
+| 409 | สถานะขัดแย้ง มีงานค้าง เลเวล (Level) ไม่ตรง quote เก่า หรือใช้ intent/reference ซ้ำ |
 | 413 | Content-Length ที่ประกาศเกินกำหนด |
 | 429 | เกินอัตราการเรียก |
 | 503 | ขาด config blockchain/explorer หรือ provider ไม่พร้อม |

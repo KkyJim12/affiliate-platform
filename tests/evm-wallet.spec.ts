@@ -1,3 +1,4 @@
+import { createTestAdmin, memberIdFor } from "./member-fixtures";
 import { expect, test, type APIRequestContext } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { Wallet, computeAddress } from "ethers";
@@ -53,7 +54,7 @@ test("registration provisions an encrypted Amoy wallet; only its owner can unloc
     const otherKey = await post(other, "/api/wallet/evm/reveal", { password, userId: user.id });
     expect(computeAddress((await otherKey.json()).privateKey)).toBe(otherWallet.address);
     await post(owner, "/api/auth/logout", {});
-    expect((await post(owner, "/api/auth/login", { username, password })).status()).toBe(200);
+    expect((await post(owner, "/api/auth/login", { memberId: user.memberId, password })).status()).toBe(200);
     expect((await (await owner.get("/api/wallet/evm")).json()).wallet.address).toBe(details.address);
     for (let i = 0; i < 3; i++) await post(owner, "/api/wallet/evm/reveal", { password: "Incorrect password!" });
     expect((await post(owner, "/api/wallet/evm/reveal", { password })).status()).toBe(429);
@@ -71,7 +72,8 @@ test("concurrent first logins provision exactly one wallet for a legacy account"
   try {
     await db.execute("INSERT INTO users VALUES ($1, $2, $3, $4, NULL, $5)", id, username, await hashPassword(password), `UNASSIGNED-${id}`, new Date().toISOString());
     await db.execute("INSERT INTO wallets (id, user_id) VALUES ($1, $2)", `LW-${randomUUID()}`, id);
-    const results = await Promise.all([post(first, "/api/auth/login", { username, password }), post(second, "/api/auth/login", { username, password })]);
+    const memberId = await memberIdFor(id);
+    const results = await Promise.all([post(first, "/api/auth/login", { memberId, password }), post(second, "/api/auth/login", { memberId, password })]);
     expect(results.map(result => result.status())).toEqual([200, 200]);
     const a = (await (await first.get("/api/wallet/evm")).json()).wallet;
     const b = (await (await second.get("/api/wallet/evm")).json()).wallet;

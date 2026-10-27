@@ -182,7 +182,7 @@ Funding requests and legacy transfers accept 0.01–999,999,999 USDT-labelled cr
 
 ### Internal transfers
 
-The sender provides their password, recipient username, amount and request key. The recipient must be active and different from the sender; the sender needs sufficient available credit. Ordered wallet locks and one transaction conserve balances, create matching debit/credit records and prevent duplicate retries. This is not an on-chain token transfer.
+The sender provides their password, recipient numeric member ID, amount and request key. The recipient must be active and different from the sender; the sender needs sufficient available credit. Ordered wallet locks and one transaction conserve balances, create matching debit/credit records and prevent duplicate retries. This is not an on-chain token transfer.
 
 ### Legacy level purchases
 

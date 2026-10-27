@@ -59,10 +59,10 @@ const content = {
     capabilityHeaders: ["Area", "Implemented behavior"],
     capabilities: [
       ["Member workspace", "Overview, referrals, wallet, explorer, FAQ, rank examples and analytics."],
-      ["Accounts", "Wallet-message sign-in, unique numeric member IDs and editable usernames."],
+      ["Accounts", "Wallet-message sign-in and identification by unique numeric member ID."],
       ["Referral network", "Actual sponsor ancestry, public ID search, fifteen generations and CSV/SVG exports."],
       ["EVM wallet", "Linked address, POL/token reads, signed sends and indexed transaction history."],
-      ["Administrator", "Credential login, account search, rename, suspend/reactivate, settings and audit."],
+      ["Administrator", "Credential login, member status management, suspend/reactivate, settings and audit."],
       ["Presentation", "Thai/English, light/dark themes, mobile layouts, keyboard controls and reduced motion."]
     ],
     architectureTitle: "How the components work together",
@@ -126,44 +126,44 @@ const content = {
   },
   th: {
     lang: "th", name: "ภาษาไทย", date: "27 ตุลาคม 2026", summary: "สรุปเอกสารโครงการ", footer: "ระบบ · การจ่ายเงิน · เงื่อนไข", page: "หน้า",
-    titles: ["ภาพรวมระบบ UNXO", "การชำระเงินและราคา 15 ระดับ", "การแบ่งจ่ายค่าคอมมิชชัน", "การดูแลระบบและเงื่อนไขสำคัญ"],
+    titles: ["ภาพรวมระบบ UNXO", "การชำระเงินและเลเวล (Level)", "การแบ่งจ่ายค่าคอมมิชชัน", "การดูแลระบบและเงื่อนไขสำคัญ"],
     leads: [
       "สรุปพื้นที่สมาชิก เครือข่ายผู้แนะนำ กระเป๋าเงิน และเครื่องมือผู้ดูแลของโปรเจกต์ UNXO",
-      "ซื้อระดับตามลำดับ โดยจ่ายเต็มราคาของแต่ละระดับ ค่าเริ่มต้นใช้กระเป๋าภายนอกและ Smart Contract",
+      "ซื้อเลเวล (Level) ตามลำดับ โดยจ่ายเต็มราคาของแต่ละเลเวล (Level) ค่าเริ่มต้นใช้กระเป๋าภายนอกและ Smart Contract",
       "การซื้อที่เข้าเงื่อนไขจะแบ่งเงินครบ 100% เป็น 19 ส่วน และโอนพร้อมกันในธุรกรรมเดียว",
       "สิทธิ์ควบคุม พฤติกรรมระบบเดิม และข้อจำกัดที่ควรเข้าใจก่อนติดตั้งหรือทำธุรกรรม"
     ],
     testTitle: "รูปแบบ DEPLOY ปัจจุบันเป็น TESTNET",
     test: "Polygon Amoy · chain ID 80002 สคริปต์สร้าง tUSDT ทดสอบที่ไม่มีมูลค่าเงินจริง ไม่ใช่ USDT จริงหรือดอลลาร์ ใช้ test POL จ่าย gas",
-    stats: [["15", "ระดับที่ซื้อได้"], ["52", "เส้นทาง API"], ["TH / EN", "ภาษาหน้าจอ"]],
+    stats: [["15", "เลเวล (Level) ที่ซื้อได้"], ["52", "เส้นทาง API"], ["TH / EN", "ภาษาหน้าจอ"]],
     capabilitiesTitle: "ความสามารถในโปรเจกต์",
     capabilityHeaders: ["ส่วนงาน", "สิ่งที่รองรับ"],
     capabilities: [
       ["พื้นที่สมาชิก", "ภาพรวม ผู้แนะนำ กระเป๋า Explorer, FAQ ตัวอย่าง rank และ analytics"],
-      ["บัญชีผู้ใช้", "ลงชื่อเข้าด้วยลายเซ็นกระเป๋า รหัสสมาชิกตัวเลขไม่ซ้ำ และเปลี่ยน username"],
+      ["บัญชีผู้ใช้", "ลงชื่อเข้าด้วยลายเซ็นกระเป๋า และระบุสมาชิกด้วย ID ตัวเลขที่ไม่ซ้ำ"],
       ["เครือข่าย", "สาย sponsor จริง ค้นหา ID สาธารณะ สูงสุด 15 รุ่น และส่งออก CSV/SVG"],
       ["กระเป๋า EVM", "ที่อยู่ที่ผูก ยอด POL/โทเคน ส่งสินทรัพย์ด้วยลายเซ็น และประวัติจาก indexer"],
-      ["ผู้ดูแล", "Login ด้วยข้อมูลบัญชี ค้นหา เปลี่ยนชื่อ ระงับ/คืนสถานะ ตั้งค่า และ audit"],
+      ["ผู้ดูแล", "Login ด้วยข้อมูลบัญชี จัดการสถานะสมาชิก ระงับ/คืนสถานะ ตั้งค่า และ audit"],
       ["หน้าจอ", "ไทย/อังกฤษ ธีมสว่าง/มืด มือถือ แป้นพิมพ์ และ reduced motion"]
     ],
     architectureTitle: "องค์ประกอบทำงานร่วมกันอย่างไร",
     architecture: ["Nuxt / Vue UI", "Nitro API", "PostgreSQL"],
-    architectureText: "API รับรองสายผู้แนะนำและสิทธิ์ กระเป๋าภายนอกลงนามซื้อ ส่วน ReferralDistributor v2 โอนเงินบน Amoy จากนั้น worker ตรวจ receipt ก่อนบันทึกระดับและรายได้ในแอป",
+    architectureText: "API รับรองสายผู้แนะนำและสิทธิ์ กระเป๋าภายนอกลงนามซื้อ ส่วน ReferralDistributor v2 โอนเงินบน Amoy จากนั้น worker ตรวจ receipt ก่อนบันทึกเลเวล (Level) และรายได้ในแอป",
     rolesTitle: "แยกอำนาจแต่ละบทบาท",
     roles: "สมาชิกควบคุมธุรกรรมกระเป๋า ผู้ดูแลจัดการบัญชีในแอป เฉพาะ owner สัญญาจึงเปลี่ยนผู้รับ ผู้ลงนาม หรือ pause บนเชนได้ Quote authority ลงนามโอนแทนผู้ซื้อไม่ได้",
     dataTitle: "ยอดเงิน 3 แบบมีความหมายต่างกัน",
     balances: "สินทรัพย์บนเชน ประวัติคอมมิชชันที่ยืนยันแล้ว และเครดิตภายในเดิมเป็นคนละส่วน การผูกกระเป๋าไม่ย้ายสินทรัพย์เก่าหรือแปลงเครดิตให้",
     modesHeaders: ["โหมด", "แหล่งเงิน / ผู้ลงนาม"],
     modes: [["External · ค่าเริ่มต้น", "ERC-20 ที่ตั้งค่าในที่อยู่ที่ผูก ให้กระเป๋าอนุมัติ"], ["Embedded + contract", "ERC-20 โดยรหัสผ่านปลดล็อก keystore เข้ารหัสฝั่ง server"], ["Embedded + ledger", "ต้องเปิดโหมดเดิมชัดเจน ใช้เครดิตภายในที่มีอยู่"]],
-    priceTitle: "ตารางราคา", priceHeaders: ["ระดับ", "ราคา", "สะสม"],
-    priceFormula: "ราคา(L) = 10 × 2<sup>L−1</sup> · ซื้อครบ 15 ระดับ: <strong>327,670</strong>",
-    priceNote: "จำนวนเงินเป็นหน่วยโทเคนที่ตั้งค่า Deployment ที่ให้มาใช้ tUSDT ทดสอบ ยังไม่รวม gas บัญชีใหม่เริ่มระดับ 0 ซื้อระดับ 1 แล้วจึงเปิดใช้รหัสแนะนำ",
+    priceTitle: "ตารางราคา", priceHeaders: ["เลเวล (Level)", "ราคา", "สะสม"],
+    priceFormula: "ราคา(L) = 10 × 2<sup>L−1</sup> · ซื้อครบ 15 เลเวล (Level): <strong>327,670</strong>",
+    priceNote: "จำนวนเงินเป็นหน่วยโทเคนที่ตั้งค่า Deployment ที่ให้มาใช้ tUSDT ทดสอบ ยังไม่รวม gas บัญชีใหม่เริ่มเลเวล (Level) 0 ซื้อเลเวล (Level) 1 แล้วจึงเปิดใช้รหัสแนะนำ",
     flowTitle: "ลำดับซื้อแบบค่าเริ่มต้น",
     steps: [
-      ["เตรียม", "ตรวจระดับถัดไป ยอดโทเคน สายผู้แนะนำ authority และ distributor v2"],
+      ["เตรียม", "ตรวจเลเวล (Level) ถัดไป ยอดโทเคน สายผู้แนะนำ authority และ distributor v2"],
       ["อนุมัติ", "Approve เท่าราคาซื้อ ถ้า allowance เดิมไม่เป็นศูนย์แต่ไม่พอ ให้ reset ก่อน"],
       ["ซื้อ", "กระเป๋าลงนาม สัญญารับเงินและโอนทั้ง 19 ส่วนแบบ atomic"],
-      ["ยืนยัน", "ตรวจ canonical receipt และ events ครบ พร้อม confirmation เริ่มต้น 2 ครั้ง จึงรับรองระดับในแอป"]
+      ["ยืนยัน", "ตรวจ canonical receipt และ events ครบ พร้อม confirmation เริ่มต้น 2 ครั้ง จึงรับรองเลเวล (Level) ในแอป"]
     ],
     status: "<strong>สถานะ:</strong> awaiting_signature → pending → confirmed / failed Quote ภายนอกอายุ 10 นาที Retry ใช้ request key เดิม การ timeout ไม่ใช่หลักฐานว่าจ่ายล้มเหลว",
     commissionLabels: ["ตรงชั้น 1", "ตรงชั้น 2", "ตรงชั้น 3", "โบนัส", "แพลตฟอร์ม"],
@@ -280,6 +280,9 @@ try {
       return { page: i+1, clearance: footer.top - content.bottom, overflowX: sheet.scrollWidth - sheet.clientWidth,
         fontsLoaded: document.fonts.check("400 12px Summary", "ระบบ UNXO"), text: sheet.innerText.length };
     }));
+    const summaryText = await page.locator("body").innerText();
+    assert(!/usernames?/i.test(summaryText), "Summary must identify members by ID only.");
+    assert(!summaryText.includes("\u0e23\u0e30\u0e14\u0e31\u0e1a"), "Thai summary must use the approved Level terminology.");
     assert.equal(checks.length, edition.pages);
     for (const check of checks) {
       assert(check.clearance >= 12, `${edition.name} page ${check.page} overlaps footer (clearance ${check.clearance.toFixed(1)}px)`);

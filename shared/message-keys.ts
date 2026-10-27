@@ -1,5 +1,11 @@
 // Source-message aliases for statuses, API errors, and activity records.
 export const messageKeys: Record<string, string> = {
+  "Sign in to admin with your member ID and password.": "profile.adminPasswordRequired",
+  "Member ID or password is incorrect.": "ui.member_id_or_password_incorrect",
+  "That member ID was not found.": "ui.that_username_was_not_found",
+  "Member IDs are assigned automatically and cannot be changed.": "profile.memberIdHint",
+  "Choose a valid account status. Member IDs cannot be changed.": "profile.memberIdHint",
+  "Member ID and password login is disabled. Sign in with your external wallet.": "connected.signInHint",
   "Sign in to admin with your username and password.": "profile.adminPasswordRequired",
   "Create an account with a username and password. Your encrypted in-app wallet is created automatically.": "ui.create_an_account_with_a_username_and_password_your_in_app_usdt_ledger_wallet_is_crea",
   "Connect MetaMask, Rabby or Phantom and sign a message to create an account or sign in. Your wallet approves every purchase and transfer.": "connected.walletFaqAnswer",

@@ -5,7 +5,7 @@ const { authOpen, notify } = useAppUI();
 const { signIn, register } = useAccount();
 const { incomingReferral } = useIncomingReferral();
 const mode = ref<"login" | "register">("login");
-const username = ref("");
+const memberId = ref("");
 const password = ref("");
 const confirmation = ref("");
 const sponsorCode = ref("");
@@ -31,13 +31,13 @@ async function submit() {
   try {
     const incomingReferral = sessionStorage.getItem("loop-incoming-referral");
     if (mode.value === "register") {
-      await register(username.value, password.value, sponsorCode.value);
+      await register(password.value, sponsorCode.value);
       sessionStorage.removeItem("loop-incoming-referral");
-    } else await signIn(username.value, password.value);
+    } else await signIn(memberId.value, password.value);
     password.value = "";
     confirmation.value = "";
     authOpen.value = false;
-    notify(mode.value === "register" ? "Your account and in-app wallet are ready." : "Welcome back to your loop.");
+    notify(mode.value === "register" ? t('profile.accountCreated', { memberId: useAccount().user.value?.memberId }) : "Welcome back to your loop.");
     await navigateTo(incomingReferral ? "/referrals" : "/dashboard");
   } catch (err) {
     const failure = err as { data?: { statusMessage?: string } };
@@ -57,8 +57,11 @@ async function submit() {
       <h2>{{ mode === 'login' ? t('ui.back_in_good_company') : t('ui.your_next_chapter_starts_here') }}</h2>
       <p>{{ mode === 'login' ? t('ui.sign_in_to_your_network_and_in_app_wallet') : t('ui.one_account_for_your_matrix_referrals_and_usdt_wallet') }}</p>
       <form class="account-form" @submit.prevent="submit">
-        <label for="login-username">{{ t('ui.username') }}</label>
-        <input id="login-username" v-model="username" class="auth-input" autocomplete="username" autocapitalize="none" spellcheck="false" :placeholder="tr('your_username')" required minlength="3" maxlength="24" pattern="[a-zA-Z][a-zA-Z0-9_]{2,23}" :disabled="loading" />
+        <template v-if="mode === 'login'">
+          <label for="login-member-id">{{ t('publicTree.memberId') }}</label>
+          <input id="login-member-id" v-model="memberId" class="auth-input" autocomplete="username" inputmode="numeric" :placeholder="t('publicTree.placeholder')" required maxlength="16" pattern="[1-9][0-9]{0,15}" :disabled="loading" />
+        </template>
+        <p v-else>{{ t('profile.autoIdHint') }}</p>
         <label for="login-password">{{ t('ui.password') }}</label>
         <div class="password-field">
           <input id="login-password" v-model="password" class="auth-input" :type="showPassword ? 'text' : 'password'" :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" :minlength="mode === 'register' ? 12 : 1" maxlength="128" :placeholder="mode === 'login' ? t('ui.enter_your_password') : t('ui.at_least_12_characters')" required :disabled="loading" />

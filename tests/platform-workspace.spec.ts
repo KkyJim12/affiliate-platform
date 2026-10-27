@@ -1,3 +1,4 @@
+import { createTestAdmin, memberIdFor } from "./member-fixtures";
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -182,13 +183,13 @@ test("landing launches the app, every FAQ is Thai, and invite codes are always v
 
 test("recent sends is styled inside the overview column and absent from the EVM wallet page", async ({ page }, info) => {
   test.skip(!external, "Connected-wallet layout regression.");
-  const username = `recent_${randomUUID().slice(0,8)}`, password = "A recent sends test password 42!";
-  execFileSync(process.execPath, ["scripts/create-admin.mjs"], { env: { ...process.env, DATABASE_URL: process.env.TEST_DATABASE_URL, LOOP_ADMIN_USERNAME: username, LOOP_ADMIN_PASSWORD: password }, stdio: "pipe" });
+  const password = "A recent sends test password 42!";
+  const memberId = createTestAdmin(password);
   const database = openTestDatabase(), wallet = Wallet.createRandom().address, recipient = Wallet.createRandom().address;
   try {
-    const user = await database.one("SELECT id FROM users WHERE username = $1", username);
+    const user = await database.one("SELECT id FROM users WHERE referral_code = $1", memberId);
     await database.execute("INSERT INTO connected_wallets (user_id,address,created_at) VALUES ($1,$2,$3)", user!.id, wallet, new Date().toISOString());
-    expect((await page.request.post("/api/admin/login", { headers: { Origin: origin }, data: { username, password } })).status()).toBe(200);
+    expect((await page.request.post("/api/admin/login", { headers: { Origin: origin }, data: { memberId, password } })).status()).toBe(200);
     await page.route("**/api/wallet/evm/balance", route => route.fulfill({ json: { address: wallet, chainId: 80002, blockNumber: "1", native: { symbol: "POL", decimals: 18, balance: "1", balanceUnits: "1000000000000000000" }, token: null } }));
     await page.route("**/api/wallet/evm/transactions", route => route.fulfill({ status: 503, json: {} }));
     await page.route("**/api/wallet/connected/operations", route => route.fulfill({ json: [{ id: "test-send", kind: "send", status: "confirmed", transactionHash: "0x" + "a".repeat(64), recipient, amount: "1.234567", symbol: "POL", call: { from: wallet, to: recipient, data: "0x", value: "1", chainId: 80002 } }] }));

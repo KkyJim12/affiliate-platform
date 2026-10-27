@@ -6,7 +6,7 @@ import type { ReferralNode } from "../../shared/types";
 const props = defineProps<{
   members: ReferralNode[];
   rootId: string;
-  username: string;
+  memberId: string;
   matchingIds: string[];
   filtered: boolean;
   interactive?: boolean;
@@ -23,7 +23,7 @@ const cardWidth = 168;
 const cardHeight = 78;
 const rowHeight = 142;
 interface PositionedNode {
-  id: string; parentId: string | null; username: string; status: string;
+  id: string; parentId: string | null; memberId: string; status: string;
   depth: number; x: number; y: number; context: boolean; deeper: number;
 }
 const included = computed(() => {
@@ -49,7 +49,7 @@ const layout = computed(() => {
   for (const member of members) children.set(member.parentId, [...(children.get(member.parentId) || []), member]);
   const nodes: PositionedNode[] = [];
   let cursor = 36;
-  function place(member: { id: string; parentId: string | null; username: string; status: string; depth: number }): PositionedNode {
+  function place(member: { id: string; parentId: string | null; memberId: string; status: string; depth: number }): PositionedNode {
     const descendants = (children.get(member.id) || []).map(place);
     const x = descendants.length ? (descendants[0]!.x + descendants[descendants.length - 1]!.x) / 2 : cursor + cardWidth / 2;
     if (!descendants.length) cursor += cardWidth + 30;
@@ -57,7 +57,7 @@ const layout = computed(() => {
     nodes.push(node);
     return node;
   }
-  const root = place({ id: props.rootId, parentId: null, username: props.username, status: props.rootLabel || "Your account", depth: 0 });
+  const root = place({ id: props.rootId, parentId: null, memberId: props.memberId, status: props.rootLabel || "Your account", depth: 0 });
   const byId = new Map(nodes.map((node) => [node.id, node]));
   return {
     nodes, root,
@@ -115,18 +115,18 @@ function downloadImage() {
     <div v-if="noMatches" class="referral-tree-empty"><AppIcon name="Search" :size="27" /><h3>{{ t('ui.no_matching_referrals') }}</h3><p>{{ t('ui.try_another_username_or_status') }}</p></div>
     <div v-else ref="viewport" class="referral-tree-viewport" tabindex="0" role="region" :aria-label="t('ui.scrollable_referral_tree')">
       <svg ref="diagram" :viewBox="`0 0 ${layout.width} ${layout.height}`" :width="layout.width * zoom / 100" :height="layout.height * zoom / 100" class="referral-network-image" :role="interactive ? 'group' : 'img'" :aria-label="t('ui.referral_network_tree_p0_members_across_p1_levels', { p0: layout.nodes.length - 1, p1: layout.depth })" style="font-family: 'Noto Sans Thai Variable', Tahoma, Arial, sans-serif; display: block; max-width: none;">
-        <title>{{ t('ui.username_s_referral_network', { username: username === 'You' ? tr('You') : username }) }}</title>
+        <title>{{ t('ui.username_s_referral_network', { memberId: memberId === 'You' ? tr('You') : memberId }) }}</title>
         <desc>{{ t('ui.each_connecting_line_shows_who_invited_the_member_below_muted_ancestors_keep_the_matc') }}</desc>
         <rect width="100%" height="100%" fill="var(--tree-bg)" />
         <g v-for="edge in layout.edges" :key="edge.id" data-tree-edge="true"><path :d="`M${edge.from.x},${edge.from.y + cardHeight} V${edge.to.y - 30} H${edge.to.x} V${edge.to.y}`" fill="none" :stroke="edge.to.context ? 'var(--border)' : 'var(--tree-line)'" stroke-width="1.7" /><circle :cx="edge.to.x" :cy="edge.to.y - 5" r="3" fill="var(--tree-line)" /></g>
-        <g v-for="node in layout.nodes" :key="node.id" :transform="`translate(${node.x - cardWidth / 2},${node.y})`" :opacity="node.context ? 0.5 : 1" :data-member="node.username" data-tree-node="true" :style="{ '--node-depth': Math.min(node.depth, 4) }" :role="interactive ? 'button' : undefined" :tabindex="interactive ? 0 : undefined" :aria-label="interactive ? t('explorer.inspectMember', { username: node.username }) : undefined" :aria-pressed="interactive ? selectedId === node.id : undefined" :class="{ 'explorer-tree-node': interactive, 'explorer-tree-selected': interactive && selectedId === node.id }" @click="interactive && emit('select', node.id)" @keydown.enter.prevent="interactive && emit('select', node.id)" @keydown.space.prevent="interactive && emit('select', node.id)">
-          <title>{{ node.depth === 0 ? (rootLabel || t('ui.your_account')) : t('ui.level_p0', { p0: node.depth }) }} · @{{ node.username }} · {{ tr(node.status) }}</title>
+        <g v-for="node in layout.nodes" :key="node.id" :transform="`translate(${node.x - cardWidth / 2},${node.y})`" :opacity="node.context ? 0.5 : 1" :data-member="node.memberId" data-tree-node="true" :style="{ '--node-depth': Math.min(node.depth, 4) }" :role="interactive ? 'button' : undefined" :tabindex="interactive ? 0 : undefined" :aria-label="interactive ? t('explorer.inspectMember', { memberId: node.memberId }) : undefined" :aria-pressed="interactive ? selectedId === node.id : undefined" :class="{ 'explorer-tree-node': interactive, 'explorer-tree-selected': interactive && selectedId === node.id }" @click="interactive && emit('select', node.id)" @keydown.enter.prevent="interactive && emit('select', node.id)" @keydown.space.prevent="interactive && emit('select', node.id)">
+          <title>{{ node.depth === 0 ? (rootLabel || t('ui.your_account')) : t('ui.level_p0', { p0: node.depth }) }} · ID {{ node.memberId }} · {{ tr(node.status) }}</title>
           <rect :width="cardWidth" :height="cardHeight" rx="12" :fill="node.depth === 0 ? 'var(--gold-soft)' : 'var(--surface)'" :stroke="node.depth === 0 ? 'var(--gold-border)' : 'var(--border)'" stroke-width="1.3" />
           <circle cx="28" cy="28" r="15" :fill="node.depth === 0 ? 'var(--gold)' : node.status === 'Qualified' ? 'var(--success-soft)' : 'var(--gold-soft)'" />
-          <text x="28" y="32" text-anchor="middle" font-size="10" font-weight="600" :fill="node.depth === 0 ? 'var(--button-ink)' : 'var(--text-secondary)'">{{ node.username.slice(0, 2).toUpperCase() }}</text>
+          <text x="28" y="32" text-anchor="middle" font-size="10" font-weight="600" :fill="node.depth === 0 ? 'var(--button-ink)' : 'var(--text-secondary)'">{{ node.memberId.slice(0, 2).toUpperCase() }}</text>
           <text x="51" y="24" font-size="10" font-weight="600" fill="var(--text-primary)">{{ node.depth === 0 ? (rootLabel || t('ui.your_account')) : t('ui.level_p0', { p0: node.depth }) }}</text>
           <text x="51" y="39" font-size="9" fill="var(--text-secondary)">{{ node.depth === 1 ? t('ui.direct_referral') : node.depth > 1 ? t('ui.indirect_referral') : t('ui.network_root') }}</text>
-          <text x="14" y="62" font-size="10" font-weight="500" fill="var(--text-primary)">{{ node.depth === 0 && username === 'You' ? t('ui.you') : '@' + clipName(node.username) }}</text>
+          <text x="14" y="62" font-size="10" font-weight="500" fill="var(--text-primary)">{{ node.depth === 0 && memberId === 'You' ? t('ui.you') : 'ID ' + clipName(node.memberId) }}</text>
           <circle v-if="node.depth > 0" cx="151" cy="59" r="3" :fill="node.status === 'Qualified' ? 'var(--success)' : 'var(--gold)'" />
           <text v-if="node.deeper" :x="cardWidth / 2" :y="cardHeight + 19" text-anchor="middle" font-size="9" fill="var(--text-secondary)">+ {{ node.deeper }} {{ node.deeper === 1 ? tr('connection') : tr('connections') }} {{ t('ui.below') }}</text>
         </g>

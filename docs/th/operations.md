@@ -29,9 +29,9 @@ npm.cmd run dev
 
 ## 2. สร้างผู้ดูแล
 
-`npm run admin:create` ใช้ `DATABASE_URL` เดียวกับแอป ทำ migration และถาม username/password ใหม่ โดยซ่อนการพิมพ์รหัสผ่าน ไม่มีบัญชีผู้ดูแลเริ่มต้นหรือหน้าสมัครผู้ดูแลสาธารณะ และไม่เขียนทับบัญชีเดิม Username ใช้กติกา 3–24 ตัวตามระบบ รหัสผ่าน 12–128 ตัว
+`npm run admin:create` ใช้ `DATABASE_URL` เดียวกับแอป ทำ migration และถามรหัสผ่าน 12–128 ตัวโดยซ่อนการพิมพ์ ระบบสร้างและแจ้ง ID ผู้ดูแลให้อัตโนมัติ ไม่มีบัญชีเริ่มต้นหรือหน้าสมัครผู้ดูแลสาธารณะ และไม่เขียนทับบัญชีเดิม ใช้ `npm run admin:list` เพื่อดู ID และสถานะผู้ดูแลเดิม
 
-โหมดไม่โต้ตอบใช้ `LOOP_ADMIN_USERNAME` และ `LOOP_ADMIN_PASSWORD` เก็บข้อมูลใน environment ส่วนตัว ไม่ใส่ในเอกสารหรือ output ที่แชร์ จากนั้นไป `/admin/login` ผู้ดูแลยังใช้ข้อมูลบัญชีได้แม้ปิด member password login
+โหมดไม่โต้ตอบใช้ `LOOP_ADMIN_PASSWORD` เก็บไว้ใน environment ส่วนตัว จากนั้นไป `/admin/login` ด้วย ID ที่ระบบแจ้งและรหัสผ่าน ผู้ดูแลยังเข้าสู่ระบบได้แม้ปิด member password login
 
 ## 3. ตัวแปรตั้งค่า
 
@@ -60,7 +60,7 @@ Nuxt runtime อ่านค่าจาก environment ชื่อ `NUXT_*` �
 | `REFERRAL_DEPLOYER_PRIVATE_KEY` | Key ส่วนตัวใช้ deploy ต้องมี Amoy test POL แอปตอนรันไม่จำเป็นต้องใช้ |
 | `ETHERSCAN_API_KEY` | Key verify source ถ้าว่างใช้ `NUXT_EVM_EXPLORER_API_KEY` แทน |
 | `REFERRAL_QUOTE_SIGNER_ADDRESS` | ที่อยู่ **สาธารณะเดิมตอน deploy** ใช้ verification fallback เมื่อไม่มี deployment record |
-| `LOOP_ADMIN_USERNAME`, `LOOP_ADMIN_PASSWORD` | ข้อมูลสร้างผู้ดูแลแบบไม่โต้ตอบ ใช้ในขั้นตอน setup |
+| `LOOP_ADMIN_PASSWORD` | รหัสผ่านสร้างผู้ดูแลแบบไม่โต้ตอบ ระบบกำหนด ID ให้อัตโนมัติ |
 
 Generic Viem transfer-evidence helpers ต้องตั้ง RPC, chain, token, treasury และ confirmation policy ให้ครบและเป็นเครือข่ายเดียวกัน การรองรับ chain ของไลบรารีไม่ได้เปลี่ยน wallet ของแอปที่ใช้เฉพาะ Amoy ห้ามเก็บ key/secret ในตัวแปร `NUXT_PUBLIC_*`
 
@@ -101,7 +101,7 @@ npm run contracts:deploy -- --replace-distributor --previous-contract <CURRENT_D
 
 | ตาราง | หน้าที่ |
 | --- | --- |
-| `users`, `user_access` | ตัวตน รหัสตัวเลข sponsor เดิม username บทบาท และสถานะระงับ |
+| `users`, `user_access` | ตัวตน ID สมาชิกตัวเลข sponsor เดิม ค่าภายในสำหรับข้อมูลเดิม บทบาท และสถานะระงับ |
 | `sessions`, `rate_limits`, `wallet_challenges` | Session hash จำกัดความถี่ และ challenge เข้าสู่ระบบ/ผูกกระเป๋าครั้งเดียว |
 | `connected_wallets`, `evm_wallets` | ที่อยู่ภายนอกที่ผูก กับ embedded keystore เข้ารหัสด้วยรหัสผ่าน |
 | `wallets`, `wallet_transactions` | Available/reserved และรายการ ledger |
@@ -114,7 +114,7 @@ npm run contracts:deploy -- --replace-distributor --previous-contract <CURRENT_D
 | `referral_placements` | ข้อมูล binary ที่เก็บไว้ ผังและการจ่ายปัจจุบันอิง `users.sponsor_id` |
 | `schema_migrations` | ชื่อ migration, SHA-256 checksum และเวลา จัดการโดย migration runner |
 
-เงินภายในใช้ BIGINT หน่วยหนึ่งในล้าน ตรวจว่าไม่ติดลบและอยู่ใน safe integer ชื่อบัญชีและที่อยู่กระเป๋ามีข้อกำหนด unique แบบไม่แยกตัวพิมพ์ Request key ระดับที่ซื้อ hash ธุรกรรม และ reference ตรวจรับเงินมี unique constraints ตามส่วนงาน โอน ledger ล็อกกระเป๋าตามลำดับ เปลี่ยนสายผู้แนะนำใช้ advisory transaction lock และงานเชนใช้การควบคุมแยกตามบัญชี ข้อมูลและบัญชีที่เกี่ยวข้อง commit พร้อมกัน
+เงินภายในใช้ BIGINT หน่วยหนึ่งในล้าน ตรวจว่าไม่ติดลบและอยู่ใน safe integer ชื่อบัญชีและที่อยู่กระเป๋ามีข้อกำหนด unique แบบไม่แยกตัวพิมพ์ Request key เลเวล (Level) ที่ซื้อ hash ธุรกรรม และ reference ตรวจรับเงินมี unique constraints ตามส่วนงาน โอน ledger ล็อกกระเป๋าตามลำดับ เปลี่ยนสายผู้แนะนำใช้ advisory transaction lock และงานเชนใช้การควบคุมแยกตามบัญชี ข้อมูลและบัญชีที่เกี่ยวข้อง commit พร้อมกัน
 
 Migration ปัจจุบันเรียง `0001` ถึง `0012` Server ทำ pending migrations ก่อนเปิดให้บริการ `npm run db:status` อ่านประวัติ ส่วน `npm run db:migrate` รัน SQL ที่ยังไม่ใช้ ทั้ง batch และ history commit ใน transaction เดียว ป้องกันรันแข่งด้วย advisory lock Checksum ปรับ line ending Windows ให้ตรงกัน หากแก้/ลบ migration ที่ใช้แล้วจะตรวจไม่ผ่านและหยุดเริ่มระบบ ต้องเพิ่มไฟล์เลขใหม่ ไม่มี rollback migration แยกรายตัว
 
@@ -154,6 +154,7 @@ API ใช้ `no-store` Proxy ที่แชร์ต้องเคารพ�
 | `typecheck` | ตรวจ Nuxt/Vue/TypeScript |
 | `docs:summary:pdf` | สร้างสรุป PDF/HTML A4 ไทย อังกฤษ และสองภาษา ใช้ฟอนต์ในโปรเจกต์กับ Microsoft Edge ที่ติดตั้ง เพิ่ม `-- --preview` เพื่อเก็บภาพหน้ากระดาษ |
 | `admin:create` | สร้างผู้ดูแลใหม่ |
+| `admin:list` | แสดง ID และสถานะของผู้ดูแลเดิม |
 | `db:start`, `db:migrate`, `db:status` | เปิด PostgreSQL native ในเครื่อง ทำ migration และดูประวัติ |
 | `db:reset`, `db:import:sqlite` | Reset schema อย่างตั้งใจ หรือนำเข้ารุ่น SQLite ที่รองรับครั้งเดียว |
 | `contracts:compile`, `contracts:prepare` | Compile Solidity และเตรียม config ส่วนตัว/แผนสาธารณะ |
@@ -185,7 +186,7 @@ API ใช้ `no-store` Proxy ที่แชร์ต้องเคารพ�
 | สมาชิกใหม่สมัครไม่ได้ | ตรวจ `registrationOpen`, activation/status ของ invite, wallet uniqueness และ mode |
 | ไม่มี/ใช้ member password login ไม่ได้ | ค่าเริ่มต้นปิดไว้ บัญชี external ที่ผูกแล้วใช้กระเป๋า ผู้ดูแลใช้ `/admin/login` |
 | สัญญาไม่พร้อม | ตรวจ RPC/80002, code ที่ deploy, version 2, token, authority signer และ environment ของ server |
-| ซื้อระดับต่อไม่ได้ | ตรวจระดับถัดไป โทเคนพอ pause รายการค้าง อายุ quote และ config nonce |
+| ซื้อเลเวล (Level) ต่อไม่ได้ | ตรวจเลเวล (Level) ถัดไป โทเคนพอ pause รายการค้าง อายุ quote และ config nonce |
 | Purchase pending | เก็บ ID/hash ตรวจ receipt canonical, confirmations, POL และ RPC ให้ worker ตรวจต่อก่อนลองใหม่ |
 | Send pending หลัง replace | เก็บ hash เดิม/ใหม่ ตรวจผู้ส่ง nonce และ receipt ยังไม่มี auto-discovery สำหรับ Send อย่าส่งซ้ำทันที |
 | อ่านยอดไม่ได้ | ตรวจที่อยู่ที่ผูก chain RPC และ token metadata อย่าใช้เครดิตเดิมแทนยอดเชน |

@@ -10,11 +10,6 @@ const password = "An account settings test password 42!";
 const external = process.env.NUXT_PUBLIC_WALLET_MODE === "external";
 const post = (api: APIRequestContext, path: string, data: object) => api.post(path, { headers: { Origin: origin }, data });
 const patch = (api: APIRequestContext, path: string, data: object) => api.patch(path, { headers: { Origin: origin }, data });
-function provisionAdmin(username: string) {
-  execFileSync(process.execPath, ["scripts/create-admin.mjs"], { env: {
-    ...process.env, DATABASE_URL: process.env.TEST_DATABASE_URL, LOOP_ADMIN_USERNAME: username, LOOP_ADMIN_PASSWORD: password,
-  } });
-}
 async function walletSignIn(api: APIRequestContext, wallet: ReturnType<typeof Wallet.createRandom>, purpose = "login") {
   const challenge = await post(api, "/api/auth/wallet/challenge", { address: wallet.address, purpose });
   expect(challenge.status()).toBe(200);
@@ -52,7 +47,7 @@ test("Thai and dark are the defaults; explicit English and light preferences per
         await expect(page.locator("#faq-1")).toContainText(external ? thai.platformFaq.walletAnswer : thai.platformFaq.embeddedAnswer);
       }
     }
-    await expect(page.getByLabel(thai.ui.username, { exact: true })).toBeVisible();
+    await expect(page.getByLabel(thai.publicTree.memberId, { exact: true })).toBeVisible();
     await expect(page.getByLabel(thai.ui.password, { exact: true })).toBeVisible();
     await page.getByRole("combobox", { name: thai.ui.language, exact: true }).click();
     await page.getByRole("option", { name: "English", exact: true }).click();
@@ -67,85 +62,22 @@ test("Thai and dark are the defaults; explicit English and light preferences per
   } finally { await context.close(); }
 });
 
-test("admin credentials work independently of member login settings and username changes persist", async ({ page, playwright }) => {
-  test.setTimeout(60_000);
-  const username = `ops_${randomUUID().slice(0, 8)}`;
-  const renamed = `renamed_${randomUUID().slice(0, 8)}`;
-  provisionAdmin(username);
+test("member IDs are read-only in settings and profile writes preserve account ownership", async ({ page, playwright }) => {
+  const member = await createMember(page.request);
   const guest = await playwright.request.newContext({ baseURL: origin });
   try {
-    expect((await post(guest, "/api/admin/login", { username, password: "incorrect" })).status()).toBe(401);
-    await page.goto("/admin/settings");
-    await expect(page).toHaveURL(/\/admin\/login\?redirect=/);
-    for (const name of ["MetaMask", "Rabby", "Phantom"]) await expect(page.getByRole("button", { name, exact: true })).toHaveCount(0);
-    await page.getByLabel("Username", { exact: true }).fill(username.toUpperCase());
-    await page.getByLabel("Password", { exact: true }).fill(password);
-    await page.getByRole("button", { name: "Sign in to admin", exact: true }).click();
-    await expect(page).toHaveURL(origin + "/admin/settings");
-    // The URL changes before the login page's leave transition completes.
-    await expect(page.getByRole("heading", { name: "Settings", exact: true, level: 1 })).toBeVisible();
-    if (external) {
-      const linked = Wallet.createRandom();
-      expect((await walletSignIn(page.request, linked, "link")).status()).toBe(200);
-      expect((await post(guest, "/api/admin/login", { username, password })).status()).toBe(200);
-      await post(guest, "/api/auth/logout", {});
-      expect((await walletSignIn(guest, linked)).status()).toBe(403);
-      expect((await (await guest.get("/api/auth/session")).json()).user).toBeNull();
-    }
-    await page.getByLabel("Username", { exact: true }).fill(renamed);
-    await page.getByRole("button", { name: "Save username", exact: true }).click();
-    await expect(page.getByRole("button", { name: `Profile menu for ${renamed}`, exact: true })).toBeVisible();
-    await page.reload();
-    await expect(page.getByLabel("Username", { exact: true })).toHaveValue(renamed);
-    await post(page.request, "/api/auth/logout", {});
-    expect((await post(guest, "/api/admin/login", { username, password })).status()).toBe(401);
-    expect((await post(guest, "/api/admin/login", { username: renamed, password })).status()).toBe(200);
-  } finally { await guest.dispose(); }
-});
-
-test("members edit their own username; admins manage names with validation and access controls", async ({ page, playwright }) => {
-  test.setTimeout(60_000);
-  const guest = await playwright.request.newContext({ baseURL: origin });
-  const admin = await playwright.request.newContext({ baseURL: origin });
-  const other = await playwright.request.newContext({ baseURL: origin });
-  try {
-    const member = await createMember(page.request);
-    const otherMember = await createMember(other);
-    const renamed = `name_${randomUUID().slice(0, 8)}`;
-    expect((await patch(guest, "/api/auth/profile", { username: renamed })).status()).toBe(401);
-    expect((await page.request.patch("/api/auth/profile", { headers: { Origin: "https://elsewhere.example" }, data: { username: renamed } })).status()).toBe(403);
-    for (const username of ["ab", "1invalid", "has space", "x".repeat(25), null])
-      expect((await patch(page.request, "/api/auth/profile", { username })).status()).toBe(400);
-    expect((await patch(page.request, "/api/auth/profile", { username: otherMember.username.toUpperCase() })).status()).toBe(409);
     await page.goto("/dashboard?view=settings");
-    await page.getByLabel("Username", { exact: true }).fill(renamed.toUpperCase());
-    await page.getByRole("button", { name: "Save username", exact: true }).click();
-    await expect(page.getByRole("button", { name: `Profile menu for ${renamed}`, exact: true })).toBeVisible();
+    await expect(page.getByTestId("account-member-id")).toHaveText(member.memberId);
+    await expect(page.getByRole("textbox", { name: "Username", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Save username", exact: true })).toHaveCount(0);
+    expect((await patch(guest, "/api/auth/profile", { memberId: "999" })).status()).toBe(401);
+    expect((await page.request.patch("/api/auth/profile", { headers: { Origin: "https://elsewhere.example" }, data: { memberId: "999" } })).status()).toBe(403);
+    for (const body of [{ memberId: "999" }, { username: "renamed" }])
+      expect((await patch(page.request, "/api/auth/profile", body)).status()).toBe(409);
+    expect((await (await page.request.get("/api/auth/session")).json()).user).toEqual(member);
     await page.reload();
-    await expect(page.getByLabel("Username", { exact: true })).toHaveValue(renamed);
-    expect((await (await page.request.get("/api/auth/session")).json()).user).toMatchObject({ ...member, username: renamed });
-    expect((await patch(page.request, `/api/admin/users/${otherMember.id}`, { username: "cannot_edit" })).status()).toBe(403);
-
-    const adminName = `manager_${randomUUID().slice(0, 8)}`;
-    provisionAdmin(adminName);
-    expect((await post(admin, "/api/admin/login", { username: adminName, password })).status()).toBe(200);
-    expect((await patch(admin, `/api/admin/users/${member.id}`, { username: otherMember.username })).status()).toBe(409);
-    expect((await patch(admin, `/api/admin/users/${member.id}`, { username: otherMember.username, status: "suspended" })).status()).toBe(409);
-    expect((await (await page.request.get("/api/auth/session")).json()).user.id).toBe(member.id);
-    const managedName = `managed_${randomUUID().slice(0, 8)}`;
-    await post(page.request, "/api/auth/logout", {});
-    await post(page.request, "/api/admin/login", { username: adminName, password });
-    await page.goto("/admin/users");
-    await page.getByLabel("Search by username", { exact: true }).fill(renamed);
-    await page.getByRole("button", { name: "Search", exact: true }).click();
-    await page.getByRole("row").filter({ hasText: `@${renamed}` }).getByRole("button", { name: "Manage", exact: true }).click();
-    await page.getByLabel("Username", { exact: true }).fill(managedName);
-    await page.getByRole("button", { name: "Save username", exact: true }).click();
-    await expect(page.getByRole("dialog")).toContainText(`@${managedName}`);
-    const changed = await (await admin.get(`/api/admin/users?search=${managedName}`)).json();
-    expect(changed.items[0]).toMatchObject({ id: member.id, username: managedName, status: "active" });
-    const overview = await (await admin.get("/api/admin/overview")).json();
-    expect(overview.audit).toEqual(expect.arrayContaining([expect.objectContaining({ action: "user_username_changed" })]));
+    await expect(page.getByTestId("account-member-id")).toHaveText(member.memberId);
+    expect(member).not.toHaveProperty("username");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  } finally { await Promise.all([guest.dispose(), admin.dispose(), other.dispose()]); }
+  } finally { await guest.dispose(); }
 });

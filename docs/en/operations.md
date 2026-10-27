@@ -29,9 +29,9 @@ The app can start before blockchain deployment, but contract purchases will rema
 
 ## 2. Administrator setup
 
-`npm run admin:create` uses the same `DATABASE_URL`, applies migrations and prompts for a new username/password with hidden password input. There are no default admin credentials and no public admin registration; it does not overwrite an existing account. The username follows the standard 3–24 character rule and the password is 12–128 characters.
+`npm run admin:create` uses the same `DATABASE_URL`, applies migrations and prompts for a 12–128 character password with hidden input. The server assigns and prints the new administrator's numeric member ID. There are no default credentials or public admin registration, and existing accounts are not overwritten. Use `npm run admin:list` to find existing admin IDs/statuses.
 
-Noninteractive setup accepts `LOOP_ADMIN_USERNAME` and `LOOP_ADMIN_PASSWORD`. Keep credentials in a private environment rather than documentation or shared command output. Visit `/admin/login` afterward. Admin credentials login remains available regardless of the member password-login flag.
+Noninteractive setup accepts `LOOP_ADMIN_PASSWORD`. Keep it private. Visit `/admin/login` and use the assigned ID plus password. Admin credentials login remains available regardless of the member password-login flag.
 
 ## 3. Configuration reference
 
@@ -60,7 +60,7 @@ Nuxt runtime settings are mapped from the corresponding `NUXT_*` environment nam
 | `REFERRAL_DEPLOYER_PRIVATE_KEY` | Private deployment-only key funded with Amoy test POL; not needed by the running app |
 | `ETHERSCAN_API_KEY` | Source-verification key; falls back to `NUXT_EVM_EXPLORER_API_KEY` when blank |
 | `REFERRAL_QUOTE_SIGNER_ADDRESS` | Optional **original public** signer address for verification fallback when the saved deployment record is absent |
-| `LOOP_ADMIN_USERNAME`, `LOOP_ADMIN_PASSWORD` | Optional one-time noninteractive administrator setup credentials |
+| `LOOP_ADMIN_PASSWORD` | Optional password for noninteractive administrator setup; member ID is assigned automatically |
 
 The generic Viem transfer-evidence helpers require a consistent RPC, chain, token, treasury and confirmation policy together. Their chain support is not a switch for the Amoy-only application wallet. Never use a `NUXT_PUBLIC_*` variable for keys or secrets.
 
@@ -101,7 +101,7 @@ This deploys a new distributor against the existing token and retains original d
 
 | Tables | Responsibility |
 | --- | --- |
-| `users`, `user_access` | Identity, numeric code, original sponsor, username, role and suspension |
+| `users`, `user_access` | Identity, numeric member ID, original sponsor, private legacy handle, role and suspension |
 | `sessions`, `rate_limits`, `wallet_challenges` | Hashed sessions, throttling, one-time wallet login/link challenges |
 | `connected_wallets`, `evm_wallets` | External address links versus password-encrypted embedded keystores |
 | `wallets`, `wallet_transactions` | Internal available/reserved balances and ledger history |
@@ -154,6 +154,7 @@ All API responses are `no-store`; shared proxies must respect this. Keep databas
 | `typecheck` | Nuxt/Vue/TypeScript checks |
 | `docs:summary:pdf` | Generate the Thai, English and bilingual A4 summary PDFs/HTML using local fonts and installed Microsoft Edge; add `-- --preview` for page images |
 | `admin:create` | Create a new administrator |
+| `admin:list` | List existing administrator member IDs and account statuses |
 | `db:start`, `db:migrate`, `db:status` | Local native PostgreSQL, apply migrations and inspect history |
 | `db:reset`, `db:import:sqlite` | Deliberate schema reset or supported one-time legacy import |
 | `contracts:compile`, `contracts:prepare` | Compile local Solidity and prepare private deployment configuration/public plan |

@@ -5,7 +5,7 @@ const { t } = useLoopI18n();
 const { authOpen } = useAppUI();
 const { signIn } = useAccount();
 const { incomingReferral } = useIncomingReferral();
-const sponsorCode = ref(""), username = ref(""), password = ref(""), error = ref("");
+const sponsorCode = ref(""), memberId = ref(""), password = ref(""), error = ref("");
 const legacy = ref(false), busy = ref(false);
 watch(authOpen, open => { error.value = ""; password.value = ""; legacy.value = false;
   if (open) {
@@ -18,7 +18,7 @@ async function signedIn() {
 async function migrateAccount() {
   if (!credentialsEnabled || busy.value) return;
   busy.value = true; error.value = "";
-  try { await signIn(username.value,password.value); authOpen.value = false; password.value = ""; await navigateTo("/wallet"); }
+  try { await signIn(memberId.value,password.value); authOpen.value = false; password.value = ""; await navigateTo("/wallet"); }
   catch (failure) { error.value = (failure as { data?: { statusMessage?: string } }).data?.statusMessage || t('connected.loginFailed'); }
   finally { busy.value = false; password.value = ""; }
 }
@@ -36,7 +36,7 @@ async function migrateAccount() {
       <button v-if="credentialsEnabled" type="button" class="text-action wallet-legacy-toggle" :aria-expanded="legacy" @click="legacy = !legacy">{{ t('connected.existingAccount') }}</button>
       <form v-if="credentialsEnabled && legacy" class="account-form" @submit.prevent="migrateAccount">
         <p>{{ t('connected.migrationHint') }}</p>
-        <label for="legacy-username">{{ t('ui.username') }}</label><input id="legacy-username" v-model="username" class="auth-input" required maxlength="24" autocomplete="username" />
+        <label for="legacy-memberId">{{ t('ui.memberId') }}</label><input id="legacy-memberId" v-model="memberId" class="auth-input" required inputmode="numeric" pattern="[1-9][0-9]{0,15}" maxlength="16" autocomplete="username" />
         <label for="legacy-password">{{ t('ui.password') }}</label><input id="legacy-password" v-model="password" type="password" class="auth-input" required maxlength="128" autocomplete="current-password" />
         <p v-if="error" class="auth-error" role="alert">{{ error }}</p><button class="button button-outline" :disabled="busy">{{ t('connected.linkExisting') }}</button>
       </form>

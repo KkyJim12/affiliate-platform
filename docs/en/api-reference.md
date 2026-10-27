@@ -24,17 +24,17 @@ Access notation below: **P** public/no session, **M** active signed-in account, 
 | GET | `/api/auth/session` | P / Any | `{ user: Account or null }` |
 | POST | `/api/auth/wallet/challenge` | P for login, M for link / X | `{address,purpose?,sponsorCode?}` → `{id,message}`; purpose defaults to `login`, or `link`; five-minute challenge |
 | POST | `/api/auth/wallet/verify` | Signature; M for link / X | `{id,signature}` → `{user}` and session cookie; creates an unknown member wallet account when registration is open |
-| POST | `/api/auth/register` | P / E+C | `{username,password,sponsorCode?}` → `{user}`, HTTP 201 and session; creates credential account and encrypted embedded wallet |
-| POST | `/api/auth/login` | P / C | `{username,password}` → `{user}` and session; external linked accounts must use wallet login |
-| PATCH | `/api/auth/profile` | M / Any | `{username}` → `{user}`; rename without changing account identity |
+| POST | `/api/auth/register` | P / E+C | `{password,sponsorCode?}` → `{user}`, HTTP 201/session; server assigns `memberId` and creates encrypted wallet |
+| POST | `/api/auth/login` | P / C | `{memberId,password}` → `{user}` and session; external linked accounts must use wallet login |
+| PATCH | `/api/auth/profile` | M / Any | Retained protected route; returns 409 because automatically assigned member IDs cannot be changed |
 | POST | `/api/auth/logout` | P / Any | No required body → `{success:true}`; revokes the supplied current session |
-| POST | `/api/admin/login` | P, valid active admin credentials / Any | `{username,password}` → `{user}` and session; independent of member password-login flag |
+| POST | `/api/admin/login` | P, valid active admin credentials / Any | `{memberId,password}` → `{user}` and session; independent of member password-login flag |
 | GET | `/api/platform-settings` | P / Any | `{registrationOpen,fundingOpen,supportEmail,feeRecipientAddress}` |
 | GET | `/api/referrals/tree` | P / Any | Query `id`, `path?`, `levels?` → public sponsor tree |
 | GET | `/api/platform/transactions` | P / Any | Public recorded activity for the configured distributor; filters below |
 | GET | `/api/platform/analytics` | P / Any | Aggregate accounts, confirmed purchases/distributions and 30-day activity |
 
-`Account` fields are `id` (internal UUID), `memberId` (numeric string), `username`, `referralCode` (null until activated), `sponsorCode`, `createdAt`, `role`. A public tree response does not expose the internal UUID. An admin cannot use a wallet login challenge to replace admin credential sign-in.
+`Account` fields are `id` (internal UUID), `memberId` (numeric string), `referralCode` (null until activated), `sponsorCode`, `createdAt`, `role`. A public tree response does not expose the internal UUID. An admin cannot use a wallet login challenge to replace admin credential sign-in.
 
 ## 3. Member, wallet and connected transactions — 18 routes
 
@@ -73,7 +73,7 @@ Indexed history contains hash/from/to, direction (`sent`,`received`,`self`), kin
 | POST | `/api/wallet/evm/send` | M / E | `{id,quoteHash,requestKey,password}` → `{send}`; 202 while pending, otherwise 200 |
 | POST | `/api/referrals/chain/purchase` | M / E, contract payment | `{password,level,requestKey}` → `ChainPurchaseStatus`; 202 while pending, otherwise 200 |
 | POST | `/api/wallet/deposit` | M / E, funding open | `{amount,requestKey}` → `WalletSummary`; creates pending request without credit |
-| POST | `/api/wallet/transfer` | M / E | `{amount,recipient,password,requestKey}` → `WalletSummary`; `recipient` is an active username |
+| POST | `/api/wallet/transfer` | M / E | `{amount,recipient,password,requestKey}` → `WalletSummary`; `recipient` is an active numeric member ID |
 | POST | `/api/referrals/activate` | M / L | `{password,requestKey}` → `{user,wallet,program}`; one-time level-1 legacy credit purchase |
 | POST | `/api/referrals/upgrade` | M / L | `{password,requestKey,level}` → `{user,wallet,program}`; next legacy level 2–15 only |
 
@@ -87,7 +87,7 @@ The public admin credential-login route is counted in section 2; every route bel
 | --- | --- | --- | --- |
 | GET | `/api/admin/overview` | Any | Account totals, legacy balances/funding, seven UTC growth days, recent payments and audit |
 | GET | `/api/admin/users` | Any | Query `page,search,status` → `{items,total,page,pageSize}` |
-| PATCH | `/api/admin/users/:id` | Any | `{username? ,status?}` with at least one field; status `active`/`suspended` → `{ok:true}`; cannot suspend admin accounts |
+| PATCH | `/api/admin/users/:id` | Any | `{status}` (`active`/`suspended`) → `{ok:true}`; IDs are immutable and admin accounts are protected |
 | GET | `/api/admin/settings` | Any | `PlatformSettings` |
 | PUT | `/api/admin/settings` | Any | `{registrationOpen,fundingOpen,supportEmail,feeRecipientAddress?}` → settings; chain-recipient changes prohibited here in contract mode |
 | GET | `/api/admin/referrals/status` | Any | `{chain,canManageFee,feeUpdate,totals}`; reconciles chain operations; contract accounting totals may include older stored distributors |
@@ -96,7 +96,7 @@ The public admin credential-login route is counted in section 2; every route bel
 | GET | `/api/admin/referral-accounting` | Any, historical ledger | `{credited,payables}` grouped by legacy fee address; not proof of on-chain settlement |
 | GET | `/api/admin/payments` | Any, historical funding | Query `page,search,status` → paginated funding requests and reviews |
 | POST | `/api/admin/payments/:id` | Any, historical funding | `{decision,reference?,note?,verified?}` → `{ok:true}`; approve/reject under receipt-verification rules |
-| GET | `/api/admin/explorer/network` | Any | Query `root?` or exact `username?` → any account's private branch |
+| GET | `/api/admin/explorer/network` | Any | Query `root?` or exact `memberId?` → any account's private branch |
 | GET | `/api/admin/explorer/transactions` | Any | Search/filter/page ledger records across accounts |
 
 Funding settlement APIs remain callable by authorized admins even though the payment-review page redirects to the dashboard. Approving requires `verified:true` and a unique 6–160 character reference. Rejection requires a note of 3–500 characters. Identical retries are idempotent. `supportEmail` may be empty; otherwise it must match the server's email-format check and fit 254 characters. A fee address must be a valid nonzero EVM address; chain fee preparation also rejects the distributor itself.
@@ -111,7 +111,7 @@ GET /api/referrals/tree?id=1&path=0/2&levels=3
 
 `id` is a positive safe-integer numeric member string, up to sixteen digits. `path` is empty or sibling indices separated by `/`; indices may exceed 1, because all actual direct referrals stay beneath their sponsor. Each path segment accepts `0` or a positive integer up to nine digits, with at most fifteen segments. `levels` is an integer 1–15, default 3, clamped by the remaining tree depth.
 
-Returns `{root,path,maxDepth:15,visibleDepth,members,levels}`. Members contain `{id,username,path,parentId}` with numeric public IDs. Each level count contains `{depth,filled}`. The endpoint does not return binary capacities, private wallet data or account status. Unknown ID: 404; malformed query: 400. Database binary placements are not the current endpoint's ancestry.
+Returns `{root,path,maxDepth:15,visibleDepth,members,levels}`. Members contain `{id,path,parentId}` with numeric public IDs. Each level count contains `{depth,filled}`. The endpoint does not return binary capacities, private wallet data or account status. Unknown ID: 404; malformed query: 400. Database binary placements are not the current endpoint's ancestry.
 
 ### Public activity and analytics
 
@@ -131,7 +131,7 @@ Response: `{configured,contractAddress,chainId,items,total,page,pageSize:12,summ
 
 ### Private explorers and lists
 
-Private network query `root` is an internal account UUID. Members can inspect their own root or descendants within their original fifteen levels; unauthorized/missing branches return the same 404. Admins may use exact `username`. Results contain `{root,members,truncated,remainingDepth}`, with up to 500 members.
+Private network query `root` is an internal account UUID. Members can inspect their own root or descendants within their original fifteen levels; unauthorized/missing branches return the same 404. Admins may use numeric `memberId`. Results contain `{root,members,truncated,remainingDepth}`, with up to 500 members.
 
 Ledger explorer query: `search`, `type`, `status`, `period`, `page`. Types: `all`, `deposit`, `withdrawal`, `transfer_in`, `transfer_out`, `commission`, `referral_purchase`. Statuses: `all`, `pending`, `completed`, `rejected`. Periods: `all`, `7`, `30`, `90`. Pagination uses twelve items and returns `{items,total,page,pageSize,summary}` with ledger credit/debit/pending totals. The `withdrawal` filter does not imply that a withdrawal creation endpoint exists.
 
@@ -213,7 +213,7 @@ Limits are per scope and IP, including account ID where the scope uses it, in fi
 | --- | ---: |
 | Legacy registration / member login / admin login | 10 / 30 / 15 |
 | Wallet challenge / verify | 50 / 40 |
-| Profile rename / sponsor attach | 30 / 15 |
+| Rejected profile write / sponsor attach | 30 / 15 |
 | Chain prepare / confirm / embedded purchase | 40 / 100 / 30 |
 | Legacy activation / upgrade | 12 / 30 |
 | Balance / indexed history | 60 / 30 |

@@ -1,5 +1,7 @@
 # UNXO — เอกสารระบบ / Project documentation
 
+[การเปลี่ยนระบบและ API มาใช้ ID สมาชิก / Member ID update](member-id-update.md): current login, registration, read-only identity, searches and compatibility details.
+
 ตรวจสอบจากซอร์สโค้ดวันที่ **27 ตุลาคม 2026** (Asia/Bangkok), revision `3ffa828` ก่อนเพิ่มเอกสารชุดนี้ เอกสารอธิบายสิ่งที่โปรเจกต์รองรับ ไม่ได้ยืนยันสถานะการตั้งค่าหรือการ deploy ของระบบที่เปิดใช้งานจริง
 
 Reviewed against source on **27 October 2026** (Asia/Bangkok), revision `3ffa828` before these documentation changes. These documents describe implemented behavior, rather than certifying a live deployment or its configuration.
@@ -7,7 +9,7 @@ Reviewed against source on **27 October 2026** (Asia/Bangkok), revision `3ffa828
 | เนื้อหา / Topic | ภาษาไทย | English |
 | --- | --- | --- |
 | ภาพรวม สถาปัตยกรรม หน้าจอ บัญชี และสิทธิ์ / System, architecture, screens, accounts and roles | [คู่มือระบบ](th/system-guide.md) | [System guide](en/system-guide.md) |
-| ราคา 15 ระดับ การจ่ายเงิน ค่าคอมมิชชัน และเงื่อนไข / Prices, payments, commissions and conditions | [การจ่ายเงินและเงื่อนไข](th/payments-and-conditions.md) | [Payments and conditions](en/payments-and-conditions.md) |
+| ราคา 15 เลเวล (Level) การจ่ายเงิน ค่าคอมมิชชัน และเงื่อนไข / Prices, payments, commissions and conditions | [การจ่ายเงินและเงื่อนไข](th/payments-and-conditions.md) | [Payments and conditions](en/payments-and-conditions.md) |
 | ติดตั้ง ตั้งค่า ฐานข้อมูล deploy ทดสอบ และแก้ปัญหา / Setup, configuration, database, deployment, tests and recovery | [คู่มือผู้ดูแลและนักพัฒนา](th/operations.md) | [Operations guide](en/operations.md) |
 | API ทุก endpoint พร้อมสิทธิ์ โหมด และตัวอย่าง / Every API endpoint, access, modes and examples | [คู่มือ API](th/api-reference.md) | [API reference](en/api-reference.md) |
 
@@ -17,9 +19,11 @@ Start with the system guide and read the payment conditions before using transac
 
 ## PDF สรุปเอกสาร / PDF summaries
 
-สรุปภาพรวมระบบ โหมดชำระเงิน ราคาครบ 15 ระดับ การแบ่งคอมมิชชัน ตัวอย่างผู้รับ เงื่อนไขสำคัญ และการดูแลระบบ จัดหน้า A4 พร้อมฟอนต์ฝังในไฟล์และข้อความที่ค้นหาได้ เป็นฉบับสรุปสำหรับอ่าน/แชร์ ใช้คู่มือด้านบนเมื่อต้องการรายละเอียดครบทุก endpoint
+สรุปภาพรวมระบบ โหมดชำระเงิน ราคาครบ 15 เลเวล (Level) การแบ่งคอมมิชชัน ตัวอย่างผู้รับ เงื่อนไขสำคัญ และการดูแลระบบ จัดหน้า A4 พร้อมฟอนต์ฝังในไฟล์และข้อความที่ค้นหาได้ เป็นฉบับสรุปสำหรับอ่าน/แชร์ ใช้คู่มือด้านบนเมื่อต้องการรายละเอียดครบทุก endpoint
 
 A4 summaries cover the system, payment modes, all fifteen prices, commission rules/examples, conditions and operations. Fonts are embedded and text remains searchable. Use the full guides above for complete implementation and endpoint details.
+
+ฉบับสรุปใช้คำว่า **เลเวล (Level)** และระบุสมาชิกด้วย **ID** / Summaries identify members by **ID**.
 
 | ฉบับ / Edition | PDF | จำนวนหน้า / Pages | HTML สำหรับอ่านหรือพิมพ์ / Read or print |
 | --- | --- | ---: | --- |

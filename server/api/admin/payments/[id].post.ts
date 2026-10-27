@@ -17,12 +17,12 @@ export default defineEventHandler(async (event) => {
     if (decision === "rejected" && note.length < 3)
         throw createError({ statusCode: 400, statusMessage: "Enter a reason for rejecting this request." });
     try { await transaction(async () => {
-        const payment = await db().one("SELECT t.*, w.available, u.username FROM wallet_transactions t JOIN wallets w ON w.id = t.wallet_id JOIN users u ON u.id = w.user_id WHERE t.id = $1 AND t.type = 'deposit' FOR UPDATE OF t, w", id) as {
+        const payment = await db().one("SELECT t.*, w.available, w.user_id FROM wallet_transactions t JOIN wallets w ON w.id = t.wallet_id JOIN users u ON u.id = w.user_id WHERE t.id = $1 AND t.type = 'deposit' FOR UPDATE OF t, w", id) as {
             amount: number;
             available: number;
             status: string;
             wallet_id: string;
-            username: string;
+            user_id: string;
         } | undefined;
         if (!payment)
             throw createError({ statusCode: 404, statusMessage: "Payment request was not found." });
@@ -47,7 +47,7 @@ export default defineEventHandler(async (event) => {
             await db().execute("UPDATE wallet_transactions SET status = 'completed' WHERE id = $1", id);
         }
         await db().execute("INSERT INTO payment_reviews VALUES ($1, $2, $3, $4, $5, $6)", id, decision, decision === "approved" ? reference : null, note, admin.id, new Date().toISOString());
-        await audit(admin.id, decision === "approved" ? "payment_approved" : "payment_rejected", payment.username);
+        await audit(admin.id, decision === "approved" ? "payment_approved" : "payment_rejected", payment.user_id);
     }); } catch (error) {
         if ((error as { code?: string; constraint?: string }).code === "23505" && (error as { constraint?: string }).constraint === "payment_reviews_reference_unique")
             throw createError({ statusCode: 409, statusMessage: "This settlement reference has already been used." });

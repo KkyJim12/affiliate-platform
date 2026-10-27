@@ -33,7 +33,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test("landing plan calculator, FAQ, and username/password dialog", async ({ page }, testInfo) => {
+test("landing plan calculator, FAQ, and member ID/password dialog", async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await gotoReady(page, "/");
@@ -41,10 +41,10 @@ test("landing plan calculator, FAQ, and username/password dialog", async ({ page
   await page.locator("#rank-range").fill("8");
   await expect(page.locator(".calculator-total strong")).toContainText("3,328.00");
   await page.getByRole("button", { name: "Do I need a crypto wallet to get started?" }).click();
-  await expect(page.locator("#faq-1")).toContainText("username and password");
+  await expect(page.locator("#faq-1")).toContainText("member ID");
   await openLandingAuth(page);
   await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page.getByLabel("Username", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Member ID", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute("type", "password");
   await page.getByRole("button", { name: "Show password", exact: true }).click();
   await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute("type", "text");
@@ -86,26 +86,26 @@ test("referral overview, corrected ranks, referrals, and wallet preview on deskt
   await page.getByRole("button", { name: "Use light theme", exact: true }).click();
   await navigate(page, "My referrals");
   await page.getByRole("button", { name: "List view", exact: true }).click();
-  await page.getByLabel("Search referrals").fill("jamie");
+  await page.getByLabel("Search referrals").fill("1002");
   await expect(page.locator("tbody tr")).toHaveCount(1);
-  await expect(page.locator("tbody")).toContainText("jamie_chen");
+  await expect(page.locator("tbody")).toContainText("1002");
   await page.getByLabel("Search referrals").fill("");
   await chooseDropdown(page, page.getByLabel("Filter referral status"), "Registered");
   await expect(page.locator("tbody tr")).toHaveCount(2);
   await page.getByRole("button", { name: "Tree view", exact: true }).click();
   await expect(page.getByRole("button", { name: "Tree view", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("[data-tree-node]")).toHaveCount(5);
-  await expect(page.locator("[data-member='taylor_kim']")).toBeVisible();
+  await expect(page.locator("[data-member='1003']")).toBeVisible();
   await chooseDropdown(page, page.getByLabel("Filter referral status"), "all");
   await expect(page.locator("[data-tree-node]")).toHaveCount(9);
   await expect(page.locator("[data-tree-edge]")).toHaveCount(8);
-  await page.getByLabel("Search referrals").fill("casey");
+  await page.getByLabel("Search referrals").fill("1007");
   await expect(page.locator("[data-tree-node]")).toHaveCount(4);
-  await expect(page.locator("[data-member='alex_morgan']")).toHaveAttribute("opacity", "0.5");
-  await expect(page.locator("[data-member='casey_brooks']")).toHaveAttribute("opacity", "1");
+  await expect(page.locator("[data-member='1001']")).toHaveAttribute("opacity", "0.5");
+  await expect(page.locator("[data-member='1007']")).toHaveAttribute("opacity", "1");
   await page.getByRole("button", { name: "List view", exact: true }).click();
   await expect(page.locator("tbody tr")).toHaveCount(1);
-  await expect(page.locator("tbody")).toContainText("casey_brooks");
+  await expect(page.locator("tbody")).toContainText("1007");
   await page.getByRole("button", { name: "Tree view", exact: true }).click();
   await page.getByLabel("Search referrals").fill("");
   await page.getByRole("button", { name: "Zoom in", exact: true }).click();
@@ -119,7 +119,7 @@ test("referral overview, corrected ranks, referrals, and wallet preview on deskt
   expect(download.suggestedFilename()).toBe("loop-referral-tree.svg");
   const svg = await readFile((await download.path())!, "utf8");
   expect(svg).toContain('xmlns="http://www.w3.org/2000/svg"');
-  expect(svg).toContain("@casey_brooks");
+  expect(svg).toContain("ID 1007");
   await page.reload();
   await expect(page.getByRole("button", { name: "Tree view", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator("[data-tree-node]")).toHaveCount(9);
@@ -139,12 +139,12 @@ test("referral overview, corrected ranks, referrals, and wallet preview on deskt
 });
 
 test("create account and EVM wallet, restore session, and sign back in", async ({ page }, testInfo) => {
-  const username = `ui_${testInfo.project.name}_${Date.now().toString(36)}`;
+  let memberId = "";
   const password = "A good local password 42!";
   await gotoReady(page, "/dashboard");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.getByRole("button", { name: "Create account", exact: true }).click();
-  await page.getByLabel("Username", { exact: true }).fill(username);
+  await expect(page.getByLabel("Member ID", { exact: true })).toHaveCount(0);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByLabel("Confirm password").fill("A different password");
   await page.getByRole("button", { name: "Create account & wallet" }).click();
@@ -152,13 +152,14 @@ test("create account and EVM wallet, restore session, and sign back in", async (
   await page.getByLabel("Confirm password").fill(password);
   await page.getByRole("button", { name: "Create account & wallet" }).click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
-  await expect(page.locator(".dashboard-greeting")).toContainText(username.toUpperCase());
+  memberId = (await (await page.request.get("/api/auth/session")).json()).user.memberId;
+  await expect(page.locator(".dashboard-greeting")).toContainText(memberId);
   await expect(page.getByTestId("wallet-balance")).toContainText("0.00");
   await navigate(page, "My referrals");
   await page.getByRole("button", { name: "Tree view", exact: true }).click();
   await expect(page.locator("[data-tree-node]")).toHaveCount(15);
   await expect(page.locator('[data-empty="true"]')).toHaveCount(14);
-  await expect(page.getByTestId("binary-referral-tree")).toContainText(username);
+  await expect(page.getByTestId("binary-referral-tree")).toContainText(memberId);
   await navigate(page, "EVM wallet");
   await expect(page.getByTestId("wallet-balance")).toContainText("0.00");
   const address = (await page.getByTestId("evm-address").textContent())!;
@@ -175,14 +176,14 @@ test("create account and EVM wallet, restore session, and sign back in", async (
   await expect(page.getByRole("button", { name: "Sign in", exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Sign in", exact: true }).first().click();
   await page.getByRole("button", { name: "Sign in", exact: true }).last().click();
-  await page.getByLabel("Username", { exact: true }).fill(username.toUpperCase());
+  await page.getByLabel("Member ID", { exact: true }).fill(memberId);
   await page.getByLabel("Password", { exact: true }).fill("wrong password");
   await page.getByRole("button", { name: "Sign in to UNXO", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("incorrect");
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in to UNXO", exact: true }).click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
-  await expect(page.locator(".dashboard-greeting")).toContainText(username.toUpperCase());
+  await expect(page.locator(".dashboard-greeting")).toContainText(memberId);
   await navigate(page, "EVM wallet");
   await expect(page.getByTestId("evm-address")).toHaveText(address);
   await page.screenshot({ path: `test-results/wallet-${testInfo.project.name}.png`, fullPage: true });
@@ -277,9 +278,9 @@ test("Thai switching persists across pages, localizes forms and tree exports, an
   await gotoReady(page, "/dashboard?view=referrals&layout=tree");
   await expect(page.locator("html")).toHaveAttribute("lang", "th-TH");
   await expect(page.locator("[data-tree-node]")).toHaveCount(9);
-  await page.getByLabel(th.search_referrals).fill("casey");
+  await page.getByLabel(th.search_referrals).fill("1007");
   await chooseDropdown(page, page.getByLabel(th.language, { exact: true }), "en");
-  await expect(page.getByLabel("Search referrals")).toHaveValue("casey");
+  await expect(page.getByLabel("Search referrals")).toHaveValue("1007");
   await expect(page.locator("[data-tree-node]")).toHaveCount(4);
   await chooseDropdown(page, page.getByLabel("Language", { exact: true }), "th");
   await page.getByLabel(th.search_referrals).fill("");
@@ -290,7 +291,7 @@ test("Thai switching persists across pages, localizes forms and tree exports, an
   await page.getByRole("button", { name: th.download_image, exact: true }).click();
   const svg = await readFile((await (await downloadEvent).path())!, "utf8");
   expect(svg).toContain(th.your_account);
-  expect(svg).toContain(th.username_s_referral_network.replace("{username}", th.you));
+  expect(svg).toContain(th.username_s_referral_network.replace("{memberId}", "1000"));
   expect(svg).not.toContain("var(--");
   await noOverflow(page);
   await page.screenshot({ path: `test-results/thai-tree-dark-${testInfo.project.name}.png`, fullPage: true });
@@ -314,7 +315,7 @@ test("Thai switching persists across pages, localizes forms and tree exports, an
   await expect(page.locator("#faq-1")).toContainText(thai.platformFaq.embeddedAnswer);
   if (!await page.locator(".nav-connect").isVisible()) await page.locator(".mobile-menu-button").click();
   await page.getByRole("button", { name: th.sign_in, exact: true }).last().click();
-  await page.getByLabel(th.username, { exact: true }).fill(`missing_${Date.now().toString(36)}`);
+  await page.getByLabel(th.username, { exact: true }).fill("9007199254740991");
   await page.getByLabel(th.password, { exact: true }).fill("A wrong password 42!");
   await page.getByRole("button", { name: th.sign_in_to_loop, exact: true }).click();
   await expect(page.getByRole("alert")).toContainText(th.username_or_password_is_incorrect);
@@ -453,9 +454,9 @@ test("page motion reveals content, preserves keyboard access, and respects reduc
   await expect(page.locator(".account-settings")).toHaveCSS("opacity", "1");
   await chooseDropdown(page, page.getByRole("combobox", { name: "Theme preference", exact: true }), "dark");
   await navigate(page, "My referrals");
-  await page.getByLabel("Search referrals").fill("casey");
+  await page.getByLabel("Search referrals").fill("1007");
   await page.getByRole("button", { name: "Tree view", exact: true }).click();
-  await expect(page.getByLabel("Search referrals")).toHaveValue("casey");
+  await expect(page.getByLabel("Search referrals")).toHaveValue("1007");
   await expect(page.locator("[data-tree-node]")).toHaveCount(4);
   await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
 

@@ -70,7 +70,7 @@ const number = (value: number) => value.toLocaleString(localeTag.value);
       <div class="binary-tree-header">
         <div>
           <span class="eyebrow">{{ t('publicTree.structure') }}</span>
-          <h2>{{ t('publicTree.memberTitle', { id: tree.root.id }) }} <span>@{{ tree.root.username }}</span></h2>
+          <h2>{{ t('publicTree.memberTitle', { id: tree.root.id }) }}</h2>
           <p>{{ t('publicTree.exploreHint') }}</p>
         </div>
         <span class="outline-pill">{{ t('publicTree.level', { level: tree.maxDepth }) }}</span>
@@ -85,17 +85,14 @@ const number = (value: number) => value.toLocaleString(localeTag.value);
       <p v-if="branch" class="binary-tree-path">{{ t('publicTree.branch') }}: {{ treePathSlots(branch).map(slot => t('publicTree.branchNumber', { number: number(Number(slot) + 1) })).join(' › ') }}</p>
       <div ref="viewport" class="binary-tree-viewport" tabindex="0" role="region" :aria-label="t('publicTree.scroll')" @scroll.passive="updateViewport">
         <svg :viewBox="`0 0 ${layout.width} ${layout.height}`" :width="layout.width * zoom / 100" :height="layout.height * zoom / 100" role="group" :aria-label="t('publicTree.treeLabel')">
-          <title>{{ t('publicTree.memberTitle', { id: tree.root.id }) }} · @{{ tree.root.username }}</title>
+          <title>{{ t('publicTree.memberTitle', { id: tree.root.id }) }}</title>
           <g v-for="node in layout.nodes.filter(node => node.parent)" :key="`edge-${node.path}`" data-tree-edge="true" :data-parent-path="node.parent!.path" :data-child-path="node.path"><path :d="`M${node.parent!.x},${node.parent!.y + cardHeight} V${node.y - 22} H${node.x} V${node.y}`" fill="none" :stroke="node.member ? 'var(--tree-line)' : 'var(--border)'" :stroke-dasharray="node.member ? undefined : '4 5'" stroke-width="1.5" /></g>
-          <g v-for="node in layout.nodes" :key="node.path" :transform="`translate(${node.x - cardWidth / 2},${node.y})`" data-tree-node="true" :data-path="node.path" :data-member-id="node.member?.id" :data-empty="!node.member" :role="node.depth < 15 && node.path !== branch ? 'button' : undefined" :tabindex="node.depth < 15 && node.path !== branch ? 0 : undefined" :aria-label="t('publicTree.nodeLabel', { level: node.depth, id: node.member?.id || '—', username: node.member?.username || t('publicTree.empty') })" :class="{ 'binary-tree-clickable': node.depth < 15 && node.path !== branch }" @click="node.depth < 15 && explore(node.path)" @keydown.enter.prevent="node.depth < 15 && explore(node.path)" @keydown.space.prevent="node.depth < 15 && explore(node.path)">
-            <title>{{ t('publicTree.nodeLabel', { level: node.depth, id: node.member?.id || '—', username: node.member?.username || t('publicTree.empty') }) }}</title>
+          <g v-for="node in layout.nodes" :key="node.path" :transform="`translate(${node.x - cardWidth / 2},${node.y})`" data-tree-node="true" :data-path="node.path" :data-member-id="node.member?.id" :data-empty="!node.member" :role="node.depth < 15 && node.path !== branch ? 'button' : undefined" :tabindex="node.depth < 15 && node.path !== branch ? 0 : undefined" :aria-label="t('publicTree.nodeLabel', { level: node.depth, id: node.member?.id || '—' })" :class="{ 'binary-tree-clickable': node.depth < 15 && node.path !== branch }" @click="node.depth < 15 && explore(node.path)" @keydown.enter.prevent="node.depth < 15 && explore(node.path)" @keydown.space.prevent="node.depth < 15 && explore(node.path)">
+            <title>{{ t('publicTree.nodeLabel', { level: node.depth, id: node.member?.id || '—' }) }}</title>
             <rect :width="cardWidth" :height="cardHeight" rx="10" :fill="node.member ? 'var(--gold-soft)' : 'var(--surface)'" :stroke="node.member ? 'var(--gold-border)' : 'var(--border)'" :stroke-dasharray="node.member ? undefined : '4 4'" />
             <text x="12" y="19" font-size="9" fill="var(--text-secondary)">{{ t('publicTree.level', { level: node.depth }) }}</text>
             <foreignObject x="12" y="27" :width="cardWidth - 24" height="18">
               <div class="binary-tree-node-id" :title="node.member ? t('publicTree.id') + ' ' + node.member.id : undefined">{{ t('publicTree.id') }} {{ node.member?.id || '—' }}</div>
-            </foreignObject>
-            <foreignObject x="12" y="48" :width="cardWidth - 24" height="18">
-              <div class="binary-tree-node-name" :title="node.member ? '@' + node.member.username : undefined">{{ node.member ? '@' + node.member.username : t('publicTree.empty') }}</div>
             </foreignObject>
             <text v-if="node.depth < 15 && node.path !== branch" x="117" y="20" text-anchor="middle" font-size="13" fill="var(--gold-text)">↓</text>
           </g>

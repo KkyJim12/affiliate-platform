@@ -12,7 +12,7 @@ export interface ReferralAccounting {
 
 export interface AdminMember {
   id: string;
-  username: string;
+  memberId: string;
   role: "member" | "admin";
   status: "active" | "suspended";
   referralCode: string | null;
@@ -24,7 +24,7 @@ export interface AdminMember {
 
 export interface AdminPayment {
   id: string;
-  username: string;
+  memberId: string;
   walletId: string;
   amount: number;
   status: "pending" | "completed" | "rejected";
@@ -44,7 +44,7 @@ export interface AdminOverview {
   settledAmount: number;
   growth: { day: string; accounts: number }[];
   payments: AdminPayment[];
-  audit: { id: string; username: string; action: string; target: string; createdAt: string }[];
+  audit: { id: string; memberId: string; action: string; target: string; createdAt: string }[];
 }
 
 export interface AdminList<T> { items: T[]; total: number; page: number; pageSize: number }

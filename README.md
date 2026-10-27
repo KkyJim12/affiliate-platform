@@ -1,12 +1,14 @@
 # UNXO — matrix and referral workspace
 
+Members are identified by numeric **Member ID** throughout the UI and public API. Credential login uses `{memberId,password}`; embedded registration assigns an ID automatically and accepts `{password,sponsorCode?}`. IDs cannot be edited. Find existing admin IDs with `npm run admin:list`. See [the identity migration notes](docs/member-id-update.md).
+
 เอกสารระบบฉบับภาษาไทยและภาษาอังกฤษ: [สารบัญ / Documentation index](docs/README.md). Covers the full system, all 52 API routes, installation/operations, fifteen-level prices, payment flows, commission eligibility and implemented conditions. Start with [ภาษาไทย](docs/th/system-guide.md) or [English](docs/en/system-guide.md); see [การจ่ายเงินและเงื่อนไข](docs/th/payments-and-conditions.md) / [Payments and conditions](docs/en/payments-and-conditions.md).
 
 PDF สรุป / Summary PDFs: [ภาษาไทย · 4 หน้า](docs/pdf/UNXO-summary-th.pdf) · [English · 4 pages](docs/pdf/UNXO-summary-en.pdf) · [รวมสองภาษา / Bilingual · 8 pages](docs/pdf/UNXO-summary-bilingual.pdf). Regenerate with `npm run docs:summary:pdf`.
 
 Connected wallets are now the default for members: wallet signatures for login and every on-chain write, with 1% bonuses at each of 15 depths. See [connected wallet setup, existing-account linking and distributor replacement](docs/connected-wallets.md). In-app key management and password-authorized transactions below apply only when `NUXT_PUBLIC_WALLET_MODE=embedded` is explicitly enabled.
 
-Administrators sign in at `/admin/login` with their username and password, including after linking a transaction wallet. Member username/password login is hidden and disabled by default. Set `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true` and restart to enable legacy member login or link an existing account; embedded member login also requires this flag.
+Administrators sign in at `/admin/login` with their member ID and password, including after linking a transaction wallet. Member member ID/password login is hidden and disabled by default. Set `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true` and restart to enable legacy member login or link an existing account; embedded member login also requires this flag.
 
 Nuxt 4 app with a referral tree overview, 15-rank explorer, 15-level unilevel projections, wallet-signature accounts, and connected EVM wallets. The UNXO interface uses a modern gold palette with light and dark themes.
 
@@ -48,11 +50,11 @@ Open http://localhost:3000. Create an account through the sign-in dialog. Choose
 
 ## Administrator workspace
 
-Run `npm run admin:create` (`npm.cmd run admin:create` in PowerShell) and choose a new administrator username and a password of at least 12 characters. Password input is hidden. Then open `/admin/login`. Non-interactive setup accepts `LOOP_ADMIN_USERNAME` and `LOOP_ADMIN_PASSWORD`; it uses the same PostgreSQL `DATABASE_URL` as the server and applies pending migrations. There are no default credentials or public admin registration. Existing accounts are never overwritten.
+Run `npm run admin:create` (`npm.cmd run admin:create` in PowerShell) and choose a password of 12–128 characters. Password input is hidden; setup prints the assigned administrator member ID. Open `/admin/login` with that ID and password. Use `npm run admin:list` to find existing admin IDs. Non-interactive setup accepts `LOOP_ADMIN_PASSWORD`; it uses the same PostgreSQL `DATABASE_URL` and applies pending migrations. There are no default credentials or public admin registration. Existing accounts are never overwritten.
 
 The protected `/admin/dashboard`, `/admin/users`, `/admin/explorer`, and `/admin/settings` pages use live PostgreSQL data, with English/Thai, light/dark mode, responsive navigation, custom dropdowns, and reduced-motion support. The dashboard shows account totals, account growth and an admin activity log. Payments navigation, funding widgets and the payment-review page have been removed; old payment-page URLs redirect to the dashboard. Users can be searched, filtered, paginated, inspected, suspended, and reactivated. Suspension revokes sessions and blocks sign-in and transfers to the suspended recipient; administrator accounts are protected from suspension.
 
-Members and administrators can edit their own username in account settings. Admins can also rename accounts from Users → Manage; these changes are audited. Names use 3–24 letters, numbers or underscores, start with a letter, and are unique without regard to case. Account IDs, wallet links, sponsor relationships and history stay attached to the same account.
+Member IDs are read-only in account settings and admin account details. Administrators can search by member ID and suspend/reactivate members. Existing account UUIDs, numeric IDs, wallet links, sponsor relationships and history are preserved; legacy private handles are retained only for storage/import compatibility.
 
 Historical funding records and authenticated settlement APIs remain for legacy compatibility. These APIs require receipt verification and unique settlement references; ledger credits, reviews and audit entries commit atomically. They are separate from contract purchases and the current admin interface.
 
@@ -68,7 +70,7 @@ Explorer opens public contract transactions from `/api/platform/transactions`: p
 
 Landing page Launch App links open the dashboard. Invite-code fields remain visible in the sign-in dialog and prefill from a valid `?ref=` on any page. The latest incoming code is remembered in the current browser tab.
 
-- Usernames are case-insensitive, 3–24 characters, beginning with a letter. Passwords are 12–128 characters, salted and hashed with scrypt on the server.
+- Member IDs are numeric and assigned automatically. Passwords are 12–128 characters, salted and hashed with scrypt on the server.
 - Sessions use random tokens in HttpOnly, SameSite=Strict cookies with a seven-day expiry. Only token hashes are stored. HTTPS requests receive Secure cookies. Mutating requests require a matching Origin; authentication and wallet writes are rate limited.
 - Connected-wallet registration atomically creates a user, zero-balance legacy ledger wallet and external wallet link, without generating an embedded private key or usable member password. Explicit embedded registration instead creates a password-encrypted Polygon Amoy wallet. Numeric member IDs are assigned at registration and become eligible referral codes after a confirmed level 1 purchase in the selected payment mode. Only activated codes from active accounts can establish a sponsor, at registration or later on the referral page. Account, referral, and wallet APIs resolve ownership from the session.
 - PostgreSQL persists accounts, hashed credentials, sessions, wallet balances, and transaction records. Set `DATABASE_URL`; there is no SQLite fallback. Use the Node server build with a reachable PostgreSQL database; static generation cannot serve the account APIs.
@@ -167,7 +169,7 @@ Empty previews use two branches. Paths use sibling indices separated by `/`,
 such as `0/2/1`, across at most 15 descendant levels. Overview and My referrals
 use the same endpoint. The UI offers 3, 4, 5 or 15 visible levels with branch
 navigation and viewport rendering; the API accepts `levels=1..15`, default 3.
-Public responses expose numeric IDs, usernames, parent/path links and level counts.
+Public responses expose numeric IDs, member IDs, parent/path links and level counts.
 
 The schema retains binary `referral_placements` and registration triggers, but
 the current displayed tree reads `users.sponsor_id`. Commission ancestry also
@@ -179,7 +181,7 @@ The `layout=tree` and `layout=list` parameters preserve the selected view.
 
 Open `/explorer` (also available as `/dashboard?view=explorer`) in the member workspace or `/admin/explorer` in the admin workspace. Both have Network and Transactions tabs, English/Thai translations, gold light/dark themes, keyboard controls, and responsive layouts. Tab choice, network roots, and transaction filters remain in the URL.
 
-The network explorer supports member inspection from clickable tree nodes, branch navigation, username search with ancestor context, zoom/depth controls, and self-contained SVG downloads. Members can only open branches within their own first 15 referral levels; moving to a descendant does not extend that boundary. Admins can open any account by exact username and inspect up to 15 levels from that root. Responses cap branches at 500 nodes and flag truncation. Unsigned visitors see a labeled sample network.
+The network explorer supports member inspection from clickable tree nodes, branch navigation, member ID search with ancestor context, zoom/depth controls, and self-contained SVG downloads. Members can only open branches within their own first 15 referral levels; moving to a descendant does not extend that boundary. Admins can open any account by exact member ID and inspect up to 15 levels from that root. Responses cap branches at 500 nodes and flag truncation. Unsigned visitors see a labeled sample network.
 
 The default Transactions tab searches public platform contract hashes and addresses, with kind/status/date filters, pagination, confirmed volume and transaction details. It reads submitted purchases and fee updates across accounts from PostgreSQL. Historical private ledger search remains available through the authenticated compatibility API.
 

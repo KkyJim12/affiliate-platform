@@ -1,4 +1,4 @@
-import { accountFor, assertSameOrigin, findUser, rateLimit, requireUser, verifyPassword } from "../../utils/auth";
+import { accountFor, assertSameOrigin, rateLimit, requireUser, verifyPassword } from "../../utils/auth";
 import { buyReferralLevel } from "../../utils/compensation";
 import { referralProgram } from "../../utils/referral";
 import { parseRequestKey, walletFor } from "../../utils/wallet";
@@ -14,5 +14,5 @@ export default defineEventHandler(async (event) => {
   if (password.length > 128 || !await verifyPassword(password, user.password_hash))
     throw createError({ statusCode: 401, statusMessage: "Your password is incorrect." });
   await buyReferralLevel(user.id, body.level, key);
-  return { user: await accountFor((await findUser(user.username))!), wallet: await walletFor(user.id), program: await referralProgram(user.id) };
+  return { user: await accountFor(user), wallet: await walletFor(user.id), program: await referralProgram(user.id) };
 });

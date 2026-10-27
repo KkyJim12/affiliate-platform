@@ -26,19 +26,19 @@ async function fixture(activated = false) {
   } finally { await db.close(); }
 }
 
-test('public ID lookup has empty positions through level 15 and exposes only IDs, usernames and structure', async ({ request }, info) => {
+test('public ID lookup has empty positions through level 15 and exposes only IDs and structure', async ({ request }, info) => {
   test.skip(info.project.name !== 'desktop');
   const root = await fixture();
   const response = await request.get(`/api/referrals/tree?id=${root.memberId}`);
   expect(response.status()).toBe(200);
   const result = await response.json();
-  expect(result.root).toEqual({ id: root.memberId, username: root.username, path: '', parentId: null });
+  expect(result.root).toEqual({ id: root.memberId, path: '', parentId: null });
   expect(result.members).toEqual([result.root]);
   expect(result.visibleDepth).toBe(3);
   expect(result.levels).toHaveLength(15);
   expect(result.levels[0]).toEqual({ depth: 1, filled: 0 });
   expect(result.levels[14]).toEqual({ depth: 15, filled: 0 });
-  for (const secret of [root.id, 'password', 'sponsor_id', 'wallet', 'created_at']) expect(await response.text()).not.toContain(secret);
+  for (const secret of [root.id, root.username, 'username', 'password', 'sponsor_id', 'wallet', 'created_at']) expect(await response.text()).not.toContain(secret);
   const deep = await (await request.get(`/api/referrals/tree?id=${root.memberId}&path=${emptyPath(12)}`)).json();
   expect(deep.visibleDepth).toBe(3);
   expect(deep.members).toEqual([]);
@@ -148,7 +148,7 @@ test('three real branches connect to their sponsor at both the root and nested l
     await expect(tree).toContainText('Showing levels 0–3 of 15');
     await expect(tree.locator('[data-tree-edge][data-parent-path=""]')).toHaveCount(3);
 
-    const login = await post(page.request, '/api/auth/login', { username: root.username, password });
+    const login = await post(page.request, '/api/auth/login', { memberId: root.memberId, password });
     expect(login.status()).toBe(200);
     await page.goto('/referrals');
     await expect(tree.locator('[data-tree-edge][data-parent-path=""]')).toHaveCount(3);
@@ -189,7 +189,7 @@ test('any visitor can search by ID and explore empty boxes through 15 levels on 
   expect(await tree.locator('[data-tree-node]').count()).toBeLessThan(250);
   await tree.getByRole('button', { name: 'Level 1: 0 members', exact: true }).click();
   await expect(tree.locator('[data-member-id]')).toHaveAttribute('data-member-id', root.memberId);
-  await expect(tree).toContainText('@' + root.username);
+  await expect(tree).toContainText('ID ' + root.memberId);
   await tree.getByRole('combobox', { name: 'Visible levels', exact: true }).click();
   await page.getByRole('listbox').locator('[data-value="3"]').click();
   await expect(tree.locator('[data-tree-node]')).toHaveCount(15);

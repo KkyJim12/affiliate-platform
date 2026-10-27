@@ -6,6 +6,7 @@
     "docs:summary:pdf": "node scripts/generate-doc-summary.mjs",
     "typecheck": "nuxt typecheck",
     "admin:create": "node --env-file-if-exists=.env scripts/create-admin.mjs",
+    "admin:list": "node --env-file-if-exists=.env scripts/create-admin.mjs --list",
     "test:ui": "node scripts/test-postgres.mjs ui",
     "test:contracts": "node --test tests/evm.test.mjs tests/evm-wallet.test.mjs tests/evm-balance.test.mjs tests/evm-transactions.test.mjs",
     "test:compensation": "node --test tests/compensation.test.mjs",

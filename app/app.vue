@@ -19,7 +19,7 @@ useHead({
   title: "UNXO",
   meta: [
     { name: "theme-color", content: computed(() => colorMode.value === "dark" ? "#0d1017" : "#f5f6f8") },
-    { name: "description", content: computed(() => tr('Your three-layer binary matrix, 15 referral levels, and in-app USDT wallet. Sign in with your username and password.')) },
+    { name: "description", content: computed(() => t('ui.your_three_layer_binary_matrix_15_referral_levels_and_in_app_usdt_wallet_sign_in_a4950')) },
   ],
 });
 </script>

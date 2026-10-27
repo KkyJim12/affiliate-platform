@@ -1,7 +1,6 @@
 export interface Account {
   id: string;
   memberId: string;
-  username: string;
   referralCode: string | null;
   sponsorCode: string | null;
   createdAt: string;
@@ -27,7 +26,7 @@ export interface WalletSummary {
 }
 
 export interface ReferralMember {
-  username: string;
+  memberId: string;
   joinedAt: string;
   status: "Registered";
 }
@@ -35,7 +34,7 @@ export interface ReferralMember {
 export interface ReferralNode {
   id: string;
   parentId: string;
-  username: string;
+  memberId: string;
   joinedAt: string;
   status: "Registered" | "Qualified";
   depth: number;

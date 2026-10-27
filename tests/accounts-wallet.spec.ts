@@ -22,7 +22,7 @@ test("account ownership, sessions, CSRF, funding idempotency, and atomic transfe
         const cookie = registration.headers()["set-cookie"]!;
         expect(cookie).toContain("HttpOnly");
         expect(cookie).toContain("SameSite=Strict");
-        expect((await post(friend, "/api/auth/register", { username: ownerName.toUpperCase(), password })).status()).toBe(409);
+        expect(account).not.toHaveProperty("username");
         const friendRegistration = await post(friend, "/api/auth/register", { username: friendName, password });
         expect(friendRegistration.status()).toBe(201);
         const friendAccount = (await friendRegistration.json()).user;
@@ -43,19 +43,19 @@ test("account ownership, sessions, CSRF, funding idempotency, and atomic transfe
         expect((await post(owner, "/api/wallet/deposit", { amount: "101", requestKey: fundingKey })).status()).toBe(409);
         expect((await post(owner, "/api/wallet/deposit", { amount: "-10", requestKey: randomUUID() })).status()).toBe(400);
         expect((await (await friend.get("/api/wallet")).json()).transactions).toEqual([]);
-        const insufficient = await post(owner, "/api/wallet/transfer", { amount: "1", recipient: friendName, password, requestKey: randomUUID() });
+        const insufficient = await post(owner, "/api/wallet/transfer", { amount: "1", recipient: friendAccount.memberId, password, requestKey: randomUUID() });
         expect(insufficient.status()).toBe(400);
         // Credit the isolated test database directly. Production has no mint endpoint.
         const database = openTestDatabase();
         await database.execute("UPDATE wallets SET available = $1 WHERE id = $2", 100000000, ownerWallet.id);
         await database.execute("INSERT INTO wallet_transactions VALUES ($1, $2, 'deposit', $3, 'completed', 'Test-only settled funding', $4, $5)", randomUUID(), ownerWallet.id, 100000000, randomUUID(), new Date().toISOString());
-        const stored = await database.one("SELECT password_hash FROM users WHERE username = $1", ownerName) as {
+        const stored = await database.one("SELECT password_hash FROM users WHERE id = $1", account.id) as {
             password_hash: string;
         };
         expect(stored.password_hash).not.toContain(password);
         await database.close();
         const transferKey = randomUUID();
-        const transferData = { amount: "25.123456", recipient: friendName, password, requestKey: transferKey };
+        const transferData = { amount: "25.123456", recipient: friendAccount.memberId, password, requestKey: transferKey };
         expect((await post(owner, "/api/wallet/transfer", { ...transferData, password: "incorrect" })).status()).toBe(401);
         expect((await post(owner, "/api/wallet/transfer", transferData)).status()).toBe(200);
         expect((await post(owner, "/api/wallet/transfer", transferData)).status()).toBe(200);
@@ -67,7 +67,7 @@ test("account ownership, sessions, CSRF, funding idempotency, and atomic transfe
             type: string;
         }) => item.type === "transfer_out")).toHaveLength(1);
         expect((await post(owner, "/api/wallet/transfer", { ...transferData, amount: "26" })).status()).toBe(409);
-        const competing = await Promise.all([1, 2].map(() => post(owner, "/api/wallet/transfer", { amount: "60", recipient: friendName, password, requestKey: randomUUID() })));
+        const competing = await Promise.all([1, 2].map(() => post(owner, "/api/wallet/transfer", { amount: "60", recipient: friendAccount.memberId, password, requestKey: randomUUID() })));
         expect(competing.map((response) => response.status()).sort()).toEqual([200, 400]);
         const finalOwner = await (await owner.get("/api/wallet")).json();
         const finalFriend = await (await friend.get("/api/wallet")).json();
@@ -76,19 +76,21 @@ test("account ownership, sessions, CSRF, funding idempotency, and atomic transfe
         const ownerActivated = await (await post(owner, "/api/referrals/activate", { password, requestKey: randomUUID() })).json();
         const friendActivated = await (await post(friend, "/api/referrals/activate", { password, requestKey: randomUUID() })).json();
         expect((await post(friend, "/api/referrals/sponsor", { code: ownerActivated.user.referralCode })).status()).toBe(200);
-        expect((await (await owner.get("/api/referrals")).json()).members[0].username).toBe(friendName);
+        expect((await (await owner.get("/api/referrals")).json()).members[0].memberId).toBe(friendAccount.memberId);
         expect((await (await friend.get("/api/referrals")).json()).members).toEqual([]);
         const grandchildName = `child_${suffix}`;
-        expect((await post(stranger, "/api/auth/register", { username: grandchildName, password, sponsorCode: friendActivated.user.referralCode })).status()).toBe(201);
+        const grandchildRegistration = await post(stranger, "/api/auth/register", { password, sponsorCode: friendActivated.user.referralCode });
+        expect(grandchildRegistration.status()).toBe(201);
+        const grandchildAccount = (await grandchildRegistration.json()).user;
         const ownerNetwork = await (await owner.get("/api/referrals")).json();
         expect(ownerNetwork.members).toHaveLength(1);
         expect(ownerNetwork.network).toHaveLength(2);
         expect(ownerNetwork.network.find((member: {
-            username: string;
-        }) => member.username === friendName)).toMatchObject({ parentId: account.id, depth: 1 });
+            memberId: string;
+        }) => member.memberId === friendAccount.memberId)).toMatchObject({ parentId: account.id, depth: 1 });
         expect(ownerNetwork.network.find((member: {
-            username: string;
-        }) => member.username === grandchildName)).toMatchObject({ parentId: friendAccount.id, depth: 2 });
+            memberId: string;
+        }) => member.memberId === grandchildAccount.memberId)).toMatchObject({ parentId: friendAccount.id, depth: 2 });
         expect((await (await friend.get("/api/referrals")).json()).network).toHaveLength(1);
         expect((await (await stranger.get("/api/referrals")).json()).network).toEqual([]);
         const stolenToken = (await owner.storageState()).cookies;

@@ -1,4 +1,4 @@
-import { accountFor, assertSameOrigin, findUser, rateLimit, requireUser } from "../../utils/auth";
+import { accountFor, assertSameOrigin, rateLimit, requireUser } from "../../utils/auth";
 import { db, transaction } from "../../utils/database";
 import { activeSponsor, referralProgram } from "../../utils/referral";
 import { walletFor } from "../../utils/wallet";
@@ -37,5 +37,5 @@ export default defineEventHandler(async (event) => {
             throw createError({ statusCode: 400, statusMessage: "This referral would create a circular network. Choose another sponsor." });
         await db().execute("UPDATE users SET sponsor_id = $1 WHERE id = $2 AND sponsor_id IS NULL", sponsor.id, user.id);
     });
-    return { user: await accountFor((await findUser(user.username))!), wallet: await walletFor(user.id), program: await referralProgram(user.id) };
+    return { user: await accountFor(user), wallet: await walletFor(user.id), program: await referralProgram(user.id) };
 });

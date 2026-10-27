@@ -138,7 +138,7 @@ async function connectSponsor() {
         <h2>{{ t('referral.sponsorTitle') }}</h2>
         <template v-if="program?.sponsor">
           <p>{{ t('referral.sponsorLinkedHint') }}</p>
-          <div class="referral-sponsor-identity"><span>{{ program.sponsor.username.slice(0, 2).toUpperCase() }}</span><div><strong data-testid="referral-sponsor">@{{ program.sponsor.username }}</strong><small>{{ program.sponsor.code }}</small></div><AppIcon name="CheckCircle2" :size="21" /></div>
+          <div class="referral-sponsor-identity"><span>{{ program.sponsor.code.slice(0, 2) }}</span><div><strong data-testid="referral-sponsor">ID {{ program.sponsor.code }}</strong></div><AppIcon name="CheckCircle2" :size="21" /></div>
           <p class="referral-card-note">{{ t('referral.sponsorPermanent') }}</p>
           <NuxtLink to="/explorer" class="inline-link">{{ t('referral.exploreNetwork') }}<AppIcon name="ArrowUpRight" :size="14" /></NuxtLink>
         </template>

@@ -64,7 +64,7 @@ The optional transport parameter on `createEvmReader` supports offline RPC tests
 
 `WalletPanel.vue` is the single member wallet card. The overview, wallet page,
 navbar and account settings use the account's existing EVM address. The former
-separate Polygon card and the internal balance/funding/username-transfer/history
+separate Polygon card and the internal balance/funding/member-ID-transfer/history
 controls have been removed from the wallet UI. No wallet keys or ledger history
 are deleted or converted. The configured account network remains Polygon Amoy.
 

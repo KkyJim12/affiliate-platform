@@ -1,3 +1,4 @@
+import { createTestAdmin, memberIdFor } from "./member-fixtures";
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { Contract, JsonRpcProvider, Wallet, parseEther, toBeHex } from 'ethers';
@@ -45,14 +46,14 @@ async function seedOwner() {
   const wallet = new Wallet(process.env.REFERRAL_TEST_OWNER_KEY!);
   const database = openTestDatabase();
   try {
-    const existing = await database.one('SELECT u.username FROM users u JOIN evm_wallets e ON e.user_id = u.id WHERE lower(e.address) = lower($1)', wallet.address);
-    if (existing) return existing.username as string;
+    const existing = await database.one('SELECT u.referral_code FROM users u JOIN evm_wallets e ON e.user_id = u.id WHERE lower(e.address) = lower($1)', wallet.address);
+    if (existing) return existing.referral_code as string;
     const id = randomUUID(), username = `ocadmin_${randomUUID().slice(0, 8)}`, timestamp = new Date().toISOString();
     await database.execute('INSERT INTO users VALUES ($1,$2,$3,$4,NULL,$5)', id, username, await hashPassword(password), `UNASSIGNED-${id}`, timestamp);
     await database.execute('INSERT INTO wallets (id,user_id) VALUES ($1,$2)', `LW-${randomUUID()}`, id);
     await database.execute("INSERT INTO user_access VALUES ($1,'admin','active')", id);
     await database.execute('INSERT INTO evm_wallets VALUES ($1,$2,$3,$4,80002,$5)', id, wallet.address, wallet.signingKey.publicKey, await wallet.encrypt(password), timestamp);
-    return username;
+    return await memberIdFor(id);
   } finally { await database.close(); }
 }
 
@@ -172,7 +173,7 @@ test('contract owner updates the fee address from admin and new purchases transf
   test.skip(info.project.name !== 'desktop');
   test.setTimeout(90000);
   const owner = await seedOwner(), recipient = Wallet.createRandom().address;
-  await post(page.request, '/api/admin/login', { username: owner, password });
+  await post(page.request, '/api/admin/login', { memberId: owner, password });
   await page.goto('/admin/settings');
   await page.waitForFunction(() => Boolean((document.querySelector('#__nuxt') as HTMLElement & { __vue_app__?: unknown })?.__vue_app__));
   await expect(page.getByTestId('chain-fee-address')).toHaveText(process.env.REFERRAL_TEST_ORIGINAL_FEE!);

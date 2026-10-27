@@ -4,7 +4,7 @@ const { t, tr } = useLoopI18n();
 const { user } = useAccount();
 const { errorMessage } = useAdminTools();
 const route = useRoute();
-const username = ref("");
+const memberId = ref("");
 const password = ref("");
 const showPassword = ref(false);
 const busy = ref(false);
@@ -17,7 +17,7 @@ async function submit() {
   busy.value = true;
   error.value = "";
   try {
-    const result = await $fetch<{ user: import("../../../shared/types").Account }>("/api/admin/login", { method: "POST", body: { username: username.value, password: password.value } });
+    const result = await $fetch<{ user: import("../../../shared/types").Account }>("/api/admin/login", { method: "POST", body: { memberId: memberId.value, password: password.value } });
     user.value = result.user;
     password.value = "";
     await navigateTo(destination.value, { replace: true });
@@ -35,8 +35,8 @@ async function submit() {
         <span class="admin-login-lock"><AppIcon name="LockKeyhole" :size="25" /></span>
         <h2>{{ t('admin.login') }}</h2><p>{{ t('admin.loginHint') }}</p>
         <form class="account-form" @submit.prevent="submit">
-          <label for="admin-username">{{ t('ui.username') }}</label>
-          <input id="admin-username" v-model="username" class="auth-input" autocomplete="username" autocapitalize="none" :placeholder="t('admin.usernamePlaceholder')" spellcheck="false" required maxlength="24" :disabled="busy" />
+          <label for="admin-member-id">{{ t('publicTree.memberId') }}</label>
+          <input id="admin-member-id" v-model="memberId" class="auth-input" autocomplete="username" inputmode="numeric" :placeholder="t('publicTree.placeholder')" required pattern="[1-9][0-9]{0,15}" maxlength="16" :disabled="busy" />
           <label for="admin-password">{{ t('ui.password') }}</label>
           <div class="password-field">
             <input id="admin-password" v-model="password" class="auth-input" :type="showPassword ? 'text' : 'password'" autocomplete="current-password" :placeholder="t('ui.enter_your_password')" required maxlength="128" :disabled="busy" />
