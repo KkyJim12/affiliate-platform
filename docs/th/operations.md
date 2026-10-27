@@ -157,6 +157,7 @@ API ใช้ `no-store` Proxy ที่แชร์ต้องเคารพ�
 | `postinstall` | เตรียม Nuxt/type หลังติดตั้ง โดยปกติรันอัตโนมัติ |
 | `typecheck` | ตรวจ Nuxt/Vue/TypeScript |
 | `docs:summary:pdf` | สร้างสรุป PDF/HTML A4 ไทย อังกฤษ และสองภาษา ใช้ฟอนต์ในโปรเจกต์กับ Microsoft Edge ที่ติดตั้ง เพิ่ม `-- --preview` เพื่อเก็บภาพหน้ากระดาษ |
+| `docs:deploy:pdf` | สร้าง PDF/HTML คู่มือ deploy Nuxt และ contract ฉบับเต็ม ไทย/อังกฤษจาก Markdown; เพิ่ม `-- --preview` เพื่อเก็บภาพหน้า |
 | `admin:create` | สร้างผู้ดูแลใหม่ |
 | `admin:list` | แสดง ID และสถานะของผู้ดูแลเดิม |
 | `db:start`, `db:migrate`, `db:status` | เปิด PostgreSQL native ในเครื่อง ทำ migration และดูประวัติ |

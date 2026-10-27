@@ -2,6 +2,8 @@
 
 [Documentation index](../README.md) · [ภาษาไทย](../th/deploy-contracts.md) · [Deploy Nuxt](deploy-nuxt.md) · [Contract details](../referral-contract.md)
 
+[PDF](../pdf/UNXO-deploy-contracts-en.pdf) · [Read or print HTML](../pdf/UNXO-deploy-contracts-en.html)
+
 Reviewed against the repository on **28 October 2026** (Asia/Bangkok). The supplied deployment workflow supports **Polygon Amoy testnet only, chain ID 80002**. It creates `AmoyTestUSDT` and `ReferralDistributor`. **tUSDT is a valueless test token, not real USDT.** Changing an environment chain ID does not make this workflow suitable for mainnet.
 
 ## 1. Prerequisites and account roles

@@ -2,6 +2,8 @@
 
 [สารบัญเอกสาร](../README.md) · [English](../en/deploy-nuxt.md) · [Deploy Contract](deploy-contracts.md) · [คู่มือผู้ดูแล](operations.md)
 
+[PDF](../pdf/UNXO-deploy-nuxt-th.pdf) · [HTML สำหรับอ่านหรือพิมพ์](../pdf/UNXO-deploy-nuxt-th.html)
+
 ตรวจสอบจากซอร์สโค้ดในโปรเจกต์วันที่ **28 ตุลาคม 2026** (Asia/Bangkok) คู่มือนี้ครอบคลุมแอป Nuxt 4, API และ worker ตรวจสอบธุรกรรม ระบบซื้อเลเวลปัจจุบันใช้ **Polygon Amoy, chain ID 80002 และ tUSDT สำหรับทดสอบ** การเปิดเว็บผ่านโดเมนสาธารณะไม่ได้เปลี่ยน contract ให้เป็น mainnet
 
 ## 1. รูปแบบระบบและสิ่งที่ต้องเตรียม

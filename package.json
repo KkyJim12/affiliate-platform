@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "docs:summary:pdf": "node scripts/generate-doc-summary.mjs",
+    "docs:deploy:pdf": "node scripts/generate-deploy-docs.mjs",
     "typecheck": "nuxt typecheck",
     "admin:create": "node --env-file-if-exists=.env scripts/create-admin.mjs",
     "admin:list": "node --env-file-if-exists=.env scripts/create-admin.mjs --list",

@@ -6,6 +6,8 @@ Members are identified by numeric **Member ID** throughout the UI and public API
 
 คู่มือ Deploy / Deployment guides: **Nuxt** [ภาษาไทย](docs/th/deploy-nuxt.md) · [English](docs/en/deploy-nuxt.md); **Smart Contract** [ภาษาไทย](docs/th/deploy-contracts.md) · [English](docs/en/deploy-contracts.md). Covers Node hosting, PostgreSQL, systemd/Nginx, Amoy deployment, verification and recovery.
 
+Deployment PDFs: **Nuxt** [ภาษาไทย](docs/pdf/UNXO-deploy-nuxt-th.pdf) · [English](docs/pdf/UNXO-deploy-nuxt-en.pdf); **Smart Contract** [ภาษาไทย](docs/pdf/UNXO-deploy-contracts-th.pdf) · [English](docs/pdf/UNXO-deploy-contracts-en.pdf). Regenerate from the full Markdown guides with `npm run docs:deploy:pdf`.
+
 PDF สรุป / Summary PDFs: [ภาษาไทย · 4 หน้า](docs/pdf/UNXO-summary-th.pdf) · [English · 4 pages](docs/pdf/UNXO-summary-en.pdf) · [รวมสองภาษา / Bilingual · 8 pages](docs/pdf/UNXO-summary-bilingual.pdf). Regenerate with `npm run docs:summary:pdf`.
 
 Connected wallets are now the default for members: wallet signatures for login and every on-chain write, with 1% bonuses at each of 15 depths. See [connected wallet setup, existing-account linking and distributor replacement](docs/connected-wallets.md). In-app key management and password-authorized transactions below apply only when `NUXT_PUBLIC_WALLET_MODE=embedded` is explicitly enabled.

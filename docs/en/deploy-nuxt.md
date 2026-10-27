@@ -2,6 +2,8 @@
 
 [Documentation index](../README.md) · [ภาษาไทย](../th/deploy-nuxt.md) · [Deploy contracts](deploy-contracts.md) · [Operations](operations.md)
 
+[PDF](../pdf/UNXO-deploy-nuxt-en.pdf) · [Read or print HTML](../pdf/UNXO-deploy-nuxt-en.html)
+
 Reviewed against the repository on **28 October 2026** (Asia/Bangkok). This guide covers the existing Nuxt 4 application, its API and reconciliation worker. Blockchain purchases currently use **Polygon Amoy, chain ID 80002, and test tUSDT**. Hosting the application on a public domain does not make its contracts a mainnet deployment.
 
 ## 1. Deployment layout and prerequisites

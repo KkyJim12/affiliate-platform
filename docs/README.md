@@ -21,6 +21,21 @@ Reviewed against source on **27 October 2026** (Asia/Bangkok), revision `3ffa828
 
 Start with the system guide and read the payment conditions before using transactions. Operators and developers should also read operations and API documentation. Both languages cover the same scope.
 
+## PDF คู่มือ Deploy ฉบับเต็ม / Complete deployment PDFs
+
+PDF ชุดนี้มีเนื้อหาเต็มตามคู่มือ Markdown ทั้งสี่ไฟล์ จัดหน้า A4 พร้อมฟอนต์ไทยฝังในไฟล์ ข้อความที่ค้นหา/คัดลอกได้ และหมายเลขอ้างอิงไฟล์ใน repository / These PDFs contain the complete Markdown deployment guides, with A4 pages, embedded fonts, searchable/copyable text and numbered repository references.
+
+| คู่มือ / Guide | ภาษา / Language | PDF | หน้า / Pages | HTML สำหรับอ่านหรือพิมพ์ / Read or print |
+| --- | --- | --- | ---: | --- |
+| Nuxt | ไทย | [UNXO-deploy-nuxt-th.pdf](pdf/UNXO-deploy-nuxt-th.pdf) | 7 | [HTML](pdf/UNXO-deploy-nuxt-th.html) |
+| Nuxt | English | [UNXO-deploy-nuxt-en.pdf](pdf/UNXO-deploy-nuxt-en.pdf) | 7 | [HTML](pdf/UNXO-deploy-nuxt-en.html) |
+| Smart Contract | ไทย | [UNXO-deploy-contracts-th.pdf](pdf/UNXO-deploy-contracts-th.pdf) | 6 | [HTML](pdf/UNXO-deploy-contracts-th.html) |
+| Smart Contract | English | [UNXO-deploy-contracts-en.pdf](pdf/UNXO-deploy-contracts-en.pdf) | 6 | [HTML](pdf/UNXO-deploy-contracts-en.html) |
+
+สร้างใหม่จาก Markdown ด้วย `npm run docs:deploy:pdf` (`npm.cmd run docs:deploy:pdf` บน PowerShell) ใช้ Microsoft Edge แบบ headless และฟอนต์/dependencies ในโปรเจกต์ ไม่อ่าน private `.env` ไม่ต้องเปิดแอปหรือเชื่อมฐานข้อมูล เพิ่ม `-- --preview` เพื่อเก็บภาพแต่ละหน้าและภาพรวมใน `.data/deploy-doc-preview` ตัวสร้างตรวจว่าเนื้อหาและ code blocks ครบตามต้นฉบับ ไม่มีข้อความล้นหน้า และ PDF ฝังฟอนต์พร้อม Unicode mappings จำนวนหน้าอาจเปลี่ยนเมื่อแก้ source ควรตรวจและอัปเดตตารางนี้หลังสร้างใหม่
+
+Regenerate from Markdown with `npm run docs:deploy:pdf`, using headless Microsoft Edge and local project fonts/dependencies. It does not read private `.env` or need a running application/database. Add `-- --preview` for page images and overviews in `.data/deploy-doc-preview`. The [generator](../scripts/generate-deploy-docs.mjs) checks source/code preservation, overflow, page count, embedded fonts and Unicode mappings. Page counts can change with the source; review and update the table after regenerating. Repository references require the accompanying source files; external website links remain clickable in the PDFs.
+
 ## PDF สรุปเอกสาร / PDF summaries
 
 สรุปภาพรวมระบบ โหมดชำระเงิน ราคาครบ 15 เลเวล (Level) การแบ่งคอมมิชชัน ตัวอย่างผู้รับ เงื่อนไขสำคัญ และการดูแลระบบ จัดหน้า A4 พร้อมฟอนต์ฝังในไฟล์และข้อความที่ค้นหาได้ เป็นฉบับสรุปสำหรับอ่าน/แชร์ ใช้คู่มือด้านบนเมื่อต้องการรายละเอียดครบทุก endpoint

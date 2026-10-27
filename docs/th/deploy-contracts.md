@@ -2,6 +2,8 @@
 
 [สารบัญเอกสาร](../README.md) · [English](../en/deploy-contracts.md) · [Deploy Nuxt](deploy-nuxt.md) · [รายละเอียด Contract](../referral-contract.md)
 
+[PDF](../pdf/UNXO-deploy-contracts-th.pdf) · [HTML สำหรับอ่านหรือพิมพ์](../pdf/UNXO-deploy-contracts-th.html)
+
 ตรวจสอบจากซอร์สโค้ดในโปรเจกต์วันที่ **28 ตุลาคม 2026** (Asia/Bangkok) ขั้นตอน deploy ที่มีอยู่รองรับ **Polygon Amoy testnet เท่านั้น chain ID 80002** โดยสร้าง `AmoyTestUSDT` และ `ReferralDistributor` ซึ่ง **tUSDT เป็น token ทดสอบที่ไม่มีมูลค่า ไม่ใช่ USDT จริง** การเปลี่ยน chain ID ใน environment ไม่ได้ทำให้ขั้นตอนนี้พร้อมใช้บน mainnet
 
 ## 1. สิ่งที่ต้องเตรียมและหน้าที่ของแต่ละบัญชี

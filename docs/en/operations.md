@@ -157,6 +157,7 @@ All API responses are `no-store`; shared proxies must respect this. Keep databas
 | `postinstall` | Nuxt type/setup preparation; normally runs after install |
 | `typecheck` | Nuxt/Vue/TypeScript checks |
 | `docs:summary:pdf` | Generate the Thai, English and bilingual A4 summary PDFs/HTML using local fonts and installed Microsoft Edge; add `-- --preview` for page images |
+| `docs:deploy:pdf` | Generate full Thai/English Nuxt and contract deployment PDFs/HTML from Markdown; add `-- --preview` for page images |
 | `admin:create` | Create a new administrator |
 | `admin:list` | List existing administrator member IDs and account statuses |
 | `db:start`, `db:migrate`, `db:status` | Local native PostgreSQL, apply migrations and inspect history |
