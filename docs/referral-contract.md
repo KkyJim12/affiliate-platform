@@ -1,5 +1,7 @@
 # Amoy referral contract
 
+Step-by-step deployment guides: [ภาษาไทย](th/deploy-contracts.md) · [English](en/deploy-contracts.md). For application hosting, see [Deploy Nuxt ภาษาไทย](th/deploy-nuxt.md) / [English](en/deploy-nuxt.md).
+
 Connected wallets are now the default: wallet signatures for login and every on-chain write, with 1% bonuses at each of 15 depths. See [connected wallet setup, existing-account linking and distributor replacement](connected-wallets.md). In-app key management and password-authorized transactions below apply only when `NUXT_PUBLIC_WALLET_MODE=embedded` is explicitly enabled.
 
 `contracts/ReferralDistributor.sol` collects the configured ERC-20 payment and

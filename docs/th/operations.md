@@ -66,6 +66,8 @@ Generic Viem transfer-evidence helpers ต้องตั้ง RPC, chain, toke
 
 ## 4. Deploy และ verify สัญญาทดสอบ
 
+ขั้นตอน deploy, verify, ส่ง runtime configuration และเปลี่ยน distributor แบบละเอียดอยู่ใน [คู่มือ Deploy Contract](deploy-contracts.md)
+
 ใช้เมื่อตั้งใจสร้าง deployment ทดสอบบน Amoy ขั้นตรวจแผนแยกจากการ broadcast
 
 1. รัน `npm run contracts:prepare` เพื่อ compile เติม field ที่ขาดใน `.env` สร้าง quote key ฝั่ง server ครั้งแรกถ้าไม่มี และเขียน `.data/contracts/deployment-plan.json` โดยไม่พิมพ์ key
@@ -133,6 +135,8 @@ npm run db:import:sqlite -- --source .data/loop.sqlite
 Importer เปิด SQLite read-only คัดลอกตารางบัญชี/ledger/access/review/settings/activation/history เดิมที่รองรับ และเชื่อม sponsor ใน destination transaction เดียว หากปลายทางมี business records หรือค่าการเปิดบริการไม่ใช่ค่าเริ่มต้นจะปฏิเสธ ไม่คัดลอก SQLite schema history และไม่ใช่ตัว migrate ทุกตาราง EVM/keystore รุ่นใหม่ แอปปัจจุบันไม่ใช้ `LOOP_DATABASE_PATH` และไม่ fallback SQLite
 
 ## 6. ให้บริการด้วย Node server
+
+ขั้นตอนตั้งค่า environment, systemd, Nginx/HTTPS, ตรวจหลัง deploy และกู้คืน release อยู่ใน [คู่มือ Deploy Nuxt](deploy-nuxt.md)
 
 Build และเปิด Node server โดยเชื่อม PostgreSQL ได้และมี environment ที่ต้องการ:
 

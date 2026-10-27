@@ -66,6 +66,8 @@ The generic Viem transfer-evidence helpers require a consistent RPC, chain, toke
 
 ## 4. Deploy and verify test contracts
 
+For the step-by-step deployment, verification, runtime handoff and replacement procedure, use [Deploy contracts](deploy-contracts.md).
+
 Use these commands only when deliberately setting up an Amoy test deployment. Review mode is separate from broadcasting.
 
 1. Run `npm run contracts:prepare`. It compiles contracts, fills missing `.env` deployment fields, generates the server-only quote key once if absent and writes `.data/contracts/deployment-plan.json` without printing the key.
@@ -133,6 +135,8 @@ npm run db:import:sqlite -- --source .data/loop.sqlite
 The importer opens SQLite read-only, copies the supported legacy account/ledger/access/review/settings/activation/history tables and reconnects sponsors in one destination transaction. It rejects existing business records or nondefault operational settings. It does not migrate SQLite schema history and is not a general all-table migration tool for newer EVM records/keystores. The live app never uses `LOOP_DATABASE_PATH` or a SQLite fallback.
 
 ## 6. Production-style Node hosting
+
+For environment setup, systemd, Nginx/HTTPS, deployment checks and release recovery, use [Deploy Nuxt](deploy-nuxt.md).
 
 Build and start the Node server with reachable PostgreSQL and the intended environment:
 

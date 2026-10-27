@@ -11,7 +11,11 @@ Reviewed against source on **27 October 2026** (Asia/Bangkok), revision `3ffa828
 | ภาพรวม สถาปัตยกรรม หน้าจอ บัญชี และสิทธิ์ / System, architecture, screens, accounts and roles | [คู่มือระบบ](th/system-guide.md) | [System guide](en/system-guide.md) |
 | ราคา 15 เลเวล (Level) การจ่ายเงิน ค่าคอมมิชชัน และเงื่อนไข / Prices, payments, commissions and conditions | [การจ่ายเงินและเงื่อนไข](th/payments-and-conditions.md) | [Payments and conditions](en/payments-and-conditions.md) |
 | ติดตั้ง ตั้งค่า ฐานข้อมูล deploy ทดสอบ และแก้ปัญหา / Setup, configuration, database, deployment, tests and recovery | [คู่มือผู้ดูแลและนักพัฒนา](th/operations.md) | [Operations guide](en/operations.md) |
+| Deploy Nuxt: Node server, PostgreSQL, systemd, Nginx/HTTPS และอัปเดตระบบ / Nuxt deployment and updates | [คู่มือ Deploy Nuxt](th/deploy-nuxt.md) | [Deploy Nuxt](en/deploy-nuxt.md) |
+| Deploy/verify Smart Contract บน Amoy และเปลี่ยน distributor / Amoy contract deployment, verification and replacement | [คู่มือ Deploy Contract](th/deploy-contracts.md) | [Deploy contracts](en/deploy-contracts.md) |
 | API ทุก endpoint พร้อมสิทธิ์ โหมด และตัวอย่าง / Every API endpoint, access, modes and examples | [คู่มือ API](th/api-reference.md) | [API reference](en/api-reference.md) |
+
+คู่มือ Deploy ทั้งสองหัวข้อตรวจจากซอร์สวันที่ **28 ตุลาคม 2026** ครอบคลุมคำสั่งสำหรับ Linux/Windows และการส่ง environment จากเครื่องผู้ deploy ไปยังเซิร์ฟเวอร์ / Both deployment guides were reviewed against source on **28 October 2026** and cover Linux/Windows commands plus runtime configuration handoff from the deployment machine to the application server.
 
 เริ่มจากคู่มือระบบ แล้วอ่านเรื่องการจ่ายเงินก่อนใช้งานธุรกรรม ผู้ติดตั้งและผู้พัฒนาอ่านคู่มือปฏิบัติการและ API เพิ่มเติม เอกสารภาษาไทยและภาษาอังกฤษมีขอบเขตเดียวกัน
 
