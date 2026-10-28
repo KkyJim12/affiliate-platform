@@ -69,21 +69,18 @@ interrupted submission. Neither this storage nor the backend stores external
 wallet private keys. Keep the original hash if a wallet replaces a transfer:
 automatic transfer replacement discovery is not implemented.
 
-## Distribution version 2
+## Distribution version 3
 
-The direct allocations remain 50%, 20%, 10% for depths 1–3. Each bonus depth
-1–15 receives exactly 1% of the purchase; these overlap the direct allocations.
-The base platform fee remains 5%.
-
-Unused **trailing** bonus depths pay the highest eligible upline. For five
-eligible uplines, depths 1–4 each receive 1% bonus and depth 5 receives 11%.
-Ineligible gaps below the highest eligible upline and missing direct allocations
-go to the platform. When no upline is eligible, the entire 15% bonus goes to the
-platform fee recipient. Confirmed redirected top-upline payments appear as that
-member's commission, with `highest_upline` accounting reasons.
+Matrix slots pay 10%, 20%, 50% at depths 1?3. Continuous binary unilevel
+placement pays 1% at each of fifteen depths, starting with the parent. A
+recipient must own the purchased level; all missing or locked shares pay the
+platform, alongside its base 5%. A completed paid matrix opens another slot
+and queues a wallet-funded next-level purchase using prior token approval.
+See [matrix payments](matrix-payments.md) for placement, cycle attestation,
+finite approvals, relayer gas and upgrade recovery.
 
 The existing contract is not upgradeable. The application refuses new purchases
-through a distributor that does not report `distributionVersion() == 2`.
+through a distributor that does not report `distributionVersion() == 3`.
 Existing pending purchases can still be receipt-verified under their original
 distribution rules; settle pending operations before a deployment change.
 
@@ -103,7 +100,7 @@ To replace only the distributor while retaining the existing token and balances:
    command checks the existing token and deploys only the new distributor,
    preserving the original deployment record and saving replacement progress.
 4. Restart the server to load the new distributor address and apply migration
-   `0010_connected_wallets.sql`. No database reset is required. Verify sources
+   `0013_matrix_slots_and_auto_upgrades.sql`. No database reset is required. Verify sources
    with `npm run contracts:verify -- --dry-run`, then normal verification.
 
 This workflow has been tested against a disposable local Amoy simulation. Running
@@ -115,7 +112,7 @@ do not alter an already-deployed contract.
 - `POST /api/auth/wallet/challenge`: `{address, purpose?: "login" | "link", sponsorCode?}`.
   Returns `{id,message}`. Linking requires an authenticated existing account.
 - `POST /api/auth/wallet/verify`: `{id,signature}`; returns `{user}` and a session.
-- `POST /api/referrals/chain/prepare`: `{level,requestKey}`; returns purchase
+- `POST /api/referrals/chain/prepare`: `{level,requestKey,automaticApproval?: boolean}`; returns purchase
   status and unsigned nonce-independent approval/purchase calls.
 - `POST /api/referrals/chain/confirm`: `{id,transactionHash}`; checks sender,
   target, calldata, chain and value before tracking canonical purchase evidence.

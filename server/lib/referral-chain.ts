@@ -1,8 +1,8 @@
-import { AbiCoder, Contract, FetchRequest, Interface, JsonRpcProvider, Transaction, Wallet, ZeroAddress, formatUnits, getAddress, keccak256, parseUnits } from "ethers";
+import { AbiCoder, Contract, FetchRequest, Interface, JsonRpcProvider, Transaction, Wallet, ZeroAddress, ZeroHash, formatUnits, getAddress, keccak256, parseUnits } from "ethers";
 import type { Provider, TransactionReceipt } from "ethers";
 import { purchaseTypes, referralContractAbi, type ChainPurchaseQuote } from "../../shared/referral-contract.ts";
-import { purchaseShares, shareRecipientDepth } from "../../shared/compensation.ts";
-import { legacyPurchaseShares } from "./legacy-distribution.ts";
+import { purchaseShares, shareRecipientIndex, remainingLevelPrice, ledgerScale } from "../../shared/compensation.ts";
+import { legacyPurchaseShares, version2PurchaseShares, version2RecipientDepth } from "./legacy-distribution.ts";
 
 export const tokenAbi = ["function decimals() view returns (uint8)", "function symbol() view returns (string)",
   "function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)",
@@ -22,12 +22,16 @@ export interface PurchasePayload {
   uplines: string[];
   recipients: { userId: string | null; reason: "upline" | "missing_upline" | "ineligible_upline" }[];
   signature: string;
+  automaticApproval?: boolean;
 }
 export interface PreparedChainTransaction { stage: string; hash: string; raw: string; nonce: number; to: string }
 export const distributorInterface = new Interface(referralContractAbi);
+const legacyDistributorInterface = new Interface([
+  "function purchase((bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline) quote,address[15] uplines,bytes signature)",
+]);
 
 export function uplineHash(uplines: string[]) {
-  return keccak256(AbiCoder.defaultAbiCoder().encode(["address[15]"], [uplines]));
+  return keccak256(AbiCoder.defaultAbiCoder().encode([uplines.length === 18 ? "address[18]" : "address[15]"], [uplines]));
 }
 
 export class ReferralChainClient {
@@ -57,8 +61,8 @@ export class ReferralChainClient {
   async inspect(buyer?: string, nextLevel?: number | null, includeGas = true) {
     if ((await this.provider.getNetwork()).chainId !== 80002n) throw new Error("Referral purchases require Polygon Amoy.");
     if (await this.provider.getCode(this.config.contractAddress) === "0x") throw new Error("Referral contract is not deployed.");
-    if (await this.contract.getFunction("distributionVersion")().catch(() => 0n) !== 2n)
-      throw new Error("Deploy the updated referral contract for 1% bonuses before accepting purchases.");
+    if (await this.contract.getFunction("distributionVersion")().catch(() => 0n) !== 3n)
+      throw new Error("Deploy the updated referral contract for binary matrix slots and level-qualified payouts before accepting purchases.");
     const [token, decimals, actualDecimals, feeRecipient, owner, quoteSigner, nonce, paused, symbol, gasFees] = await Promise.all([
       this.contract.getFunction("paymentToken")(), this.contract.getFunction("tokenDecimals")(), this.token.getFunction("decimals")(), this.contract.getFunction("feeRecipient")(),
       this.contract.getFunction("owner")(), this.contract.getFunction("quoteSigner")(), this.contract.getFunction("configNonce")(), this.contract.getFunction("paused")(),
@@ -104,12 +108,21 @@ export class ReferralChainClient {
     const allowance: bigint = await this.token.getFunction("allowance")(buyer, this.config.contractAddress);
     const calls: { stage: string; to: string; data: string; gasLimit: bigint }[] = [];
     const tokenInterface = new Interface(tokenAbi);
-    if (allowance < price) {
+    const approval = payload.automaticApproval ? BigInt(remainingLevelPrice(payload.quote.level) * ledgerScale) * 10n ** BigInt(decimals - 6) : price;
+    if (allowance < approval) {
       if (allowance > 0n) calls.push({ stage: "approval_reset", to: this.config.tokenAddress, data: tokenInterface.encodeFunctionData("approve", [this.config.contractAddress, 0]), gasLimit: approvalGasLimit });
-      calls.push({ stage: "approval", to: this.config.tokenAddress, data: tokenInterface.encodeFunctionData("approve", [this.config.contractAddress, price]), gasLimit: approvalGasLimit });
+      calls.push({ stage: "approval", to: this.config.tokenAddress, data: tokenInterface.encodeFunctionData("approve", [this.config.contractAddress, approval]), gasLimit: approvalGasLimit });
     }
     calls.push({ stage: "purchase", to: this.config.contractAddress, data: distributorInterface.encodeFunctionData("purchase", [payload.quote, payload.uplines, payload.signature]), gasLimit: purchaseGasLimit });
     return calls;
+  }
+
+  async prepareAutoUpgrade(payload: PurchasePayload, decimals: number) {
+    const price = BigInt(purchaseShares(payload.quote.level).reduce((sum, share) => sum + share.units, 0)) * 10n ** BigInt(decimals - 6);
+    if (await this.token.getFunction("balanceOf")(payload.quote.buyer) < price) throw new Error("Waiting for sufficient token balance.");
+    if (await this.token.getFunction("allowance")(payload.quote.buyer, this.config.contractAddress) < price) throw new Error("Waiting for token approval for automatic upgrades.");
+    return this.prepareBatch(this.authority, [{ stage: "purchase", to: this.config.contractAddress,
+      data: distributorInterface.encodeFunctionData("autoUpgrade", [payload.quote, payload.uplines, payload.signature]), gasLimit: purchaseGasLimit }]);
   }
 
   async prepareFeeUpdate(owner: Wallet, recipient: string, maxGasFee: bigint) {
@@ -175,9 +188,12 @@ export class ReferralChainClient {
     }
     if (!receipt) return null;
     if (receipt.status !== 1) return { status: "failed" as const, receipt };
+    const version = await this.contract.getFunction("distributionVersion")().catch(() => 1n);
     const tx = await this.provider.getTransaction(receipt.hash);
-    const expectedData = distributorInterface.encodeFunctionData("purchase", [payload.quote, payload.uplines, payload.signature]);
-    if (!tx || tx.chainId !== 80002n || tx.value !== 0n || getAddress(tx.from) !== getAddress(payload.quote.buyer)
+    const automatic = version === 3n && payload.quote.matrixCycle !== ZeroHash;
+    const purchaseInterface = version === 3n ? distributorInterface : legacyDistributorInterface;
+    const expectedData = purchaseInterface.encodeFunctionData(automatic ? "autoUpgrade" : "purchase", [payload.quote, payload.uplines, payload.signature]);
+    if (!tx || tx.chainId !== 80002n || tx.value !== 0n || (!automatic && getAddress(tx.from) !== getAddress(payload.quote.buyer))
       || !tx.to || getAddress(tx.to) !== getAddress(this.config.contractAddress) || tx.data !== expectedData) throw new Error("Purchase transaction does not match its authorization.");
     const events = this.events(receipt);
     const completion = events.filter(event => event.name === "PurchaseCompleted");
@@ -188,17 +204,18 @@ export class ReferralChainClient {
       || completion[0]!.args.configNonce.toString() !== payload.quote.configNonce) throw new Error("Invalid purchase completion event.");
     const decimals = Number(await this.contract.getFunction("tokenDecimals")());
     const multiplier = 10n ** BigInt(decimals - 6);
-    const version = await this.contract.getFunction("distributionVersion")().catch(() => 1n);
-    const expected = version === 2n ? purchaseShares(payload.quote.level) : legacyPurchaseShares(payload.quote.level);
+    const expected = version === 3n ? purchaseShares(payload.quote.level) : version === 2n ? version2PurchaseShares(payload.quote.level) : legacyPurchaseShares(payload.quote.level);
     if (completion[0]!.args.amount !== expected.reduce((sum, share) => sum + BigInt(share.units), 0n) * multiplier)
       throw new Error("Invalid purchase amount.");
     const shares = events.filter(event => event.name === "SharePaid");
     if (shares.length !== 19) throw new Error("Incomplete purchase distribution.");
     const allocations = expected.map((share, index) => {
       const actual = shares[index]!;
-      const recipientDepth = version === 2n ? shareRecipientDepth(share, payload.uplines.map(address => address !== ZeroAddress))
+      const position = version === 3n ? shareRecipientIndex(share) : share.depth - 1;
+      const recipientDepth = version === 3n ? (position >= 0 && payload.uplines[position] !== ZeroAddress ? share.depth : 0)
+        : version === 2n ? version2RecipientDepth(share, payload.uplines)
         : share.depth && payload.uplines[share.depth - 1] !== ZeroAddress ? share.depth : 0;
-      const recipient = recipientDepth ? payload.uplines[recipientDepth - 1]! : payload.quote.feeRecipient;
+      const recipient = recipientDepth ? payload.uplines[version === 3n ? position : recipientDepth - 1]! : payload.quote.feeRecipient;
       const redirected = share.kind !== "platform" && recipientDepth !== share.depth;
       if (actual.args.id !== payload.quote.id || Number(actual.args.kind) !== (share.kind === "direct" ? 0 : share.kind === "bonus" ? 1 : 2)
         || Number(actual.args.depth) !== share.depth || actual.args.amount !== BigInt(share.units) * multiplier

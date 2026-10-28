@@ -1,5 +1,6 @@
+import { referralRecipients, unlockMatrixLevel } from "./matrix";
 import { createError } from "h3";
-import { ZeroAddress, getAddress, id as hashId, parseUnits } from "ethers";
+import { ZeroHash, getAddress, id as hashId, parseUnits } from "ethers";
 import { ReferralChainClient, uplineHash, type PreparedChainTransaction, type PurchasePayload } from "../lib/referral-chain";
 import { assertNoPendingWalletOperation, walletSigner, withWalletLock } from "./evm-operations";
 import type { ChainPurchaseStatus, ReferralChainStatus } from "../../shared/referral-contract";
@@ -16,7 +17,7 @@ export interface ChainPurchaseRow {
   id: string; user_id: string; level: number; amount: number; request_key: string;
   contract_address: string; token_address: string; buyer_address: string; fee_recipient_address: string;
   transaction_hash: string | null; payload: PurchasePayload; status: ChainPurchaseStatus["status"];
-  signing_mode: "external" | "embedded";
+  signing_mode: "external" | "embedded" | "automatic";
 }
 interface FeeUpdateRow {
   id: string; admin_id: string; request_key: string; contract_address: string; owner_address: string;
@@ -67,7 +68,7 @@ async function saveTransactions(userId: string, operationId: string, prepared: P
     randomUUID(), userId, operationId, item.stage, item.nonce, item.hash, item.raw, new Date().toISOString());
 }
 
-export async function submitChainPurchase(userId: string, password: string, level: number, requestKey: string) {
+export async function submitChainPurchase(userId: string, password: string, level: number, requestKey: string, automaticApproval = false) {
   const reader = requireChainClient();
   return withWalletLock(userId, async () => {
     const previous = await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE user_id = $1 AND request_key = $2", userId, requestKey);
@@ -89,26 +90,14 @@ export async function submitChainPurchase(userId: string, password: string, leve
       const program = await referralProgram(userId);
       if (program.nextLevel !== level || (state.currentLevel !== 0 && state.currentLevel !== program.currentLevel))
         throw createError({ statusCode: 409, statusMessage: "Purchase the next referral level in order. The maximum is level 15." });
-      const ancestors = await db().all(`WITH RECURSIVE ancestors AS (
-        SELECT s.id, s.sponsor_id, 1 AS depth, ARRAY[$1::TEXT, s.id] AS path FROM users b JOIN users s ON s.id = b.sponsor_id WHERE b.id = $1 AND s.id <> b.id
-        UNION ALL SELECT s.id, s.sponsor_id, a.depth + 1, a.path || s.id FROM ancestors a JOIN users s ON s.id = a.sponsor_id
-        WHERE a.depth < 15 AND NOT s.id = ANY(a.path)
-      ) SELECT a.id, a.depth, e.address, (r.user_id IS NOT NULL AND COALESCE(access.status,'active') = 'active' AND e.address IS NOT NULL) AS eligible
-        FROM ancestors a LEFT JOIN referral_activations r ON r.user_id = a.id LEFT JOIN user_access access ON access.user_id = a.id
-        LEFT JOIN evm_wallets e ON e.user_id = a.id ORDER BY a.depth`, userId);
-      const recipients = Array.from({ length: 15 }, (_, index) => {
-        const ancestor = ancestors.find(row => row.depth === index + 1);
-        return { address: ancestor?.eligible ? getAddress(ancestor.address) : ZeroAddress,
-          userId: ancestor?.eligible ? ancestor.id as string : null,
-          reason: ancestor?.eligible ? "upline" as const : ancestor ? "ineligible_upline" as const : "missing_upline" as const };
-      });
+      const recipients = await referralRecipients(userId, level, "embedded");
       const id = randomUUID(), timestamp = new Date().toISOString();
       const uplines = recipients.map(row => row.address);
       const block = await reader.provider.getBlock("latest");
       if (!block) throw new Error("Blockchain head unavailable.");
       const quote = { id: hashId(id), buyer: signer.address, level, previousLevel: program.currentLevel,
-        uplinesHash: uplineHash(uplines), feeRecipient: state.feeRecipient, configNonce: state.configNonce, deadline: block.timestamp + 3600 };
-      const payload: PurchasePayload = { createdBlock: block.number, quote, uplines, recipients: recipients.map(({ userId, reason }) => ({ userId, reason })), signature: await reader.sign(quote) };
+        uplinesHash: uplineHash(uplines), feeRecipient: state.feeRecipient, configNonce: state.configNonce, deadline: block.timestamp + 3600, matrixCycle: ZeroHash };
+      const payload: PurchasePayload = { createdBlock: block.number, quote, uplines, automaticApproval, recipients: recipients.map(({ userId, reason }) => ({ userId, reason })), signature: await reader.sign(quote) };
       const prepared = await reader.preparePurchase(signer, payload, state.decimals);
       const hash = prepared.find(item => item.stage === "purchase")!.hash;
       await db().execute(`INSERT INTO referral_chain_purchases
@@ -124,7 +113,7 @@ export async function submitChainPurchase(userId: string, password: string, leve
 }
 
 async function rebroadcast(operationId: string, reader: ReferralChainClient) {
-  if (externalWalletMode()) return;
+  if (externalWalletMode() && !(await db().one("SELECT id FROM referral_chain_purchases WHERE id = $1 AND signing_mode = 'automatic'", operationId))) return;
   const rows = await db().all("SELECT raw_transaction FROM referral_chain_transactions WHERE operation_id = $1 ORDER BY nonce", operationId);
   for (const row of rows) {
     try { await reader.broadcast(row.raw_transaction); }
@@ -158,13 +147,15 @@ export async function reconcileChainPurchase(purchase: ChainPurchaseRow): Promis
     const current = await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE id = $1 FOR UPDATE", purchase.id);
     if (current?.status !== "pending" && current?.status !== "awaiting_signature") return;
     if (evidence.status === "confirmed") {
+      const version3 = purchase.payload.uplines.length === 18;
       for (const allocation of evidence.allocations) {
-        const recipient = allocation.recipientDepth ? purchase.payload.recipients[allocation.recipientDepth - 1]! : null;
+        const position = version3 ? (allocation.kind === "bonus" ? 3 : 0) + allocation.depth - 1 : allocation.depth - 1;
+        const recipient = allocation.recipientDepth ? purchase.payload.recipients[version3 ? position : allocation.recipientDepth - 1]! : null;
         await db().execute(`INSERT INTO referral_chain_allocations
           (purchase_id,kind,depth,amount,recipient_address,recipient_user_id,reason,log_index) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
           purchase.id, allocation.kind, allocation.depth, allocation.units, allocation.recipient,
           recipient?.userId ?? null,
-          allocation.kind === "platform" ? "platform_fee" : allocation.recipientDepth ? allocation.redirected ? "highest_upline" : "upline" : purchase.payload.recipients[allocation.depth - 1]!.reason, allocation.logIndex);
+          allocation.kind === "platform" ? "platform_fee" : allocation.recipientDepth ? allocation.redirected ? "highest_upline" : "upline" : purchase.payload.recipients[position]!.reason, allocation.logIndex);
       }
       if (!await db().one("SELECT user_id FROM referral_activations WHERE user_id = $1", purchase.user_id)) {
         await db().execute("INSERT INTO referral_activations (user_id, chain_purchase_id, created_at) VALUES ($1,$2,$3)", purchase.user_id, purchase.id, new Date().toISOString());
@@ -172,6 +163,12 @@ export async function reconcileChainPurchase(purchase: ChainPurchaseRow): Promis
     }
     await db().execute("UPDATE referral_chain_purchases SET status = $1, block_number = $2, block_hash = $3, updated_at = $4, transaction_hash = $6 WHERE id = $5",
       evidence.status, evidence.receipt.blockNumber, evidence.receipt.blockHash, new Date().toISOString(), purchase.id, evidence.receipt.hash);
+    if (evidence.status === "confirmed") {
+      await unlockMatrixLevel(purchase.user_id, purchase.level);
+      await db().execute("UPDATE matrix_auto_upgrades SET status = 'completed',last_error = NULL WHERE purchase_id = $1", purchase.id);
+    } else {
+      await db().execute("UPDATE matrix_auto_upgrades SET status = 'queued',purchase_id = NULL,last_error = 'The upgrade transaction reverted; it will be retried.' WHERE purchase_id = $1", purchase.id);
+    }
   });
   return (await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE id = $1", purchase.id))!;
 }
@@ -237,7 +234,64 @@ export async function reconcilePendingChainOperations() {
     for (const row of purchases) { try { await reconcileChainPurchase(row); } catch { /* Retry on the next reconciliation pass. */ } }
     const updates = await db().all<FeeUpdateRow>("SELECT * FROM referral_chain_fee_updates WHERE status = 'pending' ORDER BY created_at LIMIT 5");
     for (const row of updates) { try { await reconcileFeeUpdate(row); } catch { /* Preserve indeterminate transactions. */ } }
+    await processMatrixAutoUpgrades();
   } finally { sweeping = false; }
+}
+
+async function processMatrixAutoUpgrades() {
+  const reader = referralChainClient();
+  if (!reader) return;
+  // One persisted relayer transaction at a time, across app instances. This
+  // avoids reusing an authority nonce when broadcasting times out.
+  await withWalletLock("referral-auto-upgrade-relayer", async () => {
+    if (await db().one("SELECT id FROM referral_chain_purchases WHERE signing_mode = 'automatic' AND status = 'pending' LIMIT 1")) return;
+    const jobs = await db().all<{ cycle_id: string; user_id: string; level: number }>("SELECT * FROM matrix_auto_upgrades WHERE status = 'queued' ORDER BY COALESCE(last_attempt_at,created_at),cycle_id LIMIT 20");
+    for (const job of jobs) {
+      await db().execute("UPDATE matrix_auto_upgrades SET last_attempt_at = $1 WHERE cycle_id = $2", new Date().toISOString(),job.cycle_id);
+      try {
+        const purchase = await withWalletLock(job.user_id, () => transaction(async () => {
+          await db().execute("SELECT pg_advisory_xact_lock(782438, 2)");
+          if (await db().one("SELECT user_id FROM user_access WHERE user_id = $1 AND status <> 'active'",job.user_id)) throw new Error("Waiting for an active member account.");
+          const program = await referralProgram(job.user_id);
+          if (program.currentLevel >= job.level) {
+            await db().execute("UPDATE matrix_auto_upgrades SET status = 'superseded',last_error = NULL WHERE cycle_id = $1", job.cycle_id);
+            return null;
+          }
+          if (program.nextLevel !== job.level || await pendingChainPurchase(job.user_id)) return null;
+          await assertNoPendingWalletOperation(job.user_id);
+          const wallet = await evmWalletFor(job.user_id);
+          if (!wallet) throw new Error("Waiting for a linked token wallet.");
+          const state = await reader.inspect(wallet.address, job.level, false);
+          if (state.paused) throw new Error("Automatic upgrades are paused with contract purchases.");
+          if (state.currentLevel !== 0 && state.currentLevel !== program.currentLevel) throw new Error("Waiting for level reconciliation.");
+          const recipients = await referralRecipients(job.user_id, job.level, externalWalletMode() ? "external" : "embedded");
+          const uplines = recipients.map(item => item.address), block = await reader.provider.getBlock("latest");
+          if (!block) throw new Error("Chain head unavailable.");
+          const id = randomUUID(), timestamp = new Date().toISOString();
+          const quote = { id: hashId(id), buyer: wallet.address, level: job.level, previousLevel: program.currentLevel,
+            uplinesHash: uplineHash(uplines), feeRecipient: state.feeRecipient, configNonce: state.configNonce,
+            deadline: block.timestamp + 3600, matrixCycle: hashId(job.cycle_id) };
+          const payload: PurchasePayload = { createdBlock: block.number, quote, uplines,
+            recipients: recipients.map(({ userId, reason }) => ({ userId, reason })), signature: await reader.sign(quote) };
+          const prepared = await reader.prepareAutoUpgrade(payload, state.decimals);
+          await db().execute(`INSERT INTO referral_chain_purchases
+            (id,user_id,request_key,level,amount,chain_id,contract_address,token_address,buyer_address,fee_recipient_address,payload,status,signing_mode,transaction_hash,created_at,updated_at)
+            VALUES($1,$2,$3,$4,$5,80002,$6,$7,$8,$9,$10,'pending','automatic',$11,$12,$12)`,
+            id,job.user_id,`matrix-auto:${id}`,job.level,levelPrice(job.level) * ledgerScale,getAddress(reader.config.contractAddress),
+            getAddress(reader.config.tokenAddress),wallet.address,state.feeRecipient,JSON.stringify(payload),prepared[0]!.hash,timestamp);
+          await saveTransactions(job.user_id, id, prepared);
+          await db().execute("UPDATE matrix_auto_upgrades SET status = 'pending',purchase_id = $1,last_error = NULL WHERE cycle_id = $2", id,job.cycle_id);
+          return (await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE id = $1", id))!;
+        }));
+        if (purchase) { await reconcileChainPurchase(purchase); break; }
+      } catch (error) {
+        // Persist only our own public explanations, never RPC payloads or raw txs.
+        const message = error instanceof Error && /^(Waiting for |Automatic upgrades are paused)/.test(error.message)
+          ? error.message : "Automatic upgrade will retry when the contract and relayer are available.";
+        await db().execute("UPDATE matrix_auto_upgrades SET last_error = $1 WHERE cycle_id = $2 AND status = 'queued'", message,job.cycle_id);
+      }
+    }
+  }).catch(() => {});
 }
 
 export function chainActionError(error: unknown): never {

@@ -1,46 +1,48 @@
 import { isMemberId } from "../../../shared/referral-code";
-import { referralTreeDepth, treePathSlots, type ReferralTreeData } from "../../../shared/referral-tree";
+import { treePathSlots, type ReferralTreeData } from "../../../shared/referral-tree";
 import { db } from "../../utils/database";
 
-// Deliberately public: only numeric IDs and invitation links leave
-// this endpoint. Internal UUIDs, wallets, balances and account details stay private.
+// Public output contains member IDs and placement only. No internal slot IDs,
+// wallets, payment eligibility or balances leave this endpoint.
 export default defineEventHandler(async (event): Promise<ReferralTreeData> => {
   const query = getQuery(event);
   const id = typeof query.id === "string" ? query.id.trim() : "";
   const path = typeof query.path === "string" ? query.path : "";
+  const mode = query.mode ?? "unilevel", maxDepth = mode === "matrix" ? 3 : 15;
   const levels = query.levels === undefined ? 3 : Number(query.levels);
+  const level = query.level === undefined ? 1 : Number(query.level);
+  const cycle = query.cycle === undefined ? 0 : Number(query.cycle);
   const slots = treePathSlots(path).map(Number);
   if (!isMemberId(id)) throw createError({ statusCode: 400, statusMessage: "Enter a valid numeric member ID." });
-  if ((path !== '' && !/^(0|[1-9]\d{0,8})(\/(0|[1-9]\d{0,8}))*$/.test(path)) || slots.length > referralTreeDepth || !Number.isInteger(levels) || levels < 1 || levels > referralTreeDepth)
-    throw createError({ statusCode: 400, statusMessage: "Choose a branch within the first 15 levels." });
-  const root = await db().one("SELECT id, referral_code FROM users WHERE referral_code = $1", id);
+  if (!["matrix","unilevel"].includes(String(mode)) || (path !== "" && !/^[01](\/[01])*$/.test(path))
+    || slots.length > maxDepth || !Number.isInteger(levels) || levels < 1 || levels > maxDepth
+    || !Number.isInteger(level) || level < 1 || level > 15 || !Number.isSafeInteger(cycle) || cycle < 0)
+    throw createError({ statusCode: 400, statusMessage: "Choose a valid binary branch, purchase level and cycle." });
+  const root = await db().one("SELECT id,referral_code FROM users WHERE referral_code = $1", id);
   if (!root) throw createError({ statusCode: 404, statusMessage: "No member was found with that ID." });
-  const visibleDepth = Math.min(levels, referralTreeDepth - slots.length);
+  const visibleDepth = Math.min(levels, maxDepth - slots.length);
+  const cycles = mode === "matrix" ? await db().all<{ cycle: number }>("SELECT cycle FROM matrix_slots WHERE user_id = $1 AND level = $2 ORDER BY cycle", root.id, level) : [];
+  if (mode === "matrix" && !cycles.some(item => item.cycle === cycle))
+    throw createError({ statusCode: 404, statusMessage: "This matrix slot does not exist." });
+  const source = mode === "matrix" ? `SELECT s.id,u.referral_code,NULL::TEXT AS parent_code,ARRAY[]::INTEGER[] AS path
+      FROM matrix_slots s JOIN users u ON u.id = s.user_id WHERE s.user_id = $1 AND s.level = $5 AND s.cycle = $6
+      UNION ALL SELECT s.id,u.referral_code,n.referral_code,n.path || s.branch::INTEGER
+      FROM network n JOIN matrix_slots s ON s.parent_id = n.id JOIN users u ON u.id = s.user_id` :
+    `SELECT u.id,u.referral_code,NULL::TEXT AS parent_code,ARRAY[]::INTEGER[] AS path FROM users u WHERE u.id = $1
+      UNION ALL SELECT u.id,u.referral_code,n.referral_code,n.path || p.slot::INTEGER
+      FROM network n JOIN referral_placements p ON p.parent_id = n.id JOIN users u ON u.id = p.user_id`;
   const result = await db().one(`WITH RECURSIVE network AS (
-    SELECT u.id, u.referral_code, NULL::TEXT AS parent_code, ARRAY[]::INTEGER[] AS path
-    FROM users u WHERE u.id = $1
-    UNION ALL
-    SELECT u.id, u.referral_code, n.referral_code, n.path || u.slot
-    FROM network n JOIN LATERAL (
-      SELECT child.id, child.referral_code,
-        (ROW_NUMBER() OVER (ORDER BY child.created_at, child.id) - 1)::INTEGER AS slot
-      FROM users child WHERE child.sponsor_id = n.id
-    ) u ON TRUE
-    WHERE cardinality(n.path) < $2
+    ${source} WHERE cardinality(n.path) < $2
   ) SELECT
-    COALESCE((SELECT json_agg(json_build_object('id', referral_code,
-      'path', array_to_string(path, '/'), 'parentId', parent_code) ORDER BY cardinality(path), path)
-      FROM network WHERE path[1:cardinality($3::INTEGER[])] = $3::INTEGER[] AND cardinality(path) <= $4), '[]'::JSON) AS members,
+    COALESCE((SELECT json_agg(json_build_object('id',referral_code,'path',array_to_string(path,'/'),'parentId',parent_code)
+      ORDER BY cardinality(path),path) FROM network
+      WHERE path[1:cardinality($3::INTEGER[])] = $3::INTEGER[] AND cardinality(path) <= $4),'[]'::JSON) AS members,
     COALESCE((SELECT json_agg(counts) FROM (
-      SELECT cardinality(path) AS depth, COUNT(*)::INTEGER AS filled FROM network
-      WHERE cardinality(path) > 0 GROUP BY cardinality(path) ORDER BY depth
-    ) counts), '[]'::JSON) AS counts`, root.id, referralTreeDepth, slots, slots.length + visibleDepth);
+      SELECT cardinality(path) AS depth,COUNT(*)::INTEGER AS filled FROM network WHERE cardinality(path) > 0
+      GROUP BY cardinality(path) ORDER BY depth
+    ) counts),'[]'::JSON) AS counts`, root.id,maxDepth,slots,slots.length + visibleDepth,...(mode === "matrix" ? [level,cycle] : []));
   const counts = result!.counts as { depth: number; filled: number }[];
-  return {
-    root: { id: root.referral_code, path: "", parentId: null }, path,
-    maxDepth: referralTreeDepth, visibleDepth, members: result!.members,
-    levels: Array.from({ length: referralTreeDepth }, (_, index) => ({
-      depth: index + 1, filled: counts.find(item => item.depth === index + 1)?.filled ?? 0,
-    })),
-  };
+  return { root: { id: root.referral_code, path: "", parentId: null }, path, maxDepth, visibleDepth,
+    mode: mode as "matrix" | "unilevel", programLevel: level, cycle, cycles: cycles.map(item => item.cycle), members: result!.members,
+    levels: Array.from({ length: maxDepth }, (_,index) => ({ depth: index + 1, filled: counts.find(item => item.depth === index + 1)?.filled ?? 0 })) };
 });

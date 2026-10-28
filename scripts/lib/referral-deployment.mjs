@@ -46,7 +46,7 @@ export function prepareDeployment({ initialize = false } = {}) {
   for (const [name, artifact] of Object.entries(artifacts)) fs.writeFileSync(`.data/contracts/${name}.json`, JSON.stringify(artifact, null, 2) + '\n');
   const plan = { chainId: 80002, network: 'Polygon Amoy testnet', mockToken: true, owner, feeRecipient, authority, deployer,
     token: { contract: 'AmoyTestUSDT', symbol: 'tUSDT', decimals: 6, initialOwnerSupply: '1000000', oneTimeFaucetPerWallet: '400000', bytecodeHash: keccak256(artifacts.AmoyTestUSDT.bytecode) },
-    distributor: { contract: 'ReferralDistributor', bytecodeHash: keccak256(artifacts.ReferralDistributor.bytecode), prices: '10 * 2^(level - 1)', maxLevel: 15, allocation: '50% + 20% + 10% direct, 1% per upline level across 15 levels; unused trailing bonuses to highest eligible upline, 5% platform' },
+    distributor: { contract: 'ReferralDistributor', bytecodeHash: keccak256(artifacts.ReferralDistributor.bytecode), prices: '10 * 2^(level - 1)', maxLevel: 15, allocation: '10% + 20% + 50% binary matrix, 1% at each of 15 binary unilevel steps from the parent, 5% platform; missing or locked shares to platform', distributionVersion: 3 },
     missing, broadcast: false };
   fs.writeFileSync('.data/contracts/deployment-plan.json', JSON.stringify(plan, null, 2) + '\n');
   return { plan, artifacts };

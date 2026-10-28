@@ -13,3 +13,17 @@ export function legacyPurchaseShares(level: number): PurchaseShare[] {
   return [...[50,20,10].map((percent,index) => ({ kind: "direct" as const,depth: index+1,units: units*percent/100 })),
     ...bonus.map(({ kind,depth,units }) => ({ kind,depth,units })),{ kind: "platform",depth: 0,units: units/20 }];
 }
+
+// Version-2 receipt verification remains unchanged after switching new purchases.
+export function version2PurchaseShares(level: number): PurchaseShare[] {
+  const units = levelPrice(level) * ledgerScale;
+  return [...[50,20,10].map((percent,index) => ({ kind: "direct" as const, depth: index+1, units: units*percent/100 })),
+    ...Array.from({ length: 15 }, (_,index) => ({ kind: "bonus" as const, depth: index+1, units: units/100 })),
+    { kind: "platform", depth: 0, units: units/20 }];
+}
+export function version2RecipientDepth(share: PurchaseShare, addresses: string[]) {
+  if (share.kind === "platform") return 0;
+  const highest = addresses.findLastIndex(address => !/^0x0{40}$/i.test(address)) + 1;
+  const depth = share.kind === "bonus" && share.depth > highest ? highest : share.depth;
+  return depth && !/^0x0{40}$/i.test(addresses[depth-1]!) ? depth : 0;
+}

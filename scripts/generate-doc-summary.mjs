@@ -39,7 +39,7 @@ const none = example([]);
 const amounts = purchaseShares(1);
 const rates = [amounts[0], amounts[1], amounts[2], { units: amounts.slice(3, 18).reduce((sum, share) => sum + share.units, 0) }, amounts[18]]
   .map(share => share.units / (baseReferralPrice * ledgerScale) * 100);
-assert.deepEqual(rates, [50, 20, 10, 15, 5]);
+assert.deepEqual(rates, [10, 20, 50, 15, 5]);
 assert.equal(cumulative, 327670);
 
 const content = {
@@ -67,7 +67,7 @@ const content = {
     ],
     architectureTitle: "How the components work together",
     architecture: ["Nuxt / Vue UI", "Nitro API", "PostgreSQL"],
-    architectureText: "The API attests eligibility; the wallet signs. ReferralDistributor v2 pays recipients on Amoy. A worker verifies receipts before recording activation and earnings.",
+    architectureText: "The API attests eligibility; the wallet signs. ReferralDistributor v3 pays recipients on Amoy. A worker verifies receipts before recording activation and earnings.",
     rolesTitle: "Separate authorities",
     roles: "Members sign transfers; admins manage accounts. Contract owners alone change on-chain settings or pause. Quote authorities attest eligibility and cannot sign a buyer's transfer.",
     dataTitle: "Three balances with different meanings",
@@ -79,7 +79,7 @@ const content = {
     priceNote: "All amounts are configured token units; the supplied deployment uses test tUSDT. Gas is additional. A new account begins at level 0; buying level 1 activates its invite code.",
     flowTitle: "Default purchase flow",
     steps: [
-      ["Prepare", "Check next level, token balance, ancestry, authority and distributor v2."],
+      ["Prepare", "Check next level, token balance, ancestry, authority and distributor v3."],
       ["Approve", "Wallet approves the exact price; reset a nonzero insufficient allowance first."],
       ["Purchase", "Wallet signs; the contract collects and distributes all nineteen shares atomically."],
       ["Confirm", "Canonical receipt + all events + two confirmations by default activate the level in the app."]
@@ -87,14 +87,14 @@ const content = {
     status: "<strong>Tracking:</strong> awaiting_signature → pending → confirmed / failed. External purchase quotes last ten minutes. Reuse the operation's request key on retries; a timeout does not prove failure.",
     commissionLabels: ["Direct 1", "Direct 2", "Direct 3", "Bonuses", "Platform"],
     allocationHeaders: ["Allocation", "Rate", "At a 10-token purchase"],
-    allocationRows: [["Direct · depths 1 / 2 / 3", "50% / 20% / 10%", "5.00 / 2.00 / 1.00"], ["Bonus · depths 1–15", "1% each · 15% total", "0.10 each · 1.50 total"], ["Base platform share", "5%", "0.50"]],
+    allocationRows: [["Direct · depths 1 / 2 / 3", "10% / 20% / 50%", "1.00 / 2.00 / 5.00"], ["Bonus · depths 1–15", "1% each · 15% total", "0.10 each · 1.50 total"], ["Base platform share", "5%", "0.50"]],
     overlap: "Direct and bonus shares overlap: with fifteen eligible uplines, depths 1/2/3 receive 51%/21%/11%; depths 4–15 receive 1% each.",
     eligibilityTitle: "Who can receive an upline payment?",
-    eligibility: "Activated invite + active account + wallet for the selected mode. Eligibility is snapshotted in the quote. No matching rank, two direct referrals or monthly qualification is required.",
-    redirectTitle: "Missing recipients and the highest eligible upline",
+    eligibility: "Purchased matching level + active account + wallet for the selected mode. Eligibility is snapshotted in the quote.",
+    redirectTitle: "Missing or locked recipients",
     redirects: [
       "Missing/ineligible <strong>direct</strong> shares go to the platform; ancestors do not move into those gaps.",
-      "Bonus gaps below the furthest eligible ancestor also go to the platform. Unused <strong>trailing</strong> bonus depths combine into that furthest eligible ancestor.",
+      "Every missing or locked unilevel depth pays the platform. No shares combine into another member?s payout.",
       "With no eligible ancestor, the platform receives the full price. Its actual receipt can exceed the base 5%."
     ],
     examplesTitle: "Examples · price 10", examplesHeaders: ["Eligible uplines", "Result in token units"],
@@ -104,11 +104,11 @@ const content = {
       ["Depth 2 gap; 1,3,4,5 eligible", `Depths 1/3/4/5: ${[1,3,4,5].map(gap).join(" / ")}; platform: ${gap(0)}.`],
       ["None", `Platform: <strong>${none(0)}</strong>.`]
     ],
-    commissionNote: "Payouts arise from purchases, not invitations alone. Matrix/rank projections are illustrations: no implemented recycling or guaranteed return. On-chain commissions are already transferred to recipient wallets; legacy credits are not credited again.",
+    commissionNote: "Payouts arise from purchases, not invitations alone. Matrix/rank projections are illustrations: paid matrices recycle and queue wallet-funded upgrades; returns are not guaranteed. On-chain commissions are already transferred to recipient wallets; legacy credits are not credited again.",
     controlsTitle: "Accounts, permissions and controls",
     controls: [
       "Member wallet sign-in uses a single-use five-minute message. Sessions last seven days; passwords are disabled for members by default. Admins use /admin/login.",
-      "A sponsor must be active and activated. Attach once; no self-link or cycle. All direct referrals remain beneath their sponsor, including a third or later child.",
+      "A sponsor must be active and activated. Attach once; no self-link or cycle. Each placement has two branches; extra invitations spill over below existing members.",
       "Closing registration blocks new accounts. Closing funding blocks legacy deposit requests only. Contract pause requires the owner. Suspension does not freeze an external wallet."
     ],
     legacyTitle: "Legacy settlement stays separate",
@@ -148,7 +148,7 @@ const content = {
     ],
     architectureTitle: "องค์ประกอบทำงานร่วมกันอย่างไร",
     architecture: ["Nuxt / Vue UI", "Nitro API", "PostgreSQL"],
-    architectureText: "API รับรองสายผู้แนะนำและสิทธิ์ กระเป๋าภายนอกลงนามซื้อ ส่วน ReferralDistributor v2 โอนเงินบน Amoy จากนั้น worker ตรวจ receipt ก่อนบันทึกเลเวล (Level) และรายได้ในแอป",
+    architectureText: "API รับรองสายผู้แนะนำและสิทธิ์ กระเป๋าภายนอกลงนามซื้อ ส่วน ReferralDistributor v3 โอนเงินบน Amoy จากนั้น worker ตรวจ receipt ก่อนบันทึกเลเวล (Level) และรายได้ในแอป",
     rolesTitle: "แยกอำนาจแต่ละบทบาท",
     roles: "สมาชิกควบคุมธุรกรรมกระเป๋า ผู้ดูแลจัดการบัญชีในแอป เฉพาะ owner สัญญาจึงเปลี่ยนผู้รับ ผู้ลงนาม หรือ pause บนเชนได้ Quote authority ลงนามโอนแทนผู้ซื้อไม่ได้",
     dataTitle: "ยอดเงิน 3 แบบมีความหมายต่างกัน",
@@ -160,7 +160,7 @@ const content = {
     priceNote: "จำนวนเงินเป็นหน่วยโทเคนที่ตั้งค่า Deployment ที่ให้มาใช้ tUSDT ทดสอบ ยังไม่รวม gas บัญชีใหม่เริ่มเลเวล (Level) 0 ซื้อเลเวล (Level) 1 แล้วจึงเปิดใช้รหัสแนะนำ",
     flowTitle: "ลำดับซื้อแบบค่าเริ่มต้น",
     steps: [
-      ["เตรียม", "ตรวจเลเวล (Level) ถัดไป ยอดโทเคน สายผู้แนะนำ authority และ distributor v2"],
+      ["เตรียม", "ตรวจเลเวล (Level) ถัดไป ยอดโทเคน สายผู้แนะนำ authority และ distributor v3"],
       ["อนุมัติ", "Approve เท่าราคาซื้อ ถ้า allowance เดิมไม่เป็นศูนย์แต่ไม่พอ ให้ reset ก่อน"],
       ["ซื้อ", "กระเป๋าลงนาม สัญญารับเงินและโอนทั้ง 19 ส่วนแบบ atomic"],
       ["ยืนยัน", "ตรวจ canonical receipt และ events ครบ พร้อม confirmation เริ่มต้น 2 ครั้ง จึงรับรองเลเวล (Level) ในแอป"]
@@ -168,7 +168,7 @@ const content = {
     status: "<strong>สถานะ:</strong> awaiting_signature → pending → confirmed / failed Quote ภายนอกอายุ 10 นาที Retry ใช้ request key เดิม การ timeout ไม่ใช่หลักฐานว่าจ่ายล้มเหลว",
     commissionLabels: ["ตรงชั้น 1", "ตรงชั้น 2", "ตรงชั้น 3", "โบนัส", "แพลตฟอร์ม"],
     allocationHeaders: ["ส่วนแบ่ง", "อัตรา", "เมื่อซื้อ 10 โทเคน"],
-    allocationRows: [["จ่ายตรง · ชั้น 1 / 2 / 3", "50% / 20% / 10%", "5.00 / 2.00 / 1.00"], ["โบนัส · ชั้น 1–15", "ชั้นละ 1% · รวม 15%", "ชั้นละ 0.10 · รวม 1.50"], ["ส่วนแพลตฟอร์มพื้นฐาน", "5%", "0.50"]],
+    allocationRows: [["จ่ายตรง · ชั้น 1 / 2 / 3", "10% / 20% / 50%", "1.00 / 2.00 / 5.00"], ["โบนัส · ชั้น 1–15", "ชั้นละ 1% · รวม 15%", "ชั้นละ 0.10 · รวม 1.50"], ["ส่วนแพลตฟอร์มพื้นฐาน", "5%", "0.50"]],
     overlap: "รับจ่ายตรงและโบนัสร่วมกันได้ ถ้ามีผู้มีสิทธิ์ครบ 15 ชั้น ชั้น 1/2/3 รับรวม 51%/21%/11% ส่วนชั้น 4–15 รับชั้นละ 1%",
     eligibilityTitle: "ใครมีสิทธิ์รับส่วนของผู้แนะนำ",
     eligibility: "ต้องเปิดรหัสแนะนำแล้ว บัญชี active และมีกระเป๋าตามโหมดที่ใช้งาน Server บันทึกสิทธิ์ตอนเตรียม quote ไม่บังคับซื้อ rank เท่าผู้ซื้อ มีลูกตรงสองคน หรือผ่านคุณสมบัติรายเดือน",

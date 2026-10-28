@@ -27,8 +27,8 @@ async function signCall(wallet: BaseWallet,call: WalletCall) {
   return wallet.sendTransaction({ to: call.to,data: call.data,value: BigInt(call.value),chainId: call.chainId,
     ...(call.gasLimit ? { gasLimit: BigInt(call.gasLimit) } : {}),...(call.nonce !== undefined ? { nonce: call.nonce } : {}) });
 }
-async function buy(api: APIRequestContext,wallet: BaseWallet,level = 1,attach = true) {
-  const response = await post(api,'/api/referrals/chain/prepare',{ level,requestKey: randomUUID() });
+async function buy(api: APIRequestContext,wallet: BaseWallet,level = 1,attach = true,automaticApproval = false) {
+  const response = await post(api,'/api/referrals/chain/prepare',{ level,requestKey: randomUUID(),automaticApproval });
   expect(response.status(),await response.text()).toBe(200);
   const prepared = await response.json() as ExternalPurchase;
   for (const call of prepared.calls) {
@@ -146,7 +146,7 @@ for (const role of ['member','admin']) test(`existing accounts link once as ${ro
   } finally { await api.dispose(); await database.close(); }
 });
 
-test('wallet-signed purchases recover without hash attachment, top upline receives 15%, and server never signs a buyer transaction',async ({ playwright }) => {
+test('wallet-signed purchases recover without hash attachment, parent receives 10% matrix and 1% unilevel, and server never signs a buyer transaction',async ({ playwright }) => {
   test.setTimeout(120000);
   const provider = rpc(), database = openTestDatabase(), root = await playwright.request.newContext({ baseURL: origin }), child = await playwright.request.newContext({ baseURL: origin });
   const rootWallet = Wallet.createRandom().connect(provider), childWallet = Wallet.createRandom().connect(provider);
@@ -165,16 +165,16 @@ test('wallet-signed purchases recover without hash attachment, top upline receiv
     expect((await post(child,'/api/referrals/chain/confirm',{ id: rootPurchaseId,transactionHash: `0x${'11'.repeat(32)}` })).status()).toBe(404);
     await buy(child,childWallet);
     const token = new Contract(process.env.NUXT_EVM_TOKEN_ADDRESS!,['function balanceOf(address) view returns(uint256)'],provider);
-    expect(await token.getFunction('balanceOf')(rootWallet.address)).toBe(96_500_000n);
-    expect((await (await root.get('/api/dashboard')).json()).commissions).toBe(6.5);
+    expect(await token.getFunction('balanceOf')(rootWallet.address)).toBe(91_100_000n);
+    expect((await (await root.get('/api/dashboard')).json()).commissions).toBe(1.1);
     const allocation = await database.one("SELECT COUNT(*) AS count,SUM(a.amount) AS amount FROM referral_chain_allocations a JOIN referral_chain_purchases p ON p.id = a.purchase_id WHERE p.user_id = $1 AND a.reason = 'highest_upline' AND a.recipient_user_id = $2",member.id,parent.id);
-    expect(allocation).toMatchObject({ count: 14,amount: 1400000 });
+    expect(allocation).toMatchObject({ count: 0,amount: null });
     expect((await database.one('SELECT COUNT(*) AS count FROM referral_chain_transactions'))!.count).toBe(0);
     expect((await database.one('SELECT COUNT(*) AS count FROM evm_wallets WHERE user_id = ANY($1::TEXT[])',[parent.id,member.id]))!.count).toBe(0);
     const send = await (await post(child,'/api/wallet/connected/send',{ asset: 'token',recipient: rootWallet.address,amount: '2',requestKey: randomUUID() })).json();
     const tx = await signCall(childWallet,send.call); await tx.wait();
     const confirmed = await post(child,'/api/wallet/connected/confirm',{ id: send.id,transactionHash: tx.hash });
-    expect((await confirmed.json()).status).toBe('confirmed'); expect(await token.getFunction('balanceOf')(rootWallet.address)).toBe(98_500_000n);
+    expect((await confirmed.json()).status).toBe('confirmed'); expect(await token.getFunction('balanceOf')(rootWallet.address)).toBe(93_100_000n);
     const free = await playwright.request.newContext({ baseURL: origin }), freeWallet = Wallet.createRandom().connect(provider);
     try {
       await login(free,freeWallet); await fund(freeWallet,provider);
@@ -465,4 +465,36 @@ test('a delayed guest session read does not replace a completed wallet sign-in',
     await expect(page.locator('.profile-menu-trigger')).toBeVisible();
     await expect(page.locator('.dashboard-topbar .topbar-wallet')).toHaveCount(0);
   } finally { releaseSession(); provider.destroy(); }
+});
+
+test('a full paid matrix triggers exactly one relayed wallet debit and unlocks the next level', async ({ playwright }) => {
+  test.setTimeout(180000);
+  const provider=rpc(),database=openTestDatabase(),root=await playwright.request.newContext({baseURL:origin});
+  const rootWallet=Wallet.createRandom().connect(provider);
+  try {
+    const owner=await login(root,rootWallet);await fund(rootWallet,provider);
+    await buy(root,rootWallet,1,true,true);
+    const program=await (await root.get('/api/referrals/program')).json();
+    const token=new Contract(process.env.NUXT_EVM_TOKEN_ADDRESS!,['function balanceOf(address) view returns(uint256)','function allowance(address,address) view returns(uint256)'],provider);
+    expect(await token.getFunction('allowance')(rootWallet.address,process.env.NUXT_REFERRAL_CONTRACT_ADDRESS)).toBe(327660000000n);
+    for(let index=0;index<14;index++) {
+      const child=await playwright.request.newContext({baseURL:origin}),wallet=Wallet.createRandom().connect(provider);
+      try { await login(child,wallet,program.code);await fund(wallet,provider);await buy(child,wallet); }
+      finally { await child.dispose(); }
+    }
+    await expect.poll(async()=>{
+      await root.get('/api/referrals/chain/status');
+      return (await database.one("SELECT status FROM matrix_auto_upgrades WHERE user_id=$1 AND level=2",owner.id))?.status;
+    },{timeout:60000,intervals:[1000,3000]}).toBe('completed');
+    expect((await (await root.get('/api/referrals/program')).json()).currentLevel).toBe(2);
+    expect(await token.getFunction('balanceOf')(rootWallet.address)).toBe(121400000n);
+    expect((await database.one("SELECT COUNT(*) AS count FROM referral_chain_purchases WHERE user_id=$1 AND level=2 AND status='confirmed' AND signing_mode='automatic'",owner.id))!.count).toBe(1);
+    expect((await database.one("SELECT COUNT(*) AS count FROM matrix_slots WHERE user_id=$1 AND level=1",owner.id))!.count).toBe(2);
+    const automatic=await database.one("SELECT transaction_hash FROM referral_chain_purchases WHERE user_id=$1 AND level=2",owner.id);
+    const tx=await provider.getTransaction(automatic!.transaction_hash);
+    expect(tx!.from).toBe(new Wallet(process.env.NUXT_REFERRAL_AUTHORITY_PRIVATE_KEY!).address);
+    expect(tx!.from).not.toBe(rootWallet.address);
+    await root.get('/api/referrals/chain/status');
+    expect(await token.getFunction('balanceOf')(rootWallet.address)).toBe(121400000n);
+  } finally { await root.dispose();provider.destroy();await database.close(); }
 });

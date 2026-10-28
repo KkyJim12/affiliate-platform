@@ -38,7 +38,7 @@ async function fixture(depth: number, balance = 400000) {
   } finally { await db.close(); }
 }
 
-test('purchases pay 15 uplines, upgrades double through level 15, retries never duplicate payouts', async ({ playwright }, info) => {
+test('purchases pay qualified uplines, locked higher levels pay the platform, and retries do not duplicate payouts', async ({ playwright }, info) => {
   test.skip(info.project.name !== 'desktop');
   test.setTimeout(120000);
   const data = await fixture(16), db = openTestDatabase();
@@ -67,6 +67,8 @@ test('purchases pay 15 uplines, upgrades double through level 15, retries never 
     const retries = await Promise.all([post(api, '/api/referrals/upgrade', upgradeBody), post(api, '/api/referrals/upgrade', upgradeBody)]);
     expect(retries.map(response => response.status())).toEqual([200, 200]);
     expect((await retries[0]!.json()).program.currentLevel).toBe(2);
+    expect((await (await api.get('/api/referrals/program')).json()).latestPurchase.platformPayable).toBe(20);
+    expect((await db.one("SELECT COUNT(*) AS count FROM referral_allocations a JOIN referral_purchases p ON p.id=a.purchase_id WHERE p.user_id=$1 AND p.level=2 AND a.status='credited'",data.buyer.id))!.count).toBe(0);
     expect((await post(api, '/api/referrals/upgrade', { ...upgradeBody, requestKey: randomUUID() })).status()).toBe(409);
     expect((await post(api, '/api/referrals/upgrade', { ...upgradeBody, level: 3 })).status()).toBe(409);
     expect((await post(api, '/api/referrals/upgrade', { password, requestKey: randomUUID(), level: 4 })).status()).toBe(409);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { network } from 'hardhat';
-import { BrowserProvider, ContractFactory, FeeData, Transaction, Wallet, ZeroAddress, id, parseEther, parseUnits, toBeHex } from 'ethers';
+import { BrowserProvider, ContractFactory, FeeData, Transaction, Wallet, ZeroAddress, ZeroHash, id, parseEther, parseUnits, toBeHex } from 'ethers';
 import { ReferralChainClient, uplineHash } from '../server/lib/referral-chain.ts';
 import { compileContracts } from '../scripts/lib/compile-contracts.mjs';
 
@@ -19,9 +19,9 @@ async function fixture({ confirmations = 1, funds = 100n, decimals = 6 } = {}) {
   if (funds) await (await token.mint(buyer.address, funds * 10n ** BigInt(decimals))).wait();
   const config = { rpcUrl: 'http://127.0.0.1:8545', contractAddress: await contract.getAddress(), tokenAddress: await token.getAddress(), authorityPrivateKey: authority.privateKey, minConfirmations: confirmations };
   const client = new ReferralChainClient(config, provider);
-  const uplines = Array(15).fill(ZeroAddress);
+  const uplines = Array(18).fill(ZeroAddress);
   const quote = { id: id(`library-${Math.random()}`), buyer: buyer.address, level: 1, previousLevel: 0, uplinesHash: uplineHash(uplines), feeRecipient: fee.address,
-    configNonce: '0', deadline: (await provider.getBlock('latest')).timestamp + 3600 };
+    configNonce: '0', deadline: (await provider.getBlock('latest')).timestamp + 3600, matrixCycle: ZeroHash };
   const payload = { createdBlock: (await provider.getBlock('latest')).number, quote, uplines, recipients: uplines.map(() => ({ userId: null, reason: 'missing_upline' })), signature: await client.sign(quote) };
   return { connection, provider, buyer, token, contract, client, payload, fee, config, close: async () => { provider.destroy(); await connection.close(); } };
 }
@@ -58,12 +58,12 @@ test('signed purchase batches bind chain, spender, exact allowance and nonce ord
   } finally { await f.close(); }
 });
 
-for (const decimals of [6, 18]) test(`purchases below the old POL minimum fund all 15 cold recipients for a ${decimals}-decimal token`, async () => {
+for (const decimals of [6, 18]) test(`purchases below the old POL minimum fund all 18 cold recipients for a ${decimals}-decimal token`, async () => {
   const f = await fixture({ decimals });
   try {
     const fee = parseUnits('3', 'gwei');
     f.provider.getFeeData = async () => new FeeData(fee, fee, fee);
-    const uplines = Array.from({ length: 15 }, () => Wallet.createRandom().address);
+    const uplines = Array.from({ length: 18 }, () => Wallet.createRandom().address);
     f.payload.uplines = uplines;
     f.payload.quote.uplinesHash = uplineHash(uplines);
     f.payload.recipients = uplines.map(() => ({ userId: null, reason: 'upline' }));
@@ -182,4 +182,24 @@ test('mock Amoy token is six-decimal, one faucet claim covers all 15 levels, and
     await assert.rejects(mock.connect(member).faucet());
     await assert.rejects(mock.connect(member).mint(await member.getAddress(), 1n));
   } finally { provider.destroy(); await connection.close(); }
+});
+
+test('automatic approval is finite and relayed upgrade receipts verify against the buyer and cycle', async () => {
+ const f=await fixture();
+ try {
+  f.payload.automaticApproval=true;
+  await f.provider.send('hardhat_setBalance',[f.client.authority.address,toBeHex(parseEther('1'))]);
+  for(const item of await f.client.preparePurchase(f.buyer,f.payload,6)) await f.client.broadcast(item.raw);
+  assert.equal(await f.token.allowance(f.buyer.address,f.config.contractAddress),327660000000n);
+  const block=await f.provider.getBlock('latest');
+  const quote={...f.payload.quote,id:id('relayed-upgrade'),level:2,previousLevel:1,matrixCycle:id('matrix-cycle-1'),deadline:block.timestamp+3600};
+  const payload={...f.payload,createdBlock:block.number,quote,signature:await f.client.sign(quote)};
+  const batch=await f.client.prepareAutoUpgrade(payload,6);
+  assert.equal(Transaction.from(batch[0].raw).from,f.client.authority.address);
+  await f.client.broadcast(batch[0].raw);
+  const evidence=await f.client.verifyPurchase(batch[0].hash,payload);
+  assert.equal(evidence.status,'confirmed'); assert.equal(evidence.allocations.length,19);
+  assert.equal(await f.contract.levelOf(f.buyer.address),2n);
+  assert.equal(await f.token.balanceOf(f.buyer.address),70000000n);
+ } finally { await f.close(); }
 });

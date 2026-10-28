@@ -5,6 +5,9 @@ const props = defineProps<{ memberId: string }>();
 const { t, localeTag } = useLoopI18n();
 const branch = ref("");
 const levels = ref(3);
+const mode = ref<"matrix" | "unilevel">("matrix");
+const programLevel = ref(1), cycle = ref(0);
+const maxDepth = computed(() => mode.value === "matrix" ? 3 : 15);
 const zoom = ref(100);
 const viewport = ref<HTMLElement | null>(null);
 const scrollLeft = ref(0);
@@ -13,9 +16,10 @@ let focusedLevel: number | undefined;
 const requestKey = useId();
 const { data: tree, status, error, refresh } = await useFetch<ReferralTreeData>("/api/referrals/tree", {
   key: `binary-tree-${requestKey}`,
-  query: { id: computed(() => props.memberId), path: branch, levels },
+  query: { id: computed(() => props.memberId), path: branch, levels, mode, level: programLevel, cycle },
 });
-watch(() => props.memberId, () => { branch.value = ""; });
+watch([() => props.memberId, mode, programLevel], () => { branch.value = ""; cycle.value = 0; levels.value = 3; }, { flush: "sync" });
+watch(cycle, () => { branch.value = ""; }, { flush: "sync" });
 const failed = computed(() => error.value?.statusCode === 404 ? t('publicTree.notFound') : t('publicTree.loadError'));
 const { width: cardWidth, height: cardHeight, rowHeight } = referralTreeCard;
 const branchDepth = computed(() => treePathDepth(tree.value?.path ?? branch.value));
@@ -49,7 +53,7 @@ function centerTree() {
 watch([tree, zoom], centerTree);
 onMounted(centerTree);
 function explore(path: string) {
-  if (treePathDepth(path) <= referralTreeDepth && path !== branch.value) branch.value = path;
+  if (treePathDepth(path) <= maxDepth.value && path !== branch.value) branch.value = path;
 }
 function showLevel(depth: number) {
   const start = Math.max(0, depth - levels.value);
@@ -65,6 +69,17 @@ const number = (value: number) => value.toLocaleString(localeTag.value);
 
 <template>
   <section class="binary-referral-tree" :aria-label="t('publicTree.treeLabel')" :aria-busy="status === 'pending'" data-testid="binary-referral-tree">
+    <div class="binary-tree-toolbar">
+      <div role="group" :aria-label="t('matrix.program')" class="binary-tree-options">
+        <button class="button button-outline button-small" :aria-pressed="mode === 'matrix'" @click="mode = 'matrix'">{{ t('matrix.binary') }}</button>
+        <button class="button button-outline button-small" :aria-pressed="mode === 'unilevel'" @click="mode = 'unilevel'">{{ t('matrix.unilevel') }}</button>
+      </div>
+      <div v-if="mode === 'matrix'" class="binary-tree-options">
+        <AppDropdown v-model="programLevel" :label="t('ranksPage.selectLevel')" compact :options="Array.from({ length: 15 }, (_,index) => ({ value: index + 1,label: t('ranksPage.level') + ' ' + (index + 1) }))" />
+        <AppDropdown v-if="(tree?.cycles?.length ?? 0) > 1" v-model="cycle" :label="t('matrix.slot')" compact :options="(tree?.cycles ?? []).map(value => ({ value,label: t('matrix.slotNumber', { number: value + 1 }) }))" />
+      </div>
+    </div>
+    <p class="binary-tree-note">{{ t(mode === 'matrix' ? 'matrix.treeHint' : 'matrix.unilevelHint') }}</p>
     <div v-if="error" class="binary-tree-message" role="alert"><AppIcon name="Search" :size="28" /><p>{{ failed }}</p><button class="button button-outline button-small" @click="refresh()">{{ t('publicTree.retry') }}</button></div>
     <template v-else-if="tree">
       <div class="binary-tree-header">
@@ -80,21 +95,21 @@ const number = (value: number) => value.toLocaleString(localeTag.value);
       </div>
       <div class="binary-tree-toolbar">
         <div class="binary-tree-branch-controls"><button class="button button-outline button-small" :disabled="!branch" @click="branch = ''"><AppIcon name="House" :size="14" />{{ t('publicTree.root') }}</button><button class="button button-outline button-small" :disabled="!branch" @click="branch = treeParentPath(branch)"><AppIcon name="ArrowUp" :size="14" />{{ t('publicTree.up') }}</button><span aria-live="polite">{{ t('publicTree.showing', { from: branchDepth, to: branchDepth + tree.visibleDepth, max: tree.maxDepth }) }}</span></div>
-        <div class="binary-tree-options"><AppDropdown v-model="levels" :label="t('publicTree.visibleLevels')" compact :options="[3, 4, 5, referralTreeDepth].map(value => ({ value, label: t('publicTree.levelWindow', { levels: value }) }))" /><div class="tree-zoom-controls" role="group" :aria-label="t('ui.tree_zoom')"><button :aria-label="t('ui.zoom_out')" :disabled="zoom <= 50" @click="zoom -= 25">−</button><span>{{ zoom }}%</span><button :aria-label="t('ui.zoom_in')" :disabled="zoom >= 150" @click="zoom += 25">+</button></div></div>
+        <div class="binary-tree-options"><AppDropdown v-model="levels" :label="t('publicTree.visibleLevels')" compact :options="(mode === 'matrix' ? [3] : [3, 4, 5, referralTreeDepth]).map(value => ({ value, label: t('publicTree.levelWindow', { levels: value }) }))" /><div class="tree-zoom-controls" role="group" :aria-label="t('ui.tree_zoom')"><button :aria-label="t('ui.zoom_out')" :disabled="zoom <= 50" @click="zoom -= 25">−</button><span>{{ zoom }}%</span><button :aria-label="t('ui.zoom_in')" :disabled="zoom >= 150" @click="zoom += 25">+</button></div></div>
       </div>
       <p v-if="branch" class="binary-tree-path">{{ t('publicTree.branch') }}: {{ treePathSlots(branch).map(slot => t('publicTree.branchNumber', { number: number(Number(slot) + 1) })).join(' › ') }}</p>
       <div ref="viewport" class="binary-tree-viewport" tabindex="0" role="region" :aria-label="t('publicTree.scroll')" @scroll.passive="updateViewport">
         <svg :viewBox="`0 0 ${layout.width} ${layout.height}`" :width="layout.width * zoom / 100" :height="layout.height * zoom / 100" role="group" :aria-label="t('publicTree.treeLabel')">
           <title>{{ t('publicTree.memberTitle', { id: tree.root.id }) }}</title>
           <g v-for="node in layout.nodes.filter(node => node.parent)" :key="`edge-${node.path}`" data-tree-edge="true" :data-parent-path="node.parent!.path" :data-child-path="node.path"><path :d="`M${node.parent!.x},${node.parent!.y + cardHeight} V${node.y - 22} H${node.x} V${node.y}`" fill="none" :stroke="node.member ? 'var(--tree-line)' : 'var(--border)'" :stroke-dasharray="node.member ? undefined : '4 5'" stroke-width="1.5" /></g>
-          <g v-for="node in layout.nodes" :key="node.path" :transform="`translate(${node.x - cardWidth / 2},${node.y})`" data-tree-node="true" :data-path="node.path" :data-member-id="node.member?.id" :data-empty="!node.member" :role="node.depth < 15 && node.path !== branch ? 'button' : undefined" :tabindex="node.depth < 15 && node.path !== branch ? 0 : undefined" :aria-label="t('publicTree.nodeLabel', { level: node.depth, id: node.member?.id || '—' })" :class="{ 'binary-tree-clickable': node.depth < 15 && node.path !== branch }" @click="node.depth < 15 && explore(node.path)" @keydown.enter.prevent="node.depth < 15 && explore(node.path)" @keydown.space.prevent="node.depth < 15 && explore(node.path)">
+          <g v-for="node in layout.nodes" :key="node.path" :transform="`translate(${node.x - cardWidth / 2},${node.y})`" data-tree-node="true" :data-path="node.path" :data-member-id="node.member?.id" :data-empty="!node.member" :role="node.depth < maxDepth && node.path !== branch ? 'button' : undefined" :tabindex="node.depth < maxDepth && node.path !== branch ? 0 : undefined" :aria-label="t('publicTree.nodeLabel', { level: node.depth, id: node.member?.id || '—' })" :class="{ 'binary-tree-clickable': node.depth < maxDepth && node.path !== branch }" @click="node.depth < maxDepth && explore(node.path)" @keydown.enter.prevent="node.depth < maxDepth && explore(node.path)" @keydown.space.prevent="node.depth < maxDepth && explore(node.path)">
             <title>{{ t('publicTree.nodeLabel', { level: node.depth, id: node.member?.id || '—' }) }}</title>
             <rect :width="cardWidth" :height="cardHeight" rx="10" :fill="node.member ? 'var(--gold-soft)' : 'var(--surface)'" :stroke="node.member ? 'var(--gold-border)' : 'var(--border)'" :stroke-dasharray="node.member ? undefined : '4 4'" />
             <text x="12" y="19" font-size="9" fill="var(--text-secondary)">{{ t('publicTree.level', { level: node.depth }) }}</text>
             <foreignObject x="12" y="27" :width="cardWidth - 24" height="18">
               <div class="binary-tree-node-id" :title="node.member ? t('publicTree.id') + ' ' + node.member.id : undefined">{{ t('publicTree.id') }} {{ node.member?.id || '—' }}</div>
             </foreignObject>
-            <text v-if="node.depth < 15 && node.path !== branch" x="117" y="20" text-anchor="middle" font-size="13" fill="var(--gold-text)">↓</text>
+            <text v-if="node.depth < maxDepth && node.path !== branch" x="117" y="20" text-anchor="middle" font-size="13" fill="var(--gold-text)">↓</text>
           </g>
         </svg>
       </div>

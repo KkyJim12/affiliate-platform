@@ -1,5 +1,5 @@
 import { bonusRate, directRates, ledgerScale, levelPrice, purchaseShares } from "./compensation";
-// Binary examples use the same depth rates as actual sponsor commissions.
+// Binary examples use the same depth rates as paid binary matrix commissions.
 export const matrixRates = directRates;
 export const rankPrice = levelPrice;
 export const ranks = Array.from({ length: 15 }, (_, index) => {

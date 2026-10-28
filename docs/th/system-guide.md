@@ -1,5 +1,8 @@
 # คู่มือระบบ UNXO
 
+> Distribution version 3 supersedes the payment and tree rules reviewed below. See [current binary matrix, unilevel and automatic-upgrade rules](../matrix-payments.md). The older schedule below describes historical versions 1?2.
+
+
 [สารบัญเอกสาร](../README.md) · [English](../en/system-guide.md) · [การจ่ายเงินและเงื่อนไข](payments-and-conditions.md) · [คู่มือปฏิบัติการ](operations.md) · [API](api-reference.md)
 
 ตรวจสอบซอร์สโค้ดวันที่ **27 ตุลาคม 2026** revision `3ffa828` เอกสารนี้อธิบายความสามารถใน repository ไม่ได้ตรวจสอบยอดเงินจริง ที่อยู่สัญญา การตั้งค่า หรือความพร้อมของระบบที่ deploy อยู่

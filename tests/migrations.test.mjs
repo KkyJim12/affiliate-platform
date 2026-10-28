@@ -1,3 +1,4 @@
+import { unlockMatrixLevel, referralRecipients } from "../server/utils/matrix.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
@@ -302,4 +303,54 @@ test("invalid SQLite relationships roll back the entire PostgreSQL import", () =
     assert.ok(basename(directory).startsWith("unxo-import-"));
     rmSync(directory, { recursive: true, force: true });
   }
+}));
+
+test("matrix slots limit each cycle to three descendant rows, recycle once and queue wallet-funded upgrades", () => isolated(async db => {
+  await migrate(db.pool,sources);
+  await db.execute("INSERT INTO users VALUES ('root','matrix_root','hash','UNASSIGNED-root',NULL,'2026-10-28')");
+  await db.execute("INSERT INTO wallets(id,user_id,available) VALUES('w-root','root',100000000)");
+  for(let i=1;i<=16;i++) {
+    await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,'root',$2)",`child${i}`,`2026-10-28T00:00:${String(i).padStart(2,'0')}Z`);
+    await db.execute("INSERT INTO wallets(id,user_id) VALUES($1,$2)",`w-child${i}`,`child${i}`);
+  }
+  const matrix=await db.all(`WITH RECURSIVE positions AS (
+    SELECT id,0 AS depth FROM matrix_slots WHERE user_id='root' AND level=1 AND cycle=0
+    UNION ALL SELECT s.id,p.depth+1 FROM positions p JOIN matrix_slots s ON s.parent_id=p.id
+  ) SELECT depth,COUNT(*) AS count FROM positions GROUP BY depth ORDER BY depth`);
+  assert.deepEqual(matrix,[{depth:0,count:1},{depth:1,count:2},{depth:2,count:4},{depth:3,count:8}]);
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM matrix_slots WHERE user_id='root' AND level=1")).count,2);
+  assert.equal((await db.one("SELECT parent_id FROM referral_placements WHERE user_id='child15'")).parent_id,'child7');
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM matrix_slots WHERE parent_id IS NOT NULL GROUP BY parent_id HAVING COUNT(*)>2 LIMIT 1")),undefined);
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM matrix_auto_upgrades")).count,0);
+  await db.transaction(()=>unlockMatrixLevel('root',1,db));
+  for(let i=1;i<=13;i++) await db.transaction(()=>unlockMatrixLevel(`child${i}`,1,db));
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM matrix_auto_upgrades WHERE user_id='root'")).count,0);
+  await db.transaction(()=>unlockMatrixLevel('child14',1,db));
+  await db.transaction(()=>unlockMatrixLevel('child14',1,db));
+  assert.deepEqual(await db.all("SELECT user_id,level,status FROM matrix_auto_upgrades WHERE user_id='root'"),[{user_id:'root',level:2,status:'queued'}]);
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM matrix_slots WHERE user_id='root' AND level=1")).count,2);
+  assert.ok((await db.one("SELECT completed_at FROM matrix_slots WHERE user_id='root' AND level=1 AND cycle=0")).completed_at);
+  assert.equal((await db.one("SELECT unlocked FROM matrix_slots WHERE user_id='root' AND level=2 AND cycle=0")).unlocked,false);
+  const recipients=await referralRecipients('child3',1,'ledger',db);
+  assert.equal(recipients.length,18);
+  assert.equal(recipients[0].userId,'child1'); assert.equal(recipients[1].userId,'root');
+  assert.equal(recipients[3].userId,'child1'); assert.equal(recipients[4].userId,'root');
+  const locked=await referralRecipients('child3',2,'ledger',db);
+  assert.ok(locked.every(item=>item.userId===null));
+  await db.transaction(()=>unlockMatrixLevel('root',2,db));
+  const qualified=await referralRecipients('child3',2,'ledger',db);
+  assert.equal(qualified[0].reason,'ineligible_upline'); assert.equal(qualified[1].userId,'root');
+  assert.equal(qualified[3].reason,'ineligible_upline'); assert.equal(qualified[4].userId,'root');
+  await db.execute("INSERT INTO user_access VALUES('root','member','suspended')");
+  assert.equal((await referralRecipients('child3',2,'ledger',db))[1].reason,'ineligible_upline');
+}));
+
+test("matrix placement attaches existing root branches when a sponsor is linked later", () => isolated(async db => {
+  await migrate(db.pool,sources);
+  await db.execute("INSERT INTO users VALUES('a','late_a','hash','a',NULL,'2026-10-28'),('b','late_b','hash','b',NULL,'2026-10-28')");
+  await db.execute("INSERT INTO users VALUES('c','late_c','hash','c','b','2026-10-28')");
+  await db.execute("UPDATE users SET sponsor_id='a' WHERE id='b'");
+  const placement=await db.one("SELECT p.user_id FROM matrix_slots s JOIN matrix_slots p ON p.id=s.parent_id WHERE s.user_id='b' AND s.level=1 AND s.cycle=0");
+  assert.equal(placement.user_id,'a');
+  await assert.rejects(db.execute("UPDATE users SET sponsor_id='c' WHERE id='a'"),{code:'23514'});
 }));

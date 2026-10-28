@@ -11,6 +11,10 @@ export interface ReferralTreeData {
   visibleDepth: number;
   members: ReferralTreeMember[];
   levels: { depth: number; filled: number }[];
+  mode?: "matrix" | "unilevel";
+  programLevel?: number;
+  cycle?: number;
+  cycles?: number[];
 }
 
 export const treePathSlots = (path: string) => path ? path.split('/') : [];
@@ -30,23 +34,15 @@ interface PositionedReferral {
 
 export function layoutReferralTree(tree: ReferralTreeData, left: number, right: number) {
   const byPath = new Map(tree.members.map(member => [member.path, member]));
-  const children = new Map<string, number>();
-  for (const member of tree.members) {
-    if (member.path === tree.path) continue;
-    const parent = treeParentPath(member.path);
-    const slot = Number(treePathSlots(member.path).at(-1));
-    children.set(parent, Math.max(children.get(parent) ?? 2, slot + 1));
-  }
-  // Real siblings stay under their sponsor. Only empty preview positions use
-  // the two-branch shape; additional referrals expand their parent's subtree.
+  // Both programs have exactly two children per placement slot.
   const sizes = new Map<string, number>();
   let compactPreview = false;
-  const childCount = (path: string) => children.get(path) ?? (compactPreview && !byPath.has(path) ? 0 : 2);
+  const childCount = (path: string) => compactPreview && !byPath.has(path) ? 0 : 2;
   function size(path: string, remaining: number): number {
     if (!remaining) return 1;
     if (sizes.has(path)) return sizes.get(path)!;
     const count = childCount(path);
-    const units = !count ? 1 : !compactPreview && !children.has(path) ? 2 ** remaining
+    const units = !count ? 1 : !compactPreview ? 2 ** remaining
       : Array.from({ length: count }, (_, slot) => size(treeChildPath(path, slot), remaining - 1)).reduce((a, b) => a + b, 0);
     sizes.set(path, units);
     return units;

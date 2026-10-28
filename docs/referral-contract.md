@@ -1,5 +1,7 @@
 # Amoy referral contract
 
+Current behavior: [version-3 binary matrix, unilevel payments and automatic upgrades](matrix-payments.md).
+
 Step-by-step deployment guides: [ภาษาไทย](th/deploy-contracts.md) · [English](en/deploy-contracts.md). For application hosting, see [Deploy Nuxt ภาษาไทย](th/deploy-nuxt.md) / [English](en/deploy-nuxt.md).
 
 Connected wallets are now the default: wallet signatures for login and every on-chain write, with 1% bonuses at each of 15 depths. See [connected wallet setup, existing-account linking and distributor replacement](connected-wallets.md). In-app key management and password-authorized transactions below apply only when `NUXT_PUBLIC_WALLET_MODE=embedded` is explicitly enabled.
@@ -78,12 +80,13 @@ not real USDT or dollars. It only deploys on Amoy. The owner receives 1,000,000
 tUSDT; each wallet may call `faucet()` once for 400,000 tUSDT. All fifteen
 purchases cost 327,670 tUSDT together. Members also need test POL for gas.
 
-Level 1 costs 10 tokens; each full-price sequential upgrade doubles, ending at
-level 15 for 163,840 tokens. The contract pays 50%, 20%, 10% to uplines 1–3,
-exactly 1% at each bonus depth from 1 to 15, and 5% to the platform. Unused
-trailing bonus shares pay the highest eligible upline. Missing direct shares
-and ineligible gaps go to the platform; with no eligible upline the entire bonus
-pool goes there too. Prices split exactly at micro-USDT precision.
+Level 1 costs 10 tokens; sequential upgrades double through level 15 at
+163,840 tokens. Matrix parents receive 10%, 20%, 50% at depths 1?3. Continuous
+binary unilevel parents receive 1% at each of fifteen depths. The platform
+receives 5% plus missing or locked shares. A matching purchased level, active
+account and wallet are required. The quote binds eighteen independent recipient
+positions. No missing share is combined into a higher ancestor's payment.
+
 
 Supported token precision is 6–18 decimals. Fee-on-transfer tokens, short
 deliveries and rebasing during transfer are rejected. A failed payout reverts
@@ -96,8 +99,8 @@ the contracts are non-upgradeable.
 
 Prices/rates are fixed by the contract. The platform attests existing genealogy,
 eligibility and legacy levels using EIP-712. The quote signer is trusted for
-those facts. Signatures bind buyer, unique ID, next/previous level, fifteen
-recipient addresses, fee recipient, configuration nonce, deadline, chain and
+those facts. Signatures bind buyer, unique ID, next/previous level, eighteen
+recipient addresses, completed matrix-cycle hash (zero for manual purchases), fee recipient, configuration nonce, deadline, chain and
 contract. Clients cannot substitute recipients. Fee/signer changes invalidate
 older quotes. External-wallet quotes expire after ten minutes; embedded quotes after an hour. Legacy levels bootstrap the first
 chain purchase once, without repaying old purchases or converting credit to tokens.

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { network } from 'hardhat';
-import { AbiCoder, BrowserProvider, ContractFactory, Interface, Wallet, ZeroAddress, id, keccak256 } from 'ethers';
+import { AbiCoder, BrowserProvider, ContractFactory, Interface, Wallet, ZeroAddress, ZeroHash, id, keccak256 } from 'ethers';
 import { compileContracts } from '../scripts/lib/compile-contracts.mjs';
 import { purchaseTypes, referralContractAbi } from '../shared/referral-contract.ts';
 import { purchaseShares } from '../shared/compensation.ts';
@@ -19,13 +19,14 @@ async function fixture(decimals = 6) {
   };
   const token = await deploy(artifacts.TestPaymentToken, [decimals]);
   const contract = await deploy(artifacts.ReferralDistributor, [await token.getAddress(), await owner.getAddress(), await fee.getAddress(), authority.address]);
-  const uplines = await Promise.all(accounts.slice(2, 17).map(account => account.getAddress()));
+  const parents = await Promise.all(accounts.slice(2, 17).map(account => account.getAddress()));
+  const uplines = [...parents.slice(0,3),...parents];
   const multiplier = 10n ** BigInt(decimals - 6);
   await (await token.mint(await buyer.getAddress(), 400000n * 10n ** BigInt(decimals))).wait();
   async function quote(level = 1, changes = {}, ancestors = uplines, signingWallet = authority) {
     const value = { id: id(`purchase-${Math.random()}`), buyer: await buyer.getAddress(), level, previousLevel: level - 1,
-      uplinesHash: keccak256(AbiCoder.defaultAbiCoder().encode(['address[15]'], [ancestors])), feeRecipient: await fee.getAddress(),
-      configNonce: String(await contract.configNonce()), deadline: (await provider.getBlock('latest')).timestamp + 3600, ...changes };
+      uplinesHash: keccak256(AbiCoder.defaultAbiCoder().encode(['address[18]'], [ancestors])), feeRecipient: await fee.getAddress(),
+      configNonce: String(await contract.configNonce()), deadline: (await provider.getBlock('latest')).timestamp + 3600, matrixCycle: ZeroHash, ...changes };
     return { value, uplines: ancestors, signature: await signingWallet.signTypedData(
       { name: 'UNXO Referral Distributor', version: '1', chainId: 80002, verifyingContract: await contract.getAddress() }, purchaseTypes, value) };
   }
@@ -69,51 +70,65 @@ test('real token transfers conserve 100% across every level, including 15 equal 
   } finally { await f.close(); }
 });
 
-test('18-decimal tokens pay 65% to the sole upline, including the entire 15% bonus pool', async () => {
+test('18-decimal tokens pay the sole parent exactly 10% matrix plus 1% unilevel', async () => {
   const f = await fixture(18);
   try {
-    const ancestors = [f.uplines[0], ...Array(14).fill(ZeroAddress)];
-    const signed = await f.quote(1, {}, ancestors);
-    await f.buy(signed);
-    const expected = 6_500_000n * f.multiplier;
-    assert.equal(await f.token.balanceOf(f.uplines[0]), expected);
-    assert.equal(await f.token.balanceOf(await f.fee.getAddress()), 10n ** 19n - expected);
-    assert.equal(await f.token.balanceOf(await f.contract.getAddress()), 0n);
-    assert.deepEqual(Array.from(await f.contract.previewShares(15)), purchaseShares(15).map(share => BigInt(share.units) * f.multiplier));
+    const ancestors = Array(18).fill(ZeroAddress); ancestors[0] = f.uplines[0]; ancestors[3] = f.uplines[0];
+    await f.buy(await f.quote(1,{},ancestors));
+    const expected = 1_100_000n * f.multiplier;
+    assert.equal(await f.token.balanceOf(f.uplines[0]),expected);
+    assert.equal(await f.token.balanceOf(await f.fee.getAddress()),10n ** 19n - expected);
+    assert.equal(await f.token.balanceOf(await f.contract.getAddress()),0n);
   } finally { await f.close(); }
 });
 
-test('short chains pay exactly 1% per level and the top upline receives unused bonus steps', async () => {
-  for (const count of [0, 1, 5, 14, 15]) {
+test('separate binary trees pay 10/20/50 and fifteen 1% shares without folding missing depths', async () => {
+  for (const count of [0,1,5,14,15]) {
     const f = await fixture();
     try {
-      const ancestors = f.uplines.map((address, i) => i < count ? address : ZeroAddress);
+      const ancestors = [...f.uplines.slice(0,3),...f.uplines.slice(3).map((address,i) => i < count ? address : ZeroAddress)];
       const receipt = await f.buy(await f.quote(1,{},ancestors));
-      const shares = receipt.logs.flatMap(log => { try { const event = f.contract.interface.parseLog(log); return event?.name === 'SharePaid' ? [event] : []; } catch { return []; } });
-      const bonus = shares.filter(event => Number(event.args.kind) === 1);
-      assert.equal(bonus.length,15);
-      assert.equal(await f.contract.distributionVersion(),2n);
-      for (let i=0;i<15;i++) {
-        assert.equal(bonus[i].args.amount,100000n);
-        assert.equal(bonus[i].args.recipient,count ? ancestors[Math.min(i,count-1)] : await f.fee.getAddress());
-        assert.equal(bonus[i].args.redirected,count === 0 || i >= count);
+      const shares = receipt.logs.flatMap(log => { try { const e=f.contract.interface.parseLog(log); return e?.name==='SharePaid'?[e]:[]; } catch { return []; } });
+      assert.equal(await f.contract.distributionVersion(),3n);
+      assert.deepEqual(shares.slice(0,3).map(e => e.args.amount),[1_000_000n,2_000_000n,5_000_000n]);
+      for(let i=0;i<15;i++) {
+        assert.equal(shares[i+3].args.amount,100_000n);
+        assert.equal(shares[i+3].args.recipient,i<count?ancestors[i+3]:await f.fee.getAddress());
+        assert.equal(shares[i+3].args.redirected,i>=count);
       }
-      if (count === 5) assert.equal(await f.token.balanceOf(ancestors[4]),1_100_000n);
-      if (count === 0) assert.equal(await f.token.balanceOf(await f.fee.getAddress()),10_000_000n);
-      assert.equal(await f.token.balanceOf(await f.contract.getAddress()),0n);
+      assert.equal(await f.token.balanceOf(await f.fee.getAddress()),500_000n+BigInt(15-count)*100_000n);
     } finally { await f.close(); }
   }
 });
 
-test('an ineligible interior gap pays the platform while trailing bonus steps pay the highest eligible ancestor', async () => {
-  const f = await fixture();
+test('locked matrix and unilevel positions go to the platform independently', async () => {
+  const f=await fixture();
   try {
-    const ancestors = [f.uplines[0],ZeroAddress,f.uplines[2],...Array(12).fill(ZeroAddress)];
+    const ancestors=Array(18).fill(ZeroAddress); ancestors[0]=f.uplines[0]; ancestors[2]=f.uplines[2]; ancestors[5]=f.uplines[5];
     await f.buy(await f.quote(1,{},ancestors));
-    assert.equal(await f.token.balanceOf(f.uplines[0]),5_100_000n);
-    assert.equal(await f.token.balanceOf(f.uplines[2]),2_300_000n);
-    assert.equal(await f.token.balanceOf(await f.fee.getAddress()),2_600_000n);
-    assert.equal(await f.token.balanceOf(await f.contract.getAddress()),0n);
+    assert.equal(await f.token.balanceOf(f.uplines[0]),1_000_000n);
+    assert.equal(await f.token.balanceOf(f.uplines[2]),5_100_000n);
+    assert.equal(await f.token.balanceOf(await f.fee.getAddress()),3_900_000n);
+  } finally { await f.close(); }
+});
+
+test('automatic upgrades spend only approved funds, bind the completed cycle, and cannot replay', async () => {
+  const f=await fixture();
+  try {
+    await f.buy(await f.quote(1));
+    const signed=await f.quote(2,{matrixCycle:id('completed-slot-cycle')});
+    await assert.rejects(f.contract.connect(f.owner).autoUpgrade(signed.value,signed.uplines,signed.signature));
+    assert.equal(await f.contract.upgradedCycles(signed.value.matrixCycle),false);
+    await (await f.token.connect(f.buyer).approve(await f.contract.getAddress(),20_000_000n)).wait();
+    await assert.rejects(f.contract.connect(f.buyer).purchase(signed.value,signed.uplines,signed.signature));
+    await assert.rejects(f.contract.connect(f.owner).autoUpgrade({...signed.value,matrixCycle:id('other-cycle')},signed.uplines,signed.signature));
+    await (await f.contract.connect(f.owner).autoUpgrade(signed.value,signed.uplines,signed.signature)).wait();
+    assert.equal(await f.contract.levelOf(await f.buyer.getAddress()),2n);
+    assert.equal(await f.contract.upgradedCycles(signed.value.matrixCycle),true);
+    assert.equal(await f.token.balanceOf(await f.buyer.getAddress()),399970000000n);
+    await assert.rejects(f.contract.connect(f.owner).autoUpgrade(signed.value,signed.uplines,signed.signature));
+    const replayCycle=await f.quote(3,{matrixCycle:signed.value.matrixCycle});
+    await assert.rejects(f.contract.connect(f.owner).autoUpgrade(replayCycle.value,replayCycle.uplines,replayCycle.signature));
   } finally { await f.close(); }
 });
 
@@ -124,7 +139,7 @@ test('forged recipients/signatures, wrong buyers, replay, stale fees and expired
     const signed = await f.quote();
     const call = (quote = signed.value, uplines = signed.uplines, signature = signed.signature, caller = f.buyer) => f.contract.connect(caller).purchase(quote, uplines, signature);
     await assert.rejects(call({ ...signed.value, deadline: 1 }));
-    await assert.rejects(call(signed.value, Array(15).fill(ZeroAddress)));
+    await assert.rejects(call(signed.value, Array(18).fill(ZeroAddress)));
     await assert.rejects(call(signed.value, signed.uplines, signed.signature, f.owner));
     const forged = await f.quote(1, {}, f.uplines, Wallet.createRandom());
     await assert.rejects(call(forged.value, forged.uplines, forged.signature));

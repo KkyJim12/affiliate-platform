@@ -1,5 +1,8 @@
 # UNXO API
 
+> Distribution version 3 supersedes the payment and tree rules reviewed below. See [current binary matrix, unilevel and automatic-upgrade rules](matrix-payments.md). The older schedule below describes historical versions 1?2.
+
+
 For the complete current inventory of all 52 method/route combinations, access and mode checks, request formats and rate limits, see the [English API reference](en/api-reference.md) or [คู่มือ API ภาษาไทย](th/api-reference.md). The [bilingual documentation index](README.md) also covers payments, conditions and operations. The integration notes below retain additional legacy context.
 
 Connected wallets are now the default for members: wallet signatures for login and every on-chain write, with 1% bonuses at each of 15 depths. See [connected wallet setup, existing-account linking and distributor replacement](connected-wallets.md). In-app key management and password-authorized transactions below apply only when `NUXT_PUBLIC_WALLET_MODE=embedded` is explicitly enabled.

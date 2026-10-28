@@ -12,15 +12,16 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 /// @notice Fixed-price referral purchases with immediate ERC-20 distribution.
-/// @dev The platform attests genealogy/eligibility and legacy paid levels. It
-/// cannot change prices or rates, spend another buyer's funds, or replay a quote.
+/// @dev The authority attests placement, eligibility, legacy paid levels and
+/// completed cycles. Automatic quotes can spend the member's approved tokens;
+/// manual purchases require the buyer. Prices/rates are fixed and quotes cannot replay.
 contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
     uint8 public constant MAX_LEVEL = 15;
-    uint256 public constant distributionVersion = 2;
+    uint256 public constant distributionVersion = 3;
     bytes32 public constant PURCHASE_TYPEHASH = keccak256(
-        "Purchase(bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline)"
+        "Purchase(bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline,bytes32 matrixCycle)"
     );
     IERC20 public immutable paymentToken;
     uint8 public immutable tokenDecimals;
@@ -30,6 +31,7 @@ contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable 
     uint256 public configNonce;
     mapping(address => uint8) public levelOf;
     mapping(bytes32 => bool) public purchased;
+    mapping(bytes32 => bool) public upgradedCycles;
 
     struct Purchase {
         bytes32 id;
@@ -40,6 +42,7 @@ contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable 
         address feeRecipient;
         uint256 configNonce;
         uint256 deadline;
+        bytes32 matrixCycle;
     }
 
     error InvalidAddress();
@@ -81,52 +84,66 @@ contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable 
     /// Rounding is in micro-USDT, including when the token has 18 decimals.
     function previewShares(uint8 level) public view returns (uint256[19] memory amounts) {
         uint256 microPrice = priceForLevel(level) / ledgerMultiplier;
-        amounts[0] = microPrice / 2;
+        amounts[0] = microPrice / 10;
         amounts[1] = microPrice / 5;
-        amounts[2] = microPrice / 10;
+        amounts[2] = microPrice / 2;
         amounts[18] = microPrice / 20;
         for (uint256 i; i < 15; ++i) amounts[i + 3] = microPrice / 100;
         for (uint256 i; i < 19; ++i) amounts[i] *= ledgerMultiplier;
     }
 
-    function purchase(Purchase calldata quote, address[15] calldata uplines, bytes calldata signature)
+    function purchase(Purchase calldata quote, address[18] calldata uplines, bytes calldata signature)
         external nonReentrant whenNotPaused
     {
-        if (quote.buyer != msg.sender || quote.id == bytes32(0) || purchased[quote.id]) revert InvalidPurchase();
+        if (quote.buyer != msg.sender || quote.matrixCycle != bytes32(0)) revert InvalidPurchase();
+        _purchase(quote, uplines, signature);
+    }
+
+    /// @dev The quote authority attests a completed matrix. The member must have
+    /// approved enough tokens in advance; no wallet key or signature is held here.
+    function autoUpgrade(Purchase calldata quote, address[18] calldata uplines, bytes calldata signature)
+        external nonReentrant whenNotPaused
+    {
+        if (quote.matrixCycle == bytes32(0) || upgradedCycles[quote.matrixCycle] || quote.previousLevel == 0)
+            revert InvalidPurchase();
+        upgradedCycles[quote.matrixCycle] = true;
+        _purchase(quote, uplines, signature);
+    }
+
+    function _purchase(Purchase calldata quote, address[18] calldata uplines, bytes calldata signature) private {
+        if (quote.buyer == address(0) || quote.id == bytes32(0) || purchased[quote.id]) revert InvalidPurchase();
         if (quote.level == 0 || quote.level > MAX_LEVEL || quote.level != quote.previousLevel + 1)
             revert InvalidLevel();
-        uint8 previous = levelOf[msg.sender];
+        uint8 previous = levelOf[quote.buyer];
         // A signed previousLevel bootstraps existing paid members exactly once.
         if (previous != 0 && previous != quote.previousLevel) revert InvalidLevel();
         if (block.timestamp > quote.deadline || quote.feeRecipient != feeRecipient || quote.configNonce != configNonce)
             revert StaleQuote();
         if (quote.uplinesHash != keccak256(abi.encode(uplines))) revert InvalidUplines();
         bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(PURCHASE_TYPEHASH, quote.id, quote.buyer,
-            quote.level, quote.previousLevel, quote.uplinesHash, quote.feeRecipient, quote.configNonce, quote.deadline)));
+            quote.level, quote.previousLevel, quote.uplinesHash, quote.feeRecipient, quote.configNonce, quote.deadline, quote.matrixCycle)));
         if (ECDSA.recover(digest, signature) != quoteSigner) revert InvalidSignature();
-        for (uint256 i; i < 15; ++i) {
+        for (uint256 i; i < 18; ++i) {
             if (uplines[i] == address(0)) continue;
-            if (uplines[i] == msg.sender || uplines[i] == address(this)) revert InvalidUplines();
-            for (uint256 j; j < i; ++j) if (uplines[j] == uplines[i]) revert InvalidUplines();
+            if (uplines[i] == quote.buyer || uplines[i] == address(this)) revert InvalidUplines();
+            // An owner can appear in both trees, but only once within each tree.
+            for (uint256 j = i < 3 ? 0 : 3; j < i; ++j)
+                if (uplines[j] == uplines[i]) revert InvalidUplines();
         }
         purchased[quote.id] = true;
-        levelOf[msg.sender] = quote.level;
+        levelOf[quote.buyer] = quote.level;
         uint256 price = priceForLevel(quote.level);
         uint256 beforeBalance = paymentToken.balanceOf(address(this));
-        paymentToken.safeTransferFrom(msg.sender, address(this), price);
+        paymentToken.safeTransferFrom(quote.buyer, address(this), price);
         if (paymentToken.balanceOf(address(this)) != beforeBalance + price) revert UnsupportedToken();
         uint256[19] memory amounts = previewShares(quote.level);
-        uint8 highest;
-        for (uint8 i; i < 15; ++i) if (uplines[i] != address(0)) highest = i + 1;
         for (uint8 i; i < 3; ++i) _pay(quote.id, 0, i + 1, uplines[i], amounts[i], false);
         for (uint8 i; i < 15; ++i) {
-            bool toHighest = highest != 0 && i >= highest;
-            address recipient = toHighest ? uplines[highest - 1] : uplines[i];
-            _pay(quote.id, 1, i + 1, recipient, amounts[i + 3], toHighest);
+            _pay(quote.id, 1, i + 1, uplines[i + 3], amounts[i + 3], false);
         }
         _pay(quote.id, 2, 0, feeRecipient, amounts[18], false);
         if (paymentToken.balanceOf(address(this)) != beforeBalance) revert UnsupportedToken();
-        emit PurchaseCompleted(quote.id, msg.sender, quote.level, quote.previousLevel, price,
+        emit PurchaseCompleted(quote.id, quote.buyer, quote.level, quote.previousLevel, price,
             feeRecipient, quote.uplinesHash, quote.configNonce);
     }
 

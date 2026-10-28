@@ -1,7 +1,7 @@
 export const baseReferralPrice = 10;
 export const maxReferralLevel = 15;
 export const ledgerScale = 1_000_000;
-export const directRates = [0.5, 0.2, 0.1] as const;
+export const directRates = [0.1, 0.2, 0.5] as const;
 export const bonusPoolRate = 0.15;
 export const platformFeeRate = 0.05;
 
@@ -27,18 +27,22 @@ export interface PurchaseShare {
 export function purchaseShares(level: number): PurchaseShare[] {
   const units = levelPrice(level) * ledgerScale;
   return [
-    ...[50, 20, 10].map((percent, index) => ({ kind: "direct" as const, depth: index + 1, units: units * percent / 100 })),
+    ...[10, 20, 50].map((percent, index) => ({ kind: "direct" as const, depth: index + 1, units: units * percent / 100 })),
     ...Array.from({ length: maxReferralLevel }, (_, index) => ({ kind: "bonus" as const, depth: index + 1, units: units / 100 })),
     { kind: "platform", depth: 0, units: units * 5 / 100 },
   ];
 }
 
-// A short chain's unused trailing bonus shares belong to its highest eligible upline.
-// Ineligible gaps still go to the platform; a chain with no eligible upline does too.
+// Every share stays at its stated depth. Missing or locked slots pay the platform.
 export function shareRecipientDepth(share: Pick<PurchaseShare, "kind" | "depth">, eligible: readonly boolean[]) {
   if (share.kind === "platform") return 0;
-  let highest = 0;
-  for (let index = 0; index < maxReferralLevel; index++) if (eligible[index]) highest = index + 1;
-  const depth = share.kind === "bonus" && share.depth > highest ? highest : share.depth;
-  return depth && eligible[depth - 1] ? depth : 0;
+  return eligible[share.depth - 1] ? share.depth : 0;
+}
+
+export const shareRecipientIndex = (share: Pick<PurchaseShare, "kind" | "depth">) =>
+  share.kind === "platform" ? -1 : (share.kind === "bonus" ? 3 : 0) + share.depth - 1;
+
+export function remainingLevelPrice(level: number) {
+  levelPrice(level);
+  return Array.from({ length: maxReferralLevel - level + 1 }, (_, index) => levelPrice(level + index)).reduce((sum, price) => sum + price, 0);
 }

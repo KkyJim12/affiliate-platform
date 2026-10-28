@@ -16,7 +16,7 @@ test('every price conserves 100% with exact 80/15/5 pools and positive integer m
     assert.equal(shares.reduce((sum, share) => sum + share.units, 0), amount);
     for (const [kind, percent] of [['direct', 80], ['bonus', 15], ['platform', 5]])
       assert.equal(shares.filter(share => share.kind === kind).reduce((sum, share) => sum + share.units, 0), amount * percent / 100);
-    assert.deepEqual(shares.filter(share => share.kind === 'direct').map(share => share.units), [amount / 2, amount / 5, amount / 10]);
+    assert.deepEqual(shares.filter(share => share.kind === 'direct').map(share => share.units), [amount / 10, amount / 5, amount / 2]);
   }
 });
 
@@ -34,14 +34,11 @@ test('every bonus share is exactly 1%, at every purchase level', () => {
   for (const depth of [0, 16, 1.5, NaN]) assert.throws(() => bonusRate(depth), RangeError);
 });
 
-test('short chains give unused trailing bonuses to the highest eligible upline; gaps and no-upline chains go to platform', () => {
-  for (let count = 0; count <= 15; count++) {
-    const eligible = Array.from({ length: 15 }, (_, i) => i < count);
-    const bonus = purchaseShares(1).filter(share => share.kind === 'bonus');
-    for (const share of bonus) assert.equal(shareRecipientDepth(share, eligible), Math.min(share.depth, count));
-    if (count) assert.equal(bonus.filter(share => shareRecipientDepth(share,eligible) === count).reduce((sum,share) => sum + share.units,0), (16-count) * 100000);
+test('missing and locked shares go to the platform without changing their depth', () => {
+  for(let count=0;count<=15;count++) {
+    const eligible=Array.from({length:15},(_,i)=>i<count);
+    for(const share of purchaseShares(1)) assert.equal(shareRecipientDepth(share,eligible),share.depth && share.depth<=count?share.depth:0);
   }
-  assert.equal(shareRecipientDepth({ kind: 'bonus', depth: 2 }, [true,false,true]), 0);
-  assert.equal(shareRecipientDepth({ kind: 'bonus', depth: 15 }, [true,false,true]), 3);
-  assert.equal(shareRecipientDepth({ kind: 'direct', depth: 2 }, [true]), 0);
+  assert.equal(shareRecipientDepth({kind:'bonus',depth:2},[true,false,true]),0);
+  assert.equal(shareRecipientDepth({kind:'bonus',depth:15},[true,false,true]),0);
 });

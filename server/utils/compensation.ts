@@ -1,12 +1,12 @@
+import { referralRecipients, unlockMatrixLevel } from "./matrix";
 import { createError } from "h3";
-import { ledgerScale, levelPrice, maxReferralLevel, purchaseShares, shareRecipientDepth } from "../../shared/compensation";
+import { ledgerScale, levelPrice, maxReferralLevel, purchaseShares, shareRecipientIndex } from "../../shared/compensation";
 import { db, transaction } from "./database";
 import { randomUUID } from "./auth";
 import { walletRow } from "./wallet";
 import { referralPaymentMode } from "./referral-chain";
 import { requireEmbeddedWalletMode } from "./wallet-mode";
 
-interface Upline { id: string; depth: number; eligible: boolean; wallet_id: string | null }
 
 export async function buyReferralLevel(userId: string, level: number, requestKey: string) {
   requireEmbeddedWalletMode();
@@ -32,18 +32,8 @@ export async function buyReferralLevel(userId: string, level: number, requestKey
     const settings = await db().one("SELECT fee_recipient_address FROM platform_settings WHERE id = 1 FOR SHARE") as { fee_recipient_address: string };
     if (!settings.fee_recipient_address)
       throw createError({ statusCode: 409, statusMessage: "Referral purchases are unavailable until an administrator sets the platform fee address." });
-    const uplines = await db().all(`WITH RECURSIVE ancestors AS (
-      SELECT s.id, s.sponsor_id, 1 AS depth, ARRAY[$1::TEXT, s.id] AS path
-      FROM users buyer JOIN users s ON s.id = buyer.sponsor_id WHERE buyer.id = $1 AND s.id <> buyer.id
-      UNION ALL SELECT s.id, s.sponsor_id, a.depth + 1, a.path || s.id
-      FROM ancestors a JOIN users s ON s.id = a.sponsor_id
-      WHERE a.depth < 15 AND NOT s.id = ANY(a.path)
-    ) SELECT a.id, a.depth, w.id AS wallet_id,
-      (r.user_id IS NOT NULL AND COALESCE(access.status, 'active') = 'active' AND w.id IS NOT NULL) AS eligible
-      FROM ancestors a LEFT JOIN referral_activations r ON r.user_id = a.id
-      LEFT JOIN user_access access ON access.user_id = a.id LEFT JOIN wallets w ON w.user_id = a.id ORDER BY a.depth`, userId) as unknown as Upline[];
-    const recipients = uplines.filter(upline => upline.eligible);
-    await db().all("SELECT id FROM wallets WHERE user_id = ANY($1::TEXT[]) ORDER BY id FOR UPDATE", [userId, ...recipients.map(upline => upline.id)]);
+    const recipients = await referralRecipients(userId, level, "ledger");
+    await db().all("SELECT id FROM wallets WHERE user_id = ANY($1::TEXT[]) ORDER BY id FOR UPDATE", [userId, ...recipients.flatMap(item => item.userId ? [item.userId] : [])]);
     const wallet = await walletRow(userId);
     const price = levelPrice(level) * ledgerScale;
     if (wallet.available < price)
@@ -60,22 +50,49 @@ export async function buyReferralLevel(userId: string, level: number, requestKey
       await db().execute("INSERT INTO referral_activations (user_id, transaction_id, created_at) VALUES ($1, $2, $3)", userId, transactionId, timestamp);
     }
     for (const share of purchaseShares(level)) {
-      const upline = uplines.find(item => item.depth === share.depth);
-      const depth = shareRecipientDepth(share, Array.from({ length: 15 }, (_, index) => !!uplines.find(item => item.depth === index + 1)?.eligible));
-      const recipient = depth ? uplines.find(item => item.depth === depth) : undefined;
+      const position = shareRecipientIndex(share);
+      const upline = position >= 0 ? recipients[position]! : null;
+      const recipient = upline?.userId ? upline : null;
       const creditId = recipient ? randomUUID() : null;
       if (recipient) {
-        await db().execute("UPDATE wallets SET available = available + $1 WHERE id = $2", share.units, recipient.wallet_id);
+        await db().execute("UPDATE wallets SET available = available + $1 WHERE id = $2", share.units, recipient.address);
         await db().execute("INSERT INTO wallet_transactions VALUES ($1, $2, 'commission', $3, 'completed', $4, $5, $6)",
-          creditId, recipient.wallet_id, share.units, `Referral ${share.kind} commission · level ${level} · upline ${share.depth}`,
+          creditId, recipient.address, share.units, `Referral ${share.kind} commission · level ${level} · upline ${share.depth}`,
           `referral:${id}:${share.kind}:${share.depth}`, timestamp);
       }
       await db().execute(`INSERT INTO referral_allocations
         (id, purchase_id, kind, depth, amount, recipient_user_id, recipient_address, transaction_id, status, reason)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-        randomUUID(), id, share.kind, share.depth, share.units, recipient?.id ?? null,
+        randomUUID(), id, share.kind, share.depth, share.units, recipient?.userId ?? null,
         recipient ? null : settings.fee_recipient_address, creditId, recipient ? "credited" : "payable",
-        share.kind === "platform" ? "platform_fee" : recipient ? "upline" : upline ? "ineligible_upline" : "missing_upline");
+        share.kind === "platform" ? "platform_fee" : recipient ? "upline" : upline?.reason ?? "missing_upline");
     }
+    await unlockMatrixLevel(userId, level);
   });
+}
+
+let upgrading = false;
+export async function processLedgerMatrixUpgrades() {
+  if (upgrading || referralPaymentMode() !== "ledger") return;
+  upgrading = true;
+  try {
+    const jobs = await db().all<{ cycle_id: string; user_id: string; level: number }>("SELECT * FROM matrix_auto_upgrades WHERE status = 'queued' ORDER BY COALESCE(last_attempt_at,created_at) LIMIT 20");
+    for (const job of jobs) {
+      await db().execute("UPDATE matrix_auto_upgrades SET last_attempt_at = $1 WHERE cycle_id = $2", new Date().toISOString(),job.cycle_id);
+      try {
+        if (await db().one("SELECT user_id FROM user_access WHERE user_id = $1 AND status <> 'active'",job.user_id)) continue;
+        {
+          const current = await db().one("SELECT COALESCE(MAX(level),0) AS level FROM referral_purchases WHERE user_id = $1", job.user_id);
+          if (current!.level >= job.level) {
+            await db().execute("UPDATE matrix_auto_upgrades SET status = 'superseded',last_error = NULL WHERE cycle_id = $1", job.cycle_id);
+            continue;
+          }
+          await buyReferralLevel(job.user_id, job.level, `matrix-auto:${job.cycle_id}`);
+          await db().execute("UPDATE matrix_auto_upgrades SET status = 'completed',last_error = NULL WHERE cycle_id = $1", job.cycle_id);
+        }
+      } catch {
+        await db().execute("UPDATE matrix_auto_upgrades SET last_error = 'Waiting for enough available wallet credit for the next level.' WHERE cycle_id = $1 AND status = 'queued'", job.cycle_id);
+      }
+    }
+  } finally { upgrading = false; }
 }

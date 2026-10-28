@@ -1,5 +1,8 @@
 # UNXO payments and conditions
 
+> Distribution version 3 supersedes the payment and tree rules reviewed below. See [current binary matrix, unilevel and automatic-upgrade rules](../matrix-payments.md). The older schedule below describes historical versions 1?2.
+
+
 [Documentation index](../README.md) · [ภาษาไทย](../th/payments-and-conditions.md) · [System guide](system-guide.md) · [Operations](operations.md) · [API](api-reference.md)
 
 Reviewed **27 October 2026**, source revision `3ffa828`. This document specifies implemented payment rules and identifies undefined policies. It does not create a refund policy, commercial guarantee or legally adopted terms of service.

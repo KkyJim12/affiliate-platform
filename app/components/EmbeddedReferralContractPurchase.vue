@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { remainingLevelPrice } from "#shared/compensation";
 import type { ReferralProgram } from "#shared/referral";
 import type { ChainPurchaseStatus, ReferralChainStatus } from "#shared/referral-contract";
 import { formatUsdt } from "#shared/plan";
 
+const automaticApproval = ref(true);
 const props = defineProps<{ program: ReferralProgram | null; chain: ReferralChainStatus | null }>();
 const emit = defineEmits<{ updated: []; refreshed: [status: ReferralChainStatus] }>();
 const { t, tr } = useLoopI18n();
@@ -48,7 +50,7 @@ async function purchase() {
   busy.value = true; error.value = "";
   try {
     current.value = await $fetch<ChainPurchaseStatus>("/api/referrals/chain/purchase", { method: "POST", body: {
-      level: props.program.nextLevel, password: password.value, requestKey: requestKey.value,
+      level: props.program.nextLevel, password: password.value, requestKey: requestKey.value, automaticApproval: automaticApproval.value,
     } });
     confirmOpen.value = false; password.value = "";
     if (current.value.status === "confirmed") { observed.add(current.value.id); emit("updated"); notify(t("onchain.confirmedNotice")); }
@@ -90,12 +92,13 @@ onBeforeUnmount(() => { mounted = false; password.value = ""; if (timer) clearIn
       <p v-if="current.status === 'failed'">{{ t('onchain.revertedHint') }}</p>
       <a v-if="current.explorerUrl" :href="current.explorerUrl" target="_blank" rel="noopener noreferrer">{{ t('onchain.viewTransaction') }}<AppIcon name="ArrowUpRight" :size="14" /></a>
     </div>
+    <p v-if="program?.autoUpgrade" role="status">{{ t('matrix.upgradeQueued', { level: program.autoUpgrade.level }) }} {{ program.autoUpgrade.lastError ? t('matrix.upgradeWaiting') : '' }}</p>
     <p v-if="error && !confirmOpen" class="auth-error" role="alert">{{ tr(error) }}</p>
     <button class="text-action" :disabled="refreshing || busy" @click="refreshState"><AppIcon name="RefreshCw" :size="14" />{{ t('onchain.refresh') }}</button>
     <ModalTransition><AppModal v-if="confirmOpen" :title="t('onchain.confirmTitle')" @close="closeConfirmation">
       <div class="admin-dialog referral-purchase-dialog"><h2>{{ t('onchain.confirmTitle') }}</h2><p>{{ t('onchain.confirmHint') }}</p>
         <dl class="admin-details"><div><dt>{{ t('referral.levelPrice') }}</dt><dd>{{ formatUsdt(price) }} {{ symbol }}</dd></div><div><dt>{{ t('onchain.network') }}</dt><dd>Polygon Amoy · 80002</dd></div></dl>
-        <p class="referral-contract-note">{{ t('onchain.approvalNotice') }}</p>
+        <label class="admin-checkbox"><input v-model="automaticApproval" type="checkbox" :disabled="busy" /><span>{{ t('matrix.autoApproval', { amount: formatUsdt(remainingLevelPrice(program?.nextLevel || 1)), symbol: chain?.tokenSymbol || 'USDT' }) }}</span></label><p>{{ t('matrix.approvalHint') }}</p>
         <form class="account-form" @submit.prevent="purchase"><label for="chain-purchase-password">{{ t('ui.confirm_with_your_password') }}</label><input id="chain-purchase-password" v-model="password" class="auth-input" type="password" autocomplete="current-password" maxlength="128" required :disabled="busy" />
           <p v-if="error" class="auth-error" role="alert">{{ tr(error) }}</p>
           <button class="button button-orange" :disabled="busy" type="submit"><AppIcon v-if="busy" name="LoaderCircle" :size="16" class="auth-loading" />{{ busy ? t('ui.please_wait') : t('onchain.confirmPay', { amount: formatUsdt(price), symbol }) }}</button>

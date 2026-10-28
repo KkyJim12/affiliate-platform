@@ -1,5 +1,8 @@
 # UNXO system guide
 
+> Distribution version 3 supersedes the payment and tree rules reviewed below. See [current binary matrix, unilevel and automatic-upgrade rules](../matrix-payments.md). The older schedule below describes historical versions 1?2.
+
+
 [Documentation index](../README.md) · [ภาษาไทย](../th/system-guide.md) · [Payments and conditions](payments-and-conditions.md) · [Operations](operations.md) · [API](api-reference.md)
 
 Source review: **27 October 2026**, revision `3ffa828`. This guide covers the repository implementation. Live balances, contract addresses, operational settings and deployment health were not audited.

@@ -44,8 +44,7 @@ test('public ID lookup has empty positions through level 15 and exposes only IDs
   expect(deep.members).toEqual([]);
   for (const path of [emptyPath(16), '0//1', '-1', '01', '0/1.5', 'invalid'])
     expect((await request.get(`/api/referrals/tree?id=${root.memberId}&path=${path}`)).status()).toBe(400);
-  const multiDigit = await (await request.get(`/api/referrals/tree?id=${root.memberId}&path=10&levels=15`)).json();
-  expect(multiDigit.visibleDepth).toBe(14);
+  expect((await request.get(`/api/referrals/tree?id=${root.memberId}&path=10&levels=15`)).status()).toBe(400);
   for (const levels of [6, 10, 15]) {
     const response = await request.get(`/api/referrals/tree?id=${root.memberId}&levels=${levels}`);
     expect(response.status()).toBe(200);
@@ -91,11 +90,11 @@ test('registration via numeric and old invite codes retains every direct referra
     }
     expect(users.map(user => Number(user.memberId))).toEqual([1, 2, 3, 4].map(offset => Number(root.memberId) + offset));
     const tree = await (await clients[0]!.get(`/api/referrals/tree?id=${root.memberId}`)).json();
-    expect(tree.members.map((member: { path: string }) => member.path)).toEqual(['', '0', '1', '2', '3']);
+    expect(tree.members.map((member: { path: string }) => member.path)).toEqual(['', '0', '1', '0/0', '0/1']);
     expect(tree.members.slice(1).map((member: { id: string }) => member.id)).toEqual(users.map(user => user.memberId));
-    expect(tree.members.slice(1).map((member: { parentId: string }) => member.parentId)).toEqual(users.map(() => root.memberId));
-    expect(tree.levels[0].filled).toBe(4);
-    expect(tree.levels[1].filled).toBe(0);
+    expect(tree.members.slice(1).map((member: { parentId: string }) => member.parentId)).toEqual([root.memberId,root.memberId,users[0].memberId,users[0].memberId]);
+    expect(tree.levels[0].filled).toBe(2);
+    expect(tree.levels[1].filled).toBe(2);
     expect((await db.one('SELECT sponsor_id FROM users WHERE id = $1', users[2].id))!.sponsor_id).toBe(root.id);
     await db.execute('UPDATE wallets SET available = 10000000 WHERE user_id = $1', users[0].id);
     const activated = await post(clients[0]!, '/api/referrals/activate', { password, requestKey: randomUUID() });
@@ -104,62 +103,27 @@ test('registration via numeric and old invite codes retains every direct referra
   } finally { await db.execute('DELETE FROM rate_limits'); await db.close(); await Promise.all(clients.map(api => api.dispose())); }
 });
 
-test('three real branches connect to their sponsor at both the root and nested levels', async ({ page }, info) => {
-  const root = await fixture();
-  const db = openTestDatabase();
-  const children: { id: string; memberId: string; username: string }[] = [];
+test('extra referrals spill under the first referral in both tree views', async ({ page }) => {
+  const root=await fixture(),db=openTestDatabase();
+  const children: {id:string;memberId:string}[]=[];
   try {
-    for (let index = 0; index < 6; index++) {
-      const id = randomUUID(), username = `w_${id.replaceAll('-', '').slice(0, 18)}`;
-      const parent = index < 3 ? root.id : children[2]!.id;
-      const inserted = await db.one('INSERT INTO users VALUES ($1,$2,\'private-hash\',$1,$3,$4) RETURNING referral_code',
-        id, username, parent, new Date(Date.now() + index * 1000).toISOString());
-      children.push({ id, memberId: inserted!.referral_code, username });
+    for(let i=0;i<3;i++) {
+      const id=randomUUID();
+      const inserted=await db.one("INSERT INTO users VALUES($1,$2,'hash',$1,$3,$4) RETURNING referral_code",id,`binary_${id.slice(0,8)}`,root.id,new Date().toISOString());
+      children.push({id,memberId:inserted!.referral_code});
     }
-    const treeData = await (await page.request.get(`/api/referrals/tree?id=${root.memberId}`)).json();
-    expect(treeData.members.map((member: { path: string }) => member.path)).toEqual(['', '0', '1', '2', '2/0', '2/1', '2/2']);
-    expect(treeData.members.slice(1).map((member: { parentId: string }) => member.parentId))
-      .toEqual([root.memberId, root.memberId, root.memberId, ...Array(3).fill(children[2]!.memberId)]);
-    expect(treeData.levels.slice(0, 2).map((level: { filled: number }) => level.filled)).toEqual([3, 3]);
-    const branch = await (await page.request.get(`/api/referrals/tree?id=${root.memberId}&path=2`)).json();
-    expect(branch.members.map((member: { path: string }) => member.path)).toEqual(['2', '2/0', '2/1', '2/2']);
-
+    const result=await (await page.request.get(`/api/referrals/tree?id=${root.memberId}`)).json();
+    expect(result.members.map((m:{path:string})=>m.path)).toEqual(['','0','1','0/0']);
+    expect(result.members[3].parentId).toBe(children[0].memberId);
     await page.goto(`/search?id=${root.memberId}`);
-    const tree = page.getByTestId('binary-referral-tree');
-    await expect(tree.locator('[data-tree-edge][data-parent-path=""]')).toHaveCount(3);
-    await expect(tree.locator('[data-tree-edge][data-parent-path="2"]')).toHaveCount(3);
-    for (const [index, child] of children.entries()) {
-      const path = index < 3 ? String(index) : `2/${index - 3}`;
-      await expect(tree.locator(`[data-path="${path}"]`)).toHaveAttribute('data-member-id', child.memberId);
-    }
-    const third = tree.locator('[data-path="2"]');
-    const siblingRows = await tree.locator('[data-path="0"], [data-path="1"], [data-path="2"]').evaluateAll(elements =>
-      elements.map(element => (element as SVGGraphicsElement).transform.baseVal.consolidate()!.matrix.f));
-    expect(new Set(siblingRows).size).toBe(1);
-    await expect(tree.getByRole('button', { name: 'Level 1: 3 members', exact: true })).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.screenshot({ path: `test-results/referral-three-branches-${info.project.name}.png`, fullPage: true, animations: 'disabled' });
-
-    await third.press('Enter');
-    await expect(tree).toContainText('Showing levels 1–4 of 15');
-    await expect(tree).toContainText('Branch 3');
-    await expect(tree.locator('[data-tree-edge][data-parent-path="2"]')).toHaveCount(3);
-    await tree.getByRole('button', { name: 'Up one level', exact: true }).click();
-    await expect(tree).toContainText('Showing levels 0–3 of 15');
-    await expect(tree.locator('[data-tree-edge][data-parent-path=""]')).toHaveCount(3);
-
-    const login = await post(page.request, '/api/auth/login', { memberId: root.memberId, password });
-    expect(login.status()).toBe(200);
-    await page.goto('/referrals');
-    await expect(tree.locator('[data-tree-edge][data-parent-path=""]')).toHaveCount(3);
-    await expect(tree.locator('[data-tree-edge][data-parent-path="2"]')).toHaveCount(3);
-    await expect(tree.locator('[data-path="2"]')).toHaveAttribute('data-member-id', children[2]!.memberId);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.goto('/dashboard');
-    const overview = page.getByTestId('overview-referral-tree');
-    await expect(overview.locator('[data-tree-edge][data-parent-path=""]')).toHaveCount(3);
-    await expect(overview.locator('[data-tree-edge][data-parent-path="2"]')).toHaveCount(3);
-  } finally { await db.close(); }
+    const tree=page.getByTestId('binary-referral-tree');
+    await expect(tree.locator('[data-tree-edge][data-parent-path=""]')).toHaveCount(2);
+    await expect(tree.locator('[data-path="0/0"]')).toHaveAttribute('data-member-id',children[2].memberId);
+    await tree.getByRole('button',{name:'Unilevel',exact:true}).click();
+    await expect(tree.getByRole('button',{name:'Level 15: 0 members',exact:true})).toBeVisible();
+    await expect(tree.locator('[data-path="0/0"]')).toHaveAttribute('data-member-id',children[2].memberId);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  } finally {await db.close();}
 });
 
 test('any visitor can search by ID and explore empty boxes through 15 levels on desktop and mobile', async ({ page }, info) => {
@@ -174,6 +138,7 @@ test('any visitor can search by ID and explore empty boxes through 15 levels on 
   const tree = page.getByTestId('binary-referral-tree');
   await expect(tree.locator('[data-tree-node]')).toHaveCount(15);
   await expect(tree.locator('[data-empty="true"]')).toHaveCount(14);
+  await tree.getByRole('button',{name:'Unilevel',exact:true}).click();
   await tree.getByRole('combobox', { name: 'Visible levels', exact: true }).click();
   await page.getByRole('listbox').locator('[data-value="15"]').click();
   await expect(tree).toContainText('Showing levels 0–15 of 15');
@@ -202,6 +167,7 @@ test('any visitor can search by ID and explore empty boxes through 15 levels on 
   await expect(tree.locator('[data-member-id]')).toHaveCount(1);
   await expect(tree).toContainText('Showing levels 0–3 of 15');
   await page.reload();
+  await tree.getByRole('button',{name:'Unilevel',exact:true}).click();
   await expect(tree.locator('[data-member-id]')).toHaveAttribute('data-member-id', root.memberId);
   await expect(tree).toContainText('Showing levels 0–3 of 15');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

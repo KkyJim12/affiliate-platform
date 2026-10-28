@@ -14,7 +14,7 @@ export default defineEventHandler(async event => {
   if (password.length > 128 || !await verifyPassword(password, user.password_hash))
     throw createError({ statusCode: 401, statusMessage: "Your password is incorrect." });
   try {
-    const row = await submitChainPurchase(user.id, password, body.level, key);
+    const row = await submitChainPurchase(user.id, password, body.level, key, body?.automaticApproval === true);
     setResponseStatus(event, row.status === "pending" ? 202 : 200);
     return chainPurchaseStatus(row);
   } catch (error) { chainActionError(error); }

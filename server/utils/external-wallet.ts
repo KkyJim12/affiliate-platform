@@ -1,4 +1,5 @@
-import { getAddress, id as hashId, ZeroAddress } from "ethers";
+import { referralRecipients } from "./matrix";
+import { getAddress, id as hashId, ZeroHash, ZeroAddress } from "ethers";
 import { randomUUID } from "node:crypto";
 import { createError } from "h3";
 import type { WalletCall, ExternalOperation } from "../../shared/connected-wallet";
@@ -19,7 +20,7 @@ export async function connectedAddress(userId: string) {
   if (!wallet) throw createError({ statusCode: 409, statusMessage: "Link a connected wallet to your account first." });
   return wallet.address;
 }
-export async function prepareExternalPurchase(userId: string, level: number, requestKey: string) {
+export async function prepareExternalPurchase(userId: string, level: number, requestKey: string, automaticApproval = false) {
   const address = await connectedAddress(userId), reader = requireChainClient();
   return withWalletLock(userId, async () => {
     let row = await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE user_id = $1 AND request_key = $2", userId, requestKey)
@@ -37,24 +38,13 @@ export async function prepareExternalPurchase(userId: string, level: number, req
         const program = await referralProgram(userId);
         if (program.nextLevel !== level || (state.currentLevel !== 0 && state.currentLevel !== program.currentLevel))
           throw createError({ statusCode: 409, statusMessage: "Purchase the next referral level in order." });
-        const ancestors = await db().all(`WITH RECURSIVE ancestors AS (
-          SELECT s.id,s.sponsor_id,1 AS depth,ARRAY[$1::TEXT,s.id] AS path FROM users b JOIN users s ON s.id = b.sponsor_id WHERE b.id = $1 AND s.id <> b.id
-          UNION ALL SELECT s.id,s.sponsor_id,a.depth + 1,a.path || s.id FROM ancestors a JOIN users s ON s.id = a.sponsor_id
-          WHERE a.depth < 15 AND NOT s.id = ANY(a.path)
-        ) SELECT a.id,a.depth,w.address,(r.user_id IS NOT NULL AND COALESCE(access.status,'active') = 'active' AND w.address IS NOT NULL) AS eligible
-          FROM ancestors a LEFT JOIN connected_wallets w ON w.user_id = a.id LEFT JOIN referral_activations r ON r.user_id = a.id
-          LEFT JOIN user_access access ON access.user_id = a.id ORDER BY a.depth`, userId);
-        const recipients = Array.from({ length: 15 }, (_, index) => {
-          const ancestor = ancestors.find(item => item.depth === index + 1);
-          return { address: ancestor?.eligible ? getAddress(ancestor.address) : ZeroAddress, userId: ancestor?.eligible ? ancestor.id as string : null,
-            reason: ancestor?.eligible ? "upline" as const : ancestor ? "ineligible_upline" as const : "missing_upline" as const };
-        });
+        const recipients = await referralRecipients(userId, level, "external");
         const block = await reader.provider.getBlock("latest");
         if (!block) throw new Error("Chain head unavailable.");
         const id = randomUUID(), now = new Date().toISOString(), uplines = recipients.map(item => item.address);
         const quote = { id: hashId(id), buyer: address, level, previousLevel: program.currentLevel, uplinesHash: uplineHash(uplines),
-          feeRecipient: state.feeRecipient, configNonce: state.configNonce, deadline: block.timestamp + 600 };
-        const payload: PurchasePayload = { createdBlock: block.number, quote, uplines,
+          feeRecipient: state.feeRecipient, configNonce: state.configNonce, deadline: block.timestamp + 600, matrixCycle: ZeroHash };
+        const payload: PurchasePayload = { createdBlock: block.number, quote, uplines, automaticApproval,
           recipients: recipients.map(({ userId, reason }) => ({ userId, reason })), signature: await reader.sign(quote) };
         // Only the authority attestation is signed here. Buyer transactions are signed in the extension.
         await reader.purchaseCalls(address, payload, state.decimals);

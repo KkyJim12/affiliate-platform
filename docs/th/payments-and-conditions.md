@@ -1,5 +1,8 @@
 # ระบบการจ่ายเงินและเงื่อนไข UNXO
 
+> Distribution version 3 supersedes the payment and tree rules reviewed below. See [current binary matrix, unilevel and automatic-upgrade rules](../matrix-payments.md). The older schedule below describes historical versions 1?2.
+
+
 [สารบัญเอกสาร](../README.md) · [English](../en/payments-and-conditions.md) · [คู่มือระบบ](system-guide.md) · [คู่มือปฏิบัติการ](operations.md) · [API](api-reference.md)
 
 ตรวจสอบวันที่ **27 ตุลาคม 2026** จาก revision `3ffa828` เอกสารนี้ระบุกติกาที่โค้ดทำงานอยู่และนโยบายที่ยังไม่ได้กำหนด ไม่ได้สร้างสิทธิ์คืนเงิน รับประกันรายได้ หรือข้อกำหนดการให้บริการที่ผ่านการประกาศใช้แล้ว
