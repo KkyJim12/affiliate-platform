@@ -179,7 +179,7 @@ test('any visitor can search by ID and explore empty boxes through 15 levels on 
   await expect(tree.getByRole('button', { name: 'ยูนิเลเวล', exact: true })).toBeVisible();
   await expect(tree).not.toContainText(/\?{2,}|\uFFFD/u);
   await tree.getByRole('button', { name: 'ไบนารีแมทริกซ์', exact: true }).click();
-  await expect(tree).toContainText('เปิดช่องรีเบิร์ธ');
+  await expect(tree).toContainText(thai.matrix.treeHint);
   await page.getByRole('button', { name: thai.ui.use_dark_theme, exact: true }).click();
   await expect(page.locator('html')).toHaveClass(/dark/);
   await expect(page.locator('.public-tree-result')).toHaveCSS('background-color', 'rgb(21, 26, 35)');

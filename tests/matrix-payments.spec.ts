@@ -26,8 +26,20 @@ test("paid binary matrices recycle and automatically debit the wallet for the ne
     const rootCode = await create(rootId,null,100_000_000);
     await post("/api/auth/login",{ memberId: rootCode,password });
     expect((await post("/api/referrals/activate",{ password,requestKey: randomUUID() })).status()).toBe(200);
+    const extraId = randomUUID();
+    let extraCode = "";
     for(let index=0;index<14;index++) {
       const id = randomUUID(), code = await create(id,rootId,10_000_000);
+      if (index === 13) {
+        // Registration overflow reserves the next cycle, but the last unpaid
+        // branch must keep it out of both the tree and the public selector.
+        extraCode = await create(extraId,rootId,0);
+        const waiting = await (await api.get(`/api/referrals/tree?id=${rootCode}&mode=matrix`)).json();
+        expect(waiting.cycles).toEqual([0]);
+        expect(waiting.levels.map((row:{filled:number})=>row.filled)).toEqual([2,4,7]);
+        expect((await api.get(`/api/referrals/tree?id=${rootCode}&mode=matrix&cycle=1`)).status()).toBe(404);
+        expect((await database.one("SELECT COUNT(*) AS count FROM matrix_auto_upgrades WHERE user_id=$1",rootId))!.count).toBe(0);
+      }
       expect((await post("/api/auth/login",{ memberId: code,password })).status()).toBe(200);
       const response = await post("/api/referrals/activate",{ password,requestKey: randomUUID() });
       expect(response.status(),await response.text()).toBe(200);
@@ -41,9 +53,8 @@ test("paid binary matrices recycle and automatically debit the wallet for the ne
     expect(matrix.levels.map((item: { filled: number })=>item.filled)).toEqual([2,4,8]);
     expect((await api.get(`/api/referrals/tree?id=${rootCode}&mode=matrix&levels=4`)).status()).toBe(400);
     expect((await api.get(`/api/referrals/tree?id=${rootCode}&path=2`)).status()).toBe(400);
-    const extraId = randomUUID(), extraCode = await create(extraId,rootId,0);
     const recycled = await (await api.get(`/api/referrals/tree?id=${rootCode}&mode=matrix&cycle=1`)).json();
-    expect(recycled.members.map((member: { id: string })=>member.id)).toEqual([rootCode,extraCode]);
+    expect(recycled.members.map((member: { id: string })=>member.id)).toEqual([rootCode]);
     const unilevel = await (await api.get(`/api/referrals/tree?id=${rootCode}&mode=unilevel&levels=15`)).json();
     expect(unilevel.maxDepth).toBe(15); expect(unilevel.members).toHaveLength(16);
     expect(unilevel.members.find((member: { id: string })=>member.id===extraCode).path.split('/')).toHaveLength(4);
@@ -77,7 +88,7 @@ test("paid binary matrices recycle and automatically debit the wallet for the ne
     expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",rootId))!.available).toBe(5_100_000);
     expect((await database.one("SELECT COUNT(*) AS count FROM referral_purchases WHERE user_id=$1 AND level=3",rootId))!.count).toBe(1);
     await tree.getByRole("button",{name:"Binary matrix",exact:true}).click();
-    await expect(tree.getByTestId('matrix-slot-summary')).toContainText('14/14 positions');
+    await expect(tree.getByTestId('matrix-slot-summary')).toContainText('14/14 paid positions');
     const slots=tree.getByRole('combobox',{name:'Matrix slot',exact:true});
     await expect(slots).toContainText('Initial slot');
     await slots.click();

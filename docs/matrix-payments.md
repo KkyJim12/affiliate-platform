@@ -15,8 +15,9 @@ remains unchanged when an invitation spills over beneath another member.
 - **Binary matrix:** two children per slot, three descendant rows (2 + 4 + 8
   positions), four rows including the owner. Each purchase level has its own
   slots. Extra invitations search the inviter's slots in cycle order, breadth
-  first, left before right. When all three rows are occupied, another slot opens
-  at the same purchase level. A new slot starts a separate cycle.
+  first, left before right. When all three rows are occupied, overflow positions
+  are reserved in future cycles. A rebirth opens at the same purchase level only
+  after the owner and all fourteen positions purchase that level.
 - **Unilevel:** two children per member with continuous breadth-first spillover.
   Payments and the tree view cover fifteen ancestors, starting with the buyer's
   placement parent. This tree continues through matrix cycle boundaries.
@@ -43,15 +44,14 @@ completed status, paid positions and reserved positions separately. Select a
 card to open that exact level and cycle, then return to the grid to choose
 another. The level filter and pagination support accounts with many rebirths.
 Locked cards preview reserved placement; opening one does not purchase a level.
-Level 1 shows all registered referrals in their placed branches, including
-spillover and downline referrals. Levels 2 and above show members only after
-they unlock the selected level; other reserved positions stay blank. Tree
-counts therefore mean registered positions at level 1 and unlocked positions
-at higher levels. Paid activations and completion status remain separate:
-registration alone does not trigger a wallet-funded upgrade.
+Every matrix level, including level 1, shows members only after they purchase
+the selected level; other reserved positions stay blank. Tree counts show paid
+positions. Registration alone does not open a rebirth or trigger an upgrade.
+Reserved future cycles stay out of the slot list and public cycle selector
+until the preceding cycle completes with all fourteen positions and its owner paid.
 
 The owner's root remains visible for context. Traversal continues through
-blank parents at higher levels, so paid descendants retain their original
+blank parents at every level, so paid descendants retain their original
 paths. The open slot refreshes every fifteen seconds while the tab is visible.
 Opening a completed card shows all fourteen members in that exact level and
 cycle, even after later rebirths; the new slot has its own separate tree.
@@ -94,10 +94,12 @@ With all recipients eligible, members receive 9.50 total and the platform 0.50.
 ## Completion and automatic upgrade
 
 When the owner and all fourteen descendant slots are unlocked at a level, the
-backend records that cycle's completion once and ensures another same-level
-slot with space exists. This is a **rebirth**: a separate slot at the same level,
+backend records that cycle's completion once and opens the next same-level
+cycle. This is a **rebirth**: a separate slot at the same level,
 with the same two branches and three rows, while the previous slot stays intact.
 Each rebirth can fill and complete again.
+Prepaid reserved cycles are checked in order when opened; each must satisfy
+the same paid completion rule before the following rebirth opens.
 
 Each newly completed matrix slot queues one purchase of the member's next
 unowned level, through level 15. For example, completing the first level-1 slot
@@ -157,6 +159,10 @@ and records historical full unilevel trees without retrospective charges.
 updates at most fifteen unilevel ancestors instead of scanning 65,534 members.
 This application update uses the existing version-3 contract ABI and requires
 no replacement if the configured distributor already reports version 3.
+
+Migration `0015_paid_matrix_rebirths.sql` separates reserved overflow from opened
+rebirths. It preserves placement, completed cycles and payment evidence while
+hiding future unqualified cycles. Apply it with the application update below.
 
 For an existing version-3 installation:
 

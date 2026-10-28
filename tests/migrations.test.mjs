@@ -380,10 +380,52 @@ test("successive matrix rebirths reserve the next unowned levels, preserve old s
   assert.equal((await db.one("SELECT MAX(cycle) AS cycle FROM matrix_slots WHERE user_id='rebirth' AND level=1")).cycle,4);
 }));
 
+test("paid rebirth migration hides unpaid overflow and preserves completed cycles and placement", () => isolated(async db => {
+  await migrate(db.pool,sources.filter(item=>item.name < '0015_'));
+  await db.execute("INSERT INTO users VALUES('legacy-gate','legacy_gate','hash','legacy-gate',NULL,'2026-10-29')");
+  for (let i=0;i<15;i++) await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,'legacy-gate','2026-10-29')",`legacy-gate-${i}`);
+  await db.execute("UPDATE matrix_slots SET unlocked=TRUE WHERE level=2");
+  await db.execute("UPDATE matrix_slots SET completed_at='2026-10-29' WHERE user_id='legacy-gate' AND level=2 AND cycle=0");
+  const placement = await db.all("SELECT id,parent_id,branch,unlocked,completed_at FROM matrix_slots ORDER BY id");
+  await migrate(db.pool,sources);
+  assert.deepEqual(await db.all("SELECT id,parent_id,branch,unlocked,completed_at FROM matrix_slots ORDER BY id"),placement);
+  assert.deepEqual(await db.all("SELECT level,opened FROM matrix_slots WHERE user_id='legacy-gate' AND level IN (1,2) AND cycle=1 ORDER BY level"),[
+    {level:1,opened:false},{level:2,opened:true},
+  ]);
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM referral_auto_upgrades")).count,0);
+}));
+
+test("rebirth waits for the owner and every same-level branch, including prepaid overflow cycles", () => isolated(async db => {
+  await migrate(db.pool,sources);
+  await db.execute("INSERT INTO users VALUES('gate','gate','hash','gate',NULL,'2026-10-29')");
+  for (let i=0;i<42;i++) {
+    const id = `gate-${i}`;
+    await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,'gate','2026-10-29')",id);
+    // Leave one unpaid position in each descendant row of the initial cycle.
+    if (![0,2,6].includes(i)) await db.transaction(()=>unlockMatrixLevel(id,2,db));
+  }
+  const opened = async () => (await db.all("SELECT cycle FROM matrix_slots WHERE user_id='gate' AND level=2 AND opened ORDER BY cycle")).map(row=>row.cycle);
+  assert.deepEqual(await opened(),[0]);
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM referral_auto_upgrades WHERE user_id='gate'")).count,0);
+  // Paying the owner at a different level cannot open the level-2 rebirth.
+  await db.transaction(()=>unlockMatrixLevel('gate',1,db));
+  await db.transaction(()=>unlockMatrixLevel('gate-0',2,db));
+  await db.transaction(()=>unlockMatrixLevel('gate-2',2,db));
+  assert.deepEqual(await opened(),[0]);
+  await db.transaction(()=>unlockMatrixLevel('gate-6',2,db));
+  assert.deepEqual(await opened(),[0]); // All descendants paid, owner still unpaid.
+  await db.transaction(()=>unlockMatrixLevel('gate',2,db));
+  assert.deepEqual(await opened(),[0,1,2,3]);
+  assert.deepEqual((await db.all("SELECT cycle FROM matrix_slots WHERE user_id='gate' AND level=2 AND completed_at IS NOT NULL ORDER BY cycle")).map(row=>row.cycle),[0,1,2]);
+  const jobs = await db.all("SELECT cycle_id,level FROM referral_auto_upgrades WHERE user_id='gate' ORDER BY level");
+  await db.transaction(()=>unlockMatrixLevel('gate',2,db));
+  assert.deepEqual(await db.all("SELECT cycle_id,level FROM referral_auto_upgrades WHERE user_id='gate' ORDER BY level"),jobs);
+}));
+
 test("historical full unilevel trees do not charge; a new fifteen-row completion queues once after all 65,534 descendants pay", { timeout:180000 }, () => isolated(async db => {
   // Build a large legacy tree directly in this disposable schema. Suppress only
   // registration placement while importing its already determined binary edges.
-  await migrate(db.pool,sources.filter(item=>!item.name.startsWith('0014_')));
+  await migrate(db.pool,sources.filter(item=>item.name < '0014_'));
   await db.execute("ALTER TABLE users DISABLE TRIGGER users_place_binary_referral");
   await db.execute("ALTER TABLE users DISABLE TRIGGER users_place_matrix_slots");
   await db.execute(`INSERT INTO users(id,username,password_hash,referral_code,sponsor_id,created_at)
@@ -412,7 +454,7 @@ test("historical full unilevel trees do not charge; a new fifteen-row completion
 }));
 
 test("the shared upgrade queue preserves existing matrix jobs and their error history", () => isolated(async db => {
-  await migrate(db.pool,sources.filter(item=>!item.name.startsWith('0014_')));
+  await migrate(db.pool,sources.filter(item=>item.name < '0014_'));
   await db.execute("INSERT INTO users VALUES('preserved','preserved_member','hash','preserved',NULL,'2026-10-28')");
   await db.execute(`INSERT INTO matrix_auto_upgrades(cycle_id,user_id,level,last_error,created_at)
     VALUES('matrix:1:preserved:0','preserved',2,'Waiting for token approval.','2026-10-28')`);

@@ -47,7 +47,7 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer); });
       </div>
       <p v-if="current.status === 'locked'" class="slot-lock-note"><AppIcon name="LockKeyhole" :size="16" />{{ t('matrixSlots.lockedHint',{level:current.level}) }}</p>
       <p v-else class="slot-detail-note">{{ t('matrixSlots.paidProgress',{paid:number(current.paid),capacity:current.capacity}) }}</p>
-      <p class="slot-detail-note">{{ t(current.status === 'completed' ? 'matrixSlots.completedHint' : current.level === 1 ? 'matrixSlots.registrationHint' : 'matrixSlots.visibilityHint') }}</p>
+      <p class="slot-detail-note">{{ t(current.status === 'completed' ? 'matrixSlots.completedHint' : 'matrixSlots.visibilityHint') }}</p>
       <BinaryReferralTree :key="`${memberId}-${current.level}-${current.cycle}-${detailVersion}`" :member-id="memberId" :initial-level="current.level" :initial-cycle="current.cycle" fixed-selection live />
     </template>
     <template v-else>

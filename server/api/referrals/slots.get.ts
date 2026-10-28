@@ -14,10 +14,10 @@ export default defineEventHandler(async (event): Promise<MatrixSlotCatalog> => {
       COUNT(*) FILTER (WHERE unlocked) AS unlocked,
       COUNT(*) FILTER (WHERE completed_at IS NOT NULL) AS completed,
       COUNT(*) FILTER (WHERE cycle > 0 AND unlocked) AS rebirths
-      FROM matrix_slots WHERE user_id = $1 GROUP BY level ORDER BY level`,user.id),
+      FROM matrix_slots WHERE user_id = $1 AND opened GROUP BY level ORDER BY level`,user.id),
     db().all<{ level: number; cycle: number; unlocked: boolean; completed: boolean; filled: number; paid: number }>(`WITH RECURSIVE selected AS (
       SELECT id,level,cycle,unlocked,completed_at FROM matrix_slots
-      WHERE user_id = $1 AND ($2::INTEGER = 0 OR level = $2) ORDER BY level,cycle LIMIT $3 OFFSET $4
+      WHERE user_id = $1 AND opened AND ($2::INTEGER = 0 OR level = $2) ORDER BY level,cycle LIMIT $3 OFFSET $4
     ), positions AS (
       SELECT id AS root,id,unlocked,0 AS depth FROM selected
       UNION ALL SELECT p.root,s.id,s.unlocked,p.depth+1 FROM positions p
