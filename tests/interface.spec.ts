@@ -69,7 +69,7 @@ test("referral overview, corrected ranks, referrals, and wallet preview on deskt
   await page.getByRole("button", { name: /^LEVEL 08/ }).click();
   await expect(page.getByTestId("level-purchase-price")).toContainText("1,280.00");
   await expect(page.getByTestId("level-payouts").locator("tbody tr")).toHaveCount(15);
-  await expect(page.getByTestId("level-payouts").locator("tbody tr").first()).toContainText("640.00");
+  await expect(page.getByTestId("level-payouts").locator("tbody tr").first()).toContainText("128.00");
   await expect(page.getByTestId("level-upline-total")).toHaveText("1,216.00");
   await page.getByRole("button", { name: /^LEVEL 15/ }).click();
   await expect(page.getByTestId("level-purchase-price")).toContainText("163,840.00");
@@ -156,7 +156,8 @@ test("create account and EVM wallet, restore session, and sign back in", async (
   await expect(page.locator(".dashboard-greeting")).toContainText(memberId);
   await expect(page.getByTestId("wallet-balance")).toContainText("0.00");
   await navigate(page, "My referrals");
-  await page.getByRole("button", { name: "Tree view", exact: true }).click();
+  await page.getByRole("button", { name: "Matrix slots", exact: true }).click();
+  await page.locator('[data-testid="matrix-slot-card"][data-level="1"][data-cycle="0"]').click();
   await expect(page.locator("[data-tree-node]")).toHaveCount(15);
   await expect(page.locator('[data-empty="true"]')).toHaveCount(14);
   await expect(page.getByTestId("binary-referral-tree")).toContainText(memberId);

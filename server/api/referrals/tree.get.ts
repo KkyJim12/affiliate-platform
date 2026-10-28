@@ -2,8 +2,9 @@ import { isMemberId } from "../../../shared/referral-code";
 import { treePathSlots, type ReferralTreeData } from "../../../shared/referral-tree";
 import { db } from "../../utils/database";
 
-// Public output contains member IDs and placement only. No internal slot IDs,
-// wallets, payment eligibility or balances leave this endpoint.
+// Public output contains visible member IDs and placement only. Matrix
+// level 1 shows registrations; higher levels require unlocking. Traverse reserved positions
+// first so unpaid parents leave holes without moving or hiding paid children.
 export default defineEventHandler(async (event): Promise<ReferralTreeData> => {
   const query = getQuery(event);
   const id = typeof query.id === "string" ? query.id.trim() : "";
@@ -24,21 +25,21 @@ export default defineEventHandler(async (event): Promise<ReferralTreeData> => {
   const cycles = mode === "matrix" ? await db().all<{ cycle: number }>("SELECT cycle FROM matrix_slots WHERE user_id = $1 AND level = $2 ORDER BY cycle", root.id, level) : [];
   if (mode === "matrix" && !cycles.some(item => item.cycle === cycle))
     throw createError({ statusCode: 404, statusMessage: "This matrix slot does not exist." });
-  const source = mode === "matrix" ? `SELECT s.id,u.referral_code,NULL::TEXT AS parent_code,ARRAY[]::INTEGER[] AS path
+  const source = mode === "matrix" ? `SELECT s.id,u.referral_code,NULL::TEXT AS parent_code,ARRAY[]::INTEGER[] AS path,TRUE AS visible
       FROM matrix_slots s JOIN users u ON u.id = s.user_id WHERE s.user_id = $1 AND s.level = $5 AND s.cycle = $6
-      UNION ALL SELECT s.id,u.referral_code,n.referral_code,n.path || s.branch::INTEGER
+      UNION ALL SELECT s.id,u.referral_code,CASE WHEN n.visible THEN n.referral_code END,n.path || s.branch::INTEGER,(s.level = 1 OR s.unlocked)
       FROM network n JOIN matrix_slots s ON s.parent_id = n.id JOIN users u ON u.id = s.user_id` :
-    `SELECT u.id,u.referral_code,NULL::TEXT AS parent_code,ARRAY[]::INTEGER[] AS path FROM users u WHERE u.id = $1
-      UNION ALL SELECT u.id,u.referral_code,n.referral_code,n.path || p.slot::INTEGER
+    `SELECT u.id,u.referral_code,NULL::TEXT AS parent_code,ARRAY[]::INTEGER[] AS path,TRUE AS visible FROM users u WHERE u.id = $1
+      UNION ALL SELECT u.id,u.referral_code,n.referral_code,n.path || p.slot::INTEGER,TRUE
       FROM network n JOIN referral_placements p ON p.parent_id = n.id JOIN users u ON u.id = p.user_id`;
   const result = await db().one(`WITH RECURSIVE network AS (
     ${source} WHERE cardinality(n.path) < $2
   ) SELECT
     COALESCE((SELECT json_agg(json_build_object('id',referral_code,'path',array_to_string(path,'/'),'parentId',parent_code)
       ORDER BY cardinality(path),path) FROM network
-      WHERE path[1:cardinality($3::INTEGER[])] = $3::INTEGER[] AND cardinality(path) <= $4),'[]'::JSON) AS members,
+      WHERE visible AND path[1:cardinality($3::INTEGER[])] = $3::INTEGER[] AND cardinality(path) <= $4),'[]'::JSON) AS members,
     COALESCE((SELECT json_agg(counts) FROM (
-      SELECT cardinality(path) AS depth,COUNT(*)::INTEGER AS filled FROM network WHERE cardinality(path) > 0
+      SELECT cardinality(path) AS depth,COUNT(*)::INTEGER AS filled FROM network WHERE visible AND cardinality(path) > 0
       GROUP BY cardinality(path) ORDER BY depth
     ) counts),'[]'::JSON) AS counts`, root.id,maxDepth,slots,slots.length + visibleDepth,...(mode === "matrix" ? [level,cycle] : []));
   const counts = result!.counts as { depth: number; filled: number }[];

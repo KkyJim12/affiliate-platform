@@ -28,7 +28,38 @@ owner purchases that level. It does not earn that level's commissions while
 locked. A registered member is not counted as a paid completion until unlocked.
 Slots at previously purchased levels stay unlocked.
 
-The tree component provides program, purchase-level and matrix-cycle selectors.
+For example, User 2 in the first row of User 1's matrix views the same connected
+branch from User 2's own slot. Once User 1's 2/4/8 rows are paid, User 2 has two
+inherited rows (2 + 4 members) and eight empty positions in their third row.
+User 2 or their placed downline can fill those positions. Extra invitations
+from User 1 enter User 1's rebirth instead. Completing User 2's slot opens User
+2's own rebirth and queues their next unowned level. After the wallet-funded
+upgrade confirms, User 2 appears in their reserved position in User 1's
+next-level matrix; members who have not bought that level remain blank.
+
+The member referral page starts with a grid of matrix slots, including initial
+slots and rebirths at every purchase level. Cards show locked, filling or
+completed status, paid positions and reserved positions separately. Select a
+card to open that exact level and cycle, then return to the grid to choose
+another. The level filter and pagination support accounts with many rebirths.
+Locked cards preview reserved placement; opening one does not purchase a level.
+Level 1 shows all registered referrals in their placed branches, including
+spillover and downline referrals. Levels 2 and above show members only after
+they unlock the selected level; other reserved positions stay blank. Tree
+counts therefore mean registered positions at level 1 and unlocked positions
+at higher levels. Paid activations and completion status remain separate:
+registration alone does not trigger a wallet-funded upgrade.
+
+The owner's root remains visible for context. Traversal continues through
+blank parents at higher levels, so paid descendants retain their original
+paths. The open slot refreshes every fifteen seconds while the tab is visible.
+Opening a completed card shows all fourteen members in that exact level and
+cycle, even after later rebirths; the new slot has its own separate tree.
+Unilevel and the member list remain separate views on the same page.
+
+`GET /api/referrals/slots?level=1&page=1` returns the signed-in member's own
+progress, with at most 24 cards per page. It accepts no other member's identity.
+The public tree component provides program, purchase-level and cycle selectors.
 `GET /api/referrals/tree?id=<numeric ID>&mode=matrix&level=1&cycle=0` displays a
 matrix; `mode=unilevel&levels=15` displays continuous placement. Paths contain
 only `0` and `1` separated by `/`. The public endpoint returns numeric member

@@ -9,6 +9,9 @@
 .overview-network-grid > * { min-width: 0; }
 .overview-tree-panel > .binary-referral-tree { padding: 0 24px 24px; }
 .member-panel > .binary-referral-tree { padding: 24px; }
+.member-panel > .matrix-slots { padding: 24px; }
+.referral-view-toggle { max-width: 100%; flex-wrap: wrap; }
+.referral-view-toggle > button { min-width: 0; white-space: normal; }
 .member-panel .member-identity { max-width: 280px; }
 .member-panel .member-identity strong { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
 .member-panel .table-avatar { flex-shrink: 0; }
@@ -37,5 +40,6 @@
   .overview-banner { padding: 22px 18px; }
   .overview-tree-panel > .binary-referral-tree { padding: 0 18px 18px; }
   .member-panel > .binary-referral-tree { padding: 22px 18px 18px; }
+  .member-panel > .matrix-slots { padding: 22px 18px 18px; }
   .faq-nav-heading > a, .dashboard-sidebar .faq-subnav > a { font-size: 13px; }
 }

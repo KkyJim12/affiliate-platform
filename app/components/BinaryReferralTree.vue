@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { layoutReferralTree, referralTreeCard, referralTreeDepth, treeParentPath, treePathDepth, treePathSlots, type ReferralTreeData } from "#shared/referral-tree";
 
-const props = defineProps<{ memberId: string }>();
+const props = defineProps<{ memberId: string; initialLevel?: number; initialCycle?: number; initialMode?: "matrix" | "unilevel"; fixedSelection?: boolean; live?: boolean }>();
 const { t, localeTag } = useLoopI18n();
 const branch = ref("");
 const levels = ref(3);
-const mode = ref<"matrix" | "unilevel">("matrix");
-const programLevel = ref(1), cycle = ref(0);
+const mode = ref<"matrix" | "unilevel">(props.initialMode ?? "matrix");
+const programLevel = ref(props.initialLevel ?? 1), cycle = ref(props.initialCycle ?? 0);
 const maxDepth = computed(() => mode.value === "matrix" ? 3 : 15);
 const zoom = ref(100);
 const viewport = ref<HTMLElement | null>(null);
@@ -52,6 +52,11 @@ function centerTree() {
 }
 watch([tree, zoom], centerTree);
 onMounted(centerTree);
+let refreshTimer: ReturnType<typeof setInterval> | undefined;
+onMounted(() => {
+  if (props.live) refreshTimer = setInterval(() => { if (document.visibilityState === 'visible') void refresh(); },15_000);
+});
+onBeforeUnmount(() => { if (refreshTimer) clearInterval(refreshTimer); });
 function explore(path: string) {
   if (treePathDepth(path) <= maxDepth.value && path !== branch.value) branch.value = path;
 }
@@ -69,7 +74,7 @@ const number = (value: number) => value.toLocaleString(localeTag.value);
 
 <template>
   <section class="binary-referral-tree" :aria-label="t('publicTree.treeLabel')" :aria-busy="status === 'pending'" data-testid="binary-referral-tree">
-    <div class="binary-tree-toolbar">
+    <div v-if="!fixedSelection" class="binary-tree-toolbar">
       <div role="group" :aria-label="t('matrix.program')" class="binary-tree-options">
         <button class="button button-outline button-small" :aria-pressed="mode === 'matrix'" @click="mode = 'matrix'">{{ t('matrix.binary') }}</button>
         <button class="button button-outline button-small" :aria-pressed="mode === 'unilevel'" @click="mode = 'unilevel'">{{ t('matrix.unilevel') }}</button>
@@ -82,7 +87,7 @@ const number = (value: number) => value.toLocaleString(localeTag.value);
     <p class="binary-tree-note">{{ t(mode === 'matrix' ? 'matrix.treeHint' : 'matrix.unilevelHint') }}</p>
     <div v-if="error" class="binary-tree-message" role="alert"><AppIcon name="Search" :size="28" /><p>{{ failed }}</p><button class="button button-outline button-small" @click="refresh()">{{ t('publicTree.retry') }}</button></div>
     <template v-else-if="tree">
-      <p v-if="mode === 'matrix'" class="binary-tree-note" data-testid="matrix-slot-summary">{{ t('matrix.slotProgress', { number: cycle + 1, filled: tree.levels.reduce((total, row) => total + row.filled, 0), capacity: 14 }) }}</p>
+      <p v-if="mode === 'matrix'" class="binary-tree-note" data-testid="matrix-slot-summary">{{ t(programLevel === 1 ? 'matrix.registeredSlotProgress' : 'matrix.slotProgress', { number: cycle + 1, filled: tree.levels.reduce((total, row) => total + row.filled, 0), capacity: 14 }) }}</p>
       <div class="binary-tree-header">
         <div>
           <span class="eyebrow">{{ t('publicTree.structure') }}</span>

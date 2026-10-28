@@ -111,6 +111,7 @@ test('extra referrals spill under the first referral in both tree views', async 
       const id=randomUUID();
       const inserted=await db.one("INSERT INTO users VALUES($1,$2,'hash',$1,$3,$4) RETURNING referral_code",id,`binary_${id.slice(0,8)}`,root.id,new Date().toISOString());
       children.push({id,memberId:inserted!.referral_code});
+      await db.execute("UPDATE matrix_slots SET unlocked=TRUE WHERE user_id=$1 AND level=1",id);
     }
     const result=await (await page.request.get(`/api/referrals/tree?id=${root.memberId}`)).json();
     expect(result.members.map((m:{path:string})=>m.path)).toEqual(['','0','1','0/0']);
@@ -178,7 +179,7 @@ test('any visitor can search by ID and explore empty boxes through 15 levels on 
   await expect(tree.getByRole('button', { name: 'ยูนิเลเวล', exact: true })).toBeVisible();
   await expect(tree).not.toContainText(/\?{2,}|\uFFFD/u);
   await tree.getByRole('button', { name: 'ไบนารีแมทริกซ์', exact: true }).click();
-  await expect(tree).toContainText('เมื่อแมทริกซ์ชำระครบ');
+  await expect(tree).toContainText('เปิดช่องรีเบิร์ธ');
   await page.getByRole('button', { name: thai.ui.use_dark_theme, exact: true }).click();
   await expect(page.locator('html')).toHaveClass(/dark/);
   await expect(page.locator('.public-tree-result')).toHaveCSS('background-color', 'rgb(21, 26, 35)');

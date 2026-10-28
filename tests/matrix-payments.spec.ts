@@ -6,6 +6,11 @@ import { openTestDatabase } from "./database";
 const origin = "http://127.0.0.1:3100";
 const password = "Matrix integration testing 42!";
 
+test.beforeEach(async()=>{
+  const database=openTestDatabase();
+  try {await database.execute("DELETE FROM rate_limits");} finally {await database.close();}
+});
+
 test("paid binary matrices recycle and automatically debit the wallet for the next level", async ({ playwright, page }, info) => {
   test.skip(info.project.name !== "desktop" || process.env.NUXT_REFERRAL_PAYMENT_MODE === "contract");
   test.setTimeout(180000);
@@ -82,4 +87,53 @@ test("paid binary matrices recycle and automatically debit the wallet for the ne
     await page.getByRole('option',{name:'Rebirth 2',exact:true}).click();
     await expect(tree.getByTestId('matrix-slot-summary')).toContainText('Slot 3: 0/14');
   } finally { await api.dispose(); await database.close(); }
+});
+
+test("a referred member inherits two rows, their branch fills the last row and upgrades under their sponsor",async({playwright},info)=>{
+  test.skip(info.project.name!=="desktop" || process.env.NUXT_REFERRAL_PAYMENT_MODE==="contract");
+  test.setTimeout(180000);
+  const database=openTestDatabase(),hash=await hashPassword(password);
+  const ownerApi=await playwright.request.newContext({baseURL:origin}),memberApi=await playwright.request.newContext({baseURL:origin}),buyerApi=await playwright.request.newContext({baseURL:origin});
+  const create=async(sponsor:string|null,amount:number)=>{
+    const id=randomUUID();
+    const row=await database.one("INSERT INTO users VALUES($1,$2,$3,$1,$4,$5) RETURNING referral_code",id,`branch_${id.slice(0,8)}`,hash,sponsor,new Date().toISOString());
+    await database.execute("INSERT INTO wallets(id,user_id,available) VALUES($1,$2,$3)",`w-${id}`,id,amount);
+    return {id,code:row!.referral_code as string};
+  };
+  const activate=async(member:{code:string},api:typeof ownerApi)=>{
+    expect((await api.post('/api/auth/login',{headers:{Origin:origin},data:{memberId:member.code,password}})).status()).toBe(200);
+    const response=await api.post('/api/referrals/activate',{headers:{Origin:origin},data:{password,requestKey:randomUUID()}});
+    expect(response.status(),await response.text()).toBe(200);
+  };
+  const matrix=async(code:string,level=1,cycle=0)=> (await ownerApi.get(`/api/referrals/tree?id=${code}&mode=matrix&level=${level}&cycle=${cycle}`)).json();
+  try {
+    const owner=await create(null,100_000_000);await activate(owner,ownerApi);
+    const member=await create(owner.id,100_000_000);await activate(member,memberApi);
+    for(let index=2;index<=14;index++) await activate(await create(owner.id,10_000_000),buyerApi);
+    await expect.poll(async()=> (await database.one("SELECT status FROM referral_auto_upgrades WHERE user_id=$1 AND level=2",owner.id))?.status,{timeout:45000}).toBe('completed');
+    const inherited=await matrix(member.code);
+    expect(inherited.levels.map((row:{filled:number})=>row.filled)).toEqual([2,4,0]);
+    expect(inherited.members).toHaveLength(7);
+    const inheritedSponsors=await database.all("SELECT sponsor_id FROM users WHERE referral_code=ANY($1::TEXT[])",inherited.members.slice(1).map((row:{id:string})=>row.id));
+    expect(inheritedSponsors.every(row=>row.sponsor_id===owner.id)).toBe(true);
+    const ownerExtra=await create(owner.id,0);
+    expect((await database.one("SELECT parent_id FROM matrix_slots WHERE user_id=$1 AND level=1 AND cycle=0",ownerExtra.id))!.parent_id).toBe(`matrix:1:${owner.id}:1`);
+    expect((await matrix(member.code)).levels.map((row:{filled:number})=>row.filled)).toEqual([2,4,0]);
+    const downlineCode=inherited.members.find((row:{path:string})=>row.path==='0').id;
+    const downline=await database.one("SELECT id FROM users WHERE referral_code=$1",downlineCode);
+    // Both the member's own invites and invites from their placed downline
+    // fill the last row. The sponsor's overflow remains in its own rebirth.
+    for(let index=0;index<8;index++) await activate(await create(index<4 ? downline!.id : member.id,10_000_000),buyerApi);
+    await expect.poll(async()=> (await database.one("SELECT status FROM referral_auto_upgrades WHERE user_id=$1 AND level=2",member.id))?.status,{timeout:45000}).toBe('completed');
+    expect((await matrix(member.code)).levels.map((row:{filled:number})=>row.filled)).toEqual([2,4,8]);
+    const level2=await matrix(owner.code,2);
+    expect(level2.members).toEqual([level2.root,{id:member.code,path:'0',parentId:owner.code}]);
+    expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",member.id))!.available).toBe(121_400_000);
+    expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",owner.id))!.available).toBe(124_400_000);
+    const memberExtra=await create(member.id,0);
+    expect((await database.one("SELECT parent_id FROM matrix_slots WHERE user_id=$1 AND level=1 AND cycle=0",memberExtra.id))!.parent_id).toBe(`matrix:1:${member.id}:1`);
+    expect((await database.one("SELECT parent_id FROM matrix_slots WHERE user_id=$1 AND level=2 AND cycle=0",member.id))!.parent_id).toBe(`matrix:2:${owner.id}:0`);
+    expect((await database.one("SELECT COUNT(*) AS count FROM referral_purchases WHERE user_id=$1 AND level=2",member.id))!.count).toBe(1);
+    expect((await database.one("SELECT COUNT(*) AS count FROM matrix_slots WHERE user_id=$1 AND level=1",member.id))!.count).toBe(2);
+  } finally {await Promise.all([ownerApi.dispose(),memberApi.dispose(),buyerApi.dispose(),database.close()]);}
 });
