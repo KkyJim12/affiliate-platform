@@ -1,10 +1,10 @@
 <script setup lang="ts">
 const props = withDefaults(defineProps<{ purpose?: "login" | "link" | "connect"; sponsorCode?: string; showHeading?: boolean }>(), { showHeading: true });
 const emit = defineEmits<{ connected: [] }>();
-const { t } = useLoopI18n();
+const { t, tr } = useLoopI18n();
 const { user } = useAccount();
 const { wallet, refreshWallet } = useEvmWallet();
-const { providers, busy, error, discover, connect, authenticate, assertConnected, failureMessage } = useConnectedWallet();
+const { providers, busy, error, reauthenticating, discover, connect, authenticate, assertConnected, failureMessage } = useConnectedWallet();
 const activeId = ref<string | null>(null);
 const statusId = useId();
 const supported = [
@@ -27,7 +27,7 @@ async function choose(id: string) {
     else await authenticate(id,purpose,props.sponsorCode);
     emit("connected");
   } catch (failure) { error.value = failureMessage(failure); }
-  finally { busy.value = false; activeId.value = null; }
+  finally { busy.value = reauthenticating.value; activeId.value = null; }
 }
 onMounted(discover);
 </script>
@@ -55,6 +55,6 @@ onMounted(discover);
     <p v-if="!providers.length" class="wallet-discovery-hint" role="status">{{ t('connected.notDetected') }}</p>
     <div class="wallet-discovery-actions"><span>{{ t('connected.walletMissing') }}</span><button type="button" class="text-action" :disabled="busy" @click="discover"><AppIcon name="RefreshCw" :size="13" />{{ t('connected.refreshWallets') }}</button></div>
     <p v-if="busy" class="wallet-connection-status" role="status">{{ t('connected.checkWallet') }}</p>
-    <p v-if="error" class="auth-error" role="alert">{{ error }}</p>
+    <p v-if="error" class="auth-error" role="alert">{{ tr(error) }}</p>
   </div>
 </template>

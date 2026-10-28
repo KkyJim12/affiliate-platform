@@ -13,15 +13,22 @@ const origin = 'http://127.0.0.1:3100';
 const passwordLogin = passwordLoginEnabled(process.env.NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED);
 const rpc = () => new JsonRpcProvider(process.env.NUXT_EVM_RPC_URL,undefined,{ cacheTimeout: -1 });
 const post = (api: APIRequestContext,path: string,data: object) => api.post(path,{ headers: { Origin: origin },data });
+test.beforeEach(async () => {
+  // Authentication scenarios share one disposable server/IP. Keep each case's
+  // rate-limit budget independent without changing production limits.
+  const database = openTestDatabase();
+  try { await database.execute('DELETE FROM rate_limits'); }
+  finally { await database.close(); }
+});
 async function login(api: APIRequestContext,wallet: BaseWallet,sponsorCode = '') {
   const challenge = await (await post(api,'/api/auth/wallet/challenge',{ address: wallet.address,sponsorCode })).json();
   const response = await post(api,'/api/auth/wallet/verify',{ id: challenge.id,signature: await wallet.signMessage(challenge.message) });
   expect(response.status(),await response.text()).toBe(200); return (await response.json()).user;
 }
-async function fund(wallet: BaseWallet,provider: JsonRpcProvider) {
+async function fund(wallet: BaseWallet,provider: JsonRpcProvider, amount = 100_000_000n) {
   await provider.send('hardhat_setBalance',[wallet.address,toBeHex(parseEther('100'))]);
   const token = new Contract(process.env.NUXT_EVM_TOKEN_ADDRESS!,['function mint(address,uint256)'],await provider.getSigner(0));
-  await (await token.getFunction('mint')(wallet.address,100_000_000n)).wait();
+  await (await token.getFunction('mint')(wallet.address,amount)).wait();
 }
 async function signCall(wallet: BaseWallet,call: WalletCall) {
   return wallet.sendTransaction({ to: call.to,data: call.data,value: BigInt(call.value),chainId: call.chainId,
@@ -40,10 +47,15 @@ async function buy(api: APIRequestContext,wallet: BaseWallet,level = 1,attach = 
   }).toBe('confirmed');
   return prepared.id;
 }
-async function injectWallets(page: Page,wallet: BaseWallet,provider: JsonRpcProvider) {
+async function injectWallets(page: Page,wallet: BaseWallet,provider: JsonRpcProvider, otherWallets: BaseWallet[] = []) {
+  const signers = new Map([wallet,...otherWallets].map(signer => [signer.address.toLowerCase(),signer]));
   await page.exposeFunction('walletBridge',async (method: string,params: unknown[]) => {
     if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [wallet.address];
-    if (method === 'personal_sign') return wallet.signMessage(getBytes(String(params[0])));
+    if (method === 'personal_sign') {
+      const signer = signers.get(String(params[1]).toLowerCase());
+      if (!signer) throw new Error('The selected test wallet is unavailable.');
+      return signer.signMessage(getBytes(String(params[0])));
+    }
     if (method === 'wallet_switchEthereumChain' || method === 'wallet_addEthereumChain') return null;
     if (method === 'eth_sendTransaction') {
       const tx = params[0] as Record<string,string>;
@@ -61,7 +73,9 @@ async function injectWallets(page: Page,wallet: BaseWallet,provider: JsonRpcProv
       info: { uuid: `test-wallet-${index}`,name,rdns: ['io.metamask','io.rabby','app.phantom'][index],icon: '' },
       provider: { request: async ({ method,params = [] }: { method: string; params: unknown[] }) => {
         browser.walletCalls.push({ name,method,params });
+        if (['eth_accounts','eth_requestAccounts'].includes(method) && Array.isArray(browser.selectedWalletAccounts)) return browser.selectedWalletAccounts;
         if (method === 'eth_accounts' && browser.readWalletAccount) return [browser.readWalletAccount];
+        if (method === 'personal_sign' && browser.pauseWalletSignature) await new Promise(resolve => { browser.releaseWalletSignature = resolve; });
         if (browser.rejectWallet && ['personal_sign','eth_sendTransaction'].includes(method)) throw Object.assign(new Error('User rejected request'),{ code: 4001 });
         return browser.walletBridge(method,params);
       },on: (event: string,listener: Function) => { (events[event] ||= []).push(listener); },removeListener: (event: string,listener: Function) => { events[event] = (events[event] || []).filter(item => item !== listener); } },
@@ -69,6 +83,131 @@ async function injectWallets(page: Page,wallet: BaseWallet,provider: JsonRpcProv
     window.addEventListener('eip6963:requestProvider',() => wallets.forEach(detail => window.dispatchEvent(new CustomEvent('eip6963:announceProvider',{ detail }))));
   });
 }
+
+async function selectWalletAccount(page: Page, accounts: string[]) {
+  await page.evaluate(accounts => {
+    const browser = window as any;
+    browser.selectedWalletAccounts = accounts;
+    [...(browser.walletEvents.accountsChanged || [])].forEach((listener: Function) => listener(accounts));
+  }, accounts);
+}
+
+async function signInInjectedWallet(page: Page, address: string) {
+  await page.goto('/wallet');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).first().click();
+  await page.getByRole('button', { name: 'MetaMask', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page).toHaveURL(origin + '/dashboard');
+  await page.locator('.sidebar-nav a[href="/wallet"]').click();
+  await expect(page).toHaveURL(origin + '/wallet');
+  await expect(page.getByTestId('connected-wallet-address')).toHaveText(address);
+}
+
+test('switching wallet accounts immediately revokes the old session and automatically requests a new signature', async ({ page }) => {
+  const provider = rpc(), first = Wallet.createRandom().connect(provider), second = Wallet.createRandom().connect(provider);
+  try {
+    await fund(first,provider); await fund(second,provider,37_000_000n);
+    await injectWallets(page,first,provider,[second]);
+    await signInInjectedWallet(page,first.address);
+    await expect(page.getByTestId('profile-usdt-balance')).toHaveText('100.00 tUSDT');
+    const oldCookie = (await page.context().cookies()).find(cookie => cookie.name === 'loop_session')!;
+    await page.evaluate(() => { (window as any).pauseWalletSignature = true; });
+    await selectWalletAccount(page,[second.address]);
+    await expect.poll(() => page.evaluate(() => (window as any).walletCalls.filter((call: any) => call.method === 'personal_sign').length)).toBe(2);
+    await expect(page.locator('.profile-menu-trigger')).toHaveCount(0);
+    await expect(page.getByTestId('connected-wallet-address')).toHaveCount(0);
+    expect((await (await page.request.get('/api/auth/session')).json()).user).toBeNull();
+    expect((await page.request.get('/api/wallet/evm',{ headers: { Cookie: `loop_session=${oldCookie.value}` } })).status()).toBe(401);
+    await page.evaluate(() => { const browser = window as any; browser.pauseWalletSignature = false; browser.releaseWalletSignature(); });
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByTestId('connected-wallet-address')).toHaveText(second.address);
+    await expect(page.getByTestId('profile-usdt-balance')).toHaveText('37.00 tUSDT');
+    const newSession = await (await page.request.get('/api/wallet/evm')).json();
+    expect(newSession.wallet.address).toBe(second.address);
+    await selectWalletAccount(page,[second.address.toLowerCase()]);
+    await selectWalletAccount(page,[second.address]);
+    expect((await (await page.request.get('/api/wallet/evm')).json()).wallet.address).toBe(second.address);
+    const calls = await page.evaluate(() => (window as any).walletCalls);
+    expect(calls.filter((call: any) => call.method === 'personal_sign')).toHaveLength(2);
+    expect(calls.filter((call: any) => call.method === 'eth_sendTransaction')).toHaveLength(0);
+  } finally { provider.destroy(); }
+});
+
+test('rejecting automatic wallet re-sign-in stays signed out and a manual retry uses the selected wallet', async ({ page }) => {
+  const provider = rpc(), first = Wallet.createRandom().connect(provider), second = Wallet.createRandom().connect(provider);
+  try {
+    await fund(first,provider); await fund(second,provider,23_000_000n);
+    await injectWallets(page,first,provider,[second]); await signInInjectedWallet(page,first.address);
+    await page.evaluate(() => { (window as any).rejectWallet = true; });
+    await selectWalletAccount(page,[second.address]);
+    await expect(page.getByRole('dialog').getByRole('alert')).toContainText('declined');
+    expect((await (await page.request.get('/api/auth/session')).json()).user).toBeNull();
+    await expect(page.locator('.profile-menu-trigger')).toHaveCount(0);
+    await page.evaluate(() => { (window as any).rejectWallet = false; });
+    await page.getByRole('button',{ name: 'MetaMask',exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByTestId('profile-usdt-balance')).toHaveText('23.00 tUSDT');
+    expect((await (await page.request.get('/api/wallet/evm')).json()).wallet.address).toBe(second.address);
+  } finally { provider.destroy(); }
+});
+
+test('empty wallet accounts sign out without requesting another signature', async ({ page }) => {
+  const provider = rpc(), wallet = Wallet.createRandom().connect(provider);
+  try {
+    await fund(wallet,provider); await injectWallets(page,wallet,provider); await signInInjectedWallet(page,wallet.address);
+    await selectWalletAccount(page,[]);
+    await expect(page.getByRole('dialog').getByRole('alert')).toContainText('disconnected');
+    await expect.poll(async () => (await (await page.request.get('/api/auth/session')).json()).user).toBeNull();
+    await expect(page.getByTestId('connected-wallet-address')).toHaveCount(0);
+    expect(await page.evaluate(() => (window as any).walletCalls.filter((call: any) => call.method === 'personal_sign').length)).toBe(1);
+  } finally { provider.destroy(); }
+});
+
+test('a different wallet selected while the tab was closed is detected and re-authenticated on reload', async ({ page }) => {
+  const provider = rpc(), first = Wallet.createRandom().connect(provider), second = Wallet.createRandom().connect(provider);
+  try {
+    await fund(first,provider); await fund(second,provider,19_000_000n);
+    await injectWallets(page,first,provider,[second]); await signInInjectedWallet(page,first.address);
+    await page.addInitScript(address => { (window as any).selectedWalletAccounts = [address]; },second.address);
+    await page.reload();
+    await expect(page.getByTestId('connected-wallet-address')).toHaveText(second.address);
+    await expect(page.getByTestId('profile-usdt-balance')).toHaveText('19.00 tUSDT');
+    expect((await (await page.request.get('/api/wallet/evm')).json()).wallet.address).toBe(second.address);
+    expect(await page.evaluate(() => (window as any).walletCalls.filter((call: any) => call.method === 'personal_sign').length)).toBe(1);
+  } finally { provider.destroy(); }
+});
+
+test('a delayed wallet verification cannot restore an account after a second wallet switch', async ({ page }) => {
+  test.setTimeout(90000);
+  const provider = rpc(), first = Wallet.createRandom().connect(provider), second = Wallet.createRandom().connect(provider), third = Wallet.createRandom().connect(provider);
+  const database = openTestDatabase();
+  let releaseVerification: (() => void) | undefined;
+  try {
+    await fund(first,provider); await fund(second,provider); await fund(third,provider,41_000_000n);
+    await injectWallets(page,first,provider,[second,third]); await signInInjectedWallet(page,first.address);
+    let heldUserId = '';
+    let held = false;
+    await page.route('**/api/auth/wallet/verify',async route => {
+      const response = await route.fetch();
+      if (!held) {
+        held = true;
+        heldUserId = (await response.json()).user.id;
+        await new Promise<void>(resolve => { releaseVerification = resolve; });
+      }
+      await route.fulfill({ response });
+    });
+    await selectWalletAccount(page,[second.address]);
+    await expect.poll(() => heldUserId).not.toBe('');
+    await selectWalletAccount(page,[third.address]);
+    await expect(page.locator('.profile-menu-trigger')).toHaveCount(0);
+    releaseVerification!();
+    await expect(page.getByTestId('connected-wallet-address')).toHaveText(third.address);
+    await expect(page.getByTestId('profile-usdt-balance')).toHaveText('41.00 tUSDT');
+    expect((await (await page.request.get('/api/wallet/evm')).json()).wallet.address).toBe(third.address);
+    expect((await database.one('SELECT COUNT(*) AS count FROM sessions WHERE user_id=$1',heldUserId))!.count).toBe(0);
+    expect(await page.evaluate(() => (window as any).walletCalls.filter((call: any) => call.method === 'personal_sign').length)).toBe(3);
+  } finally { releaseVerification?.(); await database.close(); provider.destroy(); }
+});
 
 test('wallet authentication is nonce-bound, one-time, origin-bound and creates no server keystore',async ({ playwright }) => {
   const api = await playwright.request.newContext({ baseURL: origin }), database = openTestDatabase(), wallet = Wallet.createRandom();
@@ -322,8 +461,10 @@ test('browser purchase requests separate wallet approval and purchase signatures
     expect(calls.filter((call: any) => call.method === 'eth_sendTransaction').every((call: any) => call.name === 'MetaMask')).toBe(true);
     await page.locator('.sidebar-nav a[href="/wallet"]').click();
     await page.evaluate(() => { const browser = window as any; browser.walletEvents.accountsChanged?.forEach((listener: Function) => listener(['0x1111111111111111111111111111111111111111'])); });
-    await expect(page.getByRole('button',{ name: 'Send',exact: true })).toBeDisabled();
-    await expect(page.getByTestId('connected-wallet-panel')).toContainText('Select the wallet linked');
+    await expect(page.getByTestId('connected-wallet-address')).toHaveCount(0);
+    await expect(page.locator('.profile-menu-trigger')).toHaveCount(0);
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect.poll(async () => (await (await page.request.get('/api/auth/session')).json()).user).toBeNull();
   } finally { provider.destroy(); }
 });
 
@@ -384,9 +525,10 @@ test('tUSDT balance and linked wallet agree across profile, referrals and wallet
     await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
     await page.addInitScript(() => { (window as any).readWalletAccount = '0x1111111111111111111111111111111111111111'; });
     await page.reload();
-    await expect(page.getByTestId('connected-wallet-address')).toHaveText(wallet.address);
-    await expect(page.getByTestId('profile-usdt-balance')).toHaveText('100.00 tUSDT');
-    await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
+    await expect(page.getByTestId('connected-wallet-address')).toHaveCount(0);
+    await expect(page.getByTestId('profile-usdt-balance')).toHaveCount(0);
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect.poll(async () => (await (await page.request.get('/api/auth/session')).json()).user).toBeNull();
     await expect(page.getByRole('button', { name: 'Rabby', exact: true })).toBeVisible();
     expect(errors).toEqual([]);
   } finally { provider.destroy(); }

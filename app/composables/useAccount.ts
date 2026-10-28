@@ -3,6 +3,7 @@ import type { Account } from "../../shared/types";
 export function useAccount() {
   const user = useState<Account | null>("account", () => null);
   const sessionError = useState("session-error", () => "");
+  const sessionVersion = useState("account-session-version", () => 0);
   const request = useRequestFetch();
   const authenticated = computed(() => !!user.value);
   function clearWalletState() {
@@ -17,15 +18,23 @@ export function useAccount() {
     useState("evm-balance-read-at").value = 0;
   }
 
+  function clearSession() {
+    sessionVersion.value++;
+    clearWalletState();
+    user.value = null;
+    sessionError.value = "";
+  }
+
   async function restoreSession() {
     const account = user.value;
+    const version = sessionVersion.value;
     try {
       const result = await request<{ user: Account | null }>("/api/auth/session");
-      if (user.value !== account) return;
+      if (user.value !== account || sessionVersion.value !== version) return;
       user.value = result.user;
       sessionError.value = "";
     } catch {
-      if (user.value !== account) return;
+      if (user.value !== account || sessionVersion.value !== version) return;
       sessionError.value = "Your account could not be loaded. Please refresh to try again.";
     }
   }
@@ -46,10 +55,9 @@ export function useAccount() {
 
   async function logout() {
     await $fetch("/api/auth/logout", { method: "POST" });
-    clearWalletState();
-    user.value = null;
+    clearSession();
     useAppUI().notify("You have signed out of Loop.");
   }
 
-  return { user, authenticated, sessionError, restoreSession, signIn, register, logout };
+  return { user, authenticated, sessionError, restoreSession, signIn, register, logout, clearSession };
 }

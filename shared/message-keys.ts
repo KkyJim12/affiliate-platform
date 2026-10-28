@@ -1,5 +1,10 @@
 // Source-message aliases for statuses, API errors, and activity records.
 export const messageKeys: Record<string, string> = {
+  "Your wallet changed. Sign a new message to continue.": "connected.accountChanged",
+  "Your wallet disconnected. Connect it again to continue.": "connected.walletDisconnected",
+  "Wallet or account changed. Please sign in again.": "connected.signInChanged",
+  "Your previous session could not be cleared. Please try signing in again.": "connected.sessionResetFailed",
+  "You declined the wallet request. You can try again when ready.": "connected.requestDeclined",
   "Sign in to admin with your member ID and password.": "profile.adminPasswordRequired",
   "Member ID or password is incorrect.": "ui.member_id_or_password_incorrect",
   "That member ID was not found.": "ui.that_username_was_not_found",
