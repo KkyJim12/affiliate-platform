@@ -9,6 +9,7 @@
     "admin:create": "node --env-file-if-exists=.env scripts/create-admin.mjs",
     "admin:list": "node --env-file-if-exists=.env scripts/create-admin.mjs --list",
     "test:ui": "node scripts/test-postgres.mjs ui",
+    "test:i18n": "node --test tests/locales.test.mjs",
     "test:contracts": "node --test tests/evm.test.mjs tests/evm-wallet.test.mjs tests/evm-balance.test.mjs tests/evm-transactions.test.mjs",
     "test:compensation": "node --test tests/compensation.test.mjs",
     "contracts:compile": "node scripts/compile-contracts.mjs",

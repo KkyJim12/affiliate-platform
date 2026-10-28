@@ -2,9 +2,9 @@
 
 [การเปลี่ยนระบบและ API มาใช้ ID สมาชิก / Member ID update](member-id-update.md): current login, registration, read-only identity, searches and compatibility details.
 
-ตรวจสอบจากซอร์สโค้ดวันที่ **27 ตุลาคม 2026** (Asia/Bangkok), revision `3ffa828` ก่อนเพิ่มเอกสารชุดนี้ เอกสารอธิบายสิ่งที่โปรเจกต์รองรับ ไม่ได้ยืนยันสถานะการตั้งค่าหรือการ deploy ของระบบที่เปิดใช้งานจริง
+ตรวจสอบจากซอร์สโค้ดวันที่ **28 ตุลาคม 2026** (Asia/Bangkok), revision `614d7cd` พร้อมการปรับปรุงเอกสารเวอร์ชัน 3 ใน working tree เอกสารอธิบายสิ่งที่โปรเจกต์รองรับ ไม่ได้ยืนยันสถานะการตั้งค่าหรือการ deploy ของระบบที่เปิดใช้งานจริง
 
-Reviewed against source on **27 October 2026** (Asia/Bangkok), revision `3ffa828` before these documentation changes. These documents describe implemented behavior, rather than certifying a live deployment or its configuration.
+Reviewed against source on **28 October 2026** (Asia/Bangkok), revision `614d7cd` with the version-3 documentation updates in the working tree. These documents describe implemented behavior, rather than certifying a live deployment or its configuration.
 
 | เนื้อหา / Topic | ภาษาไทย | English |
 | --- | --- | --- |
@@ -13,6 +13,7 @@ Reviewed against source on **27 October 2026** (Asia/Bangkok), revision `3ffa828
 | ติดตั้ง ตั้งค่า ฐานข้อมูล deploy ทดสอบ และแก้ปัญหา / Setup, configuration, database, deployment, tests and recovery | [คู่มือผู้ดูแลและนักพัฒนา](th/operations.md) | [Operations guide](en/operations.md) |
 | Deploy Nuxt: Node server, PostgreSQL, systemd, Nginx/HTTPS และอัปเดตระบบ / Nuxt deployment and updates | [คู่มือ Deploy Nuxt](th/deploy-nuxt.md) | [Deploy Nuxt](en/deploy-nuxt.md) |
 | Deploy/verify Smart Contract บน Amoy และเปลี่ยน distributor / Amoy contract deployment, verification and replacement | [คู่มือ Deploy Contract](th/deploy-contracts.md) | [Deploy contracts](en/deploy-contracts.md) |
+| แมทริกซ์ 3 ขั้น ยูนิเลเวล 15 ขั้น และหักเงินอัปเกรดอัตโนมัติ / Three-step matrix, fifteen-step unilevel and wallet-funded upgrades | [กติกาการจ่ายเวอร์ชัน 3](th/matrix-payments.md) | [Version-3 matrix payments](matrix-payments.md) |
 | API ทุก endpoint พร้อมสิทธิ์ โหมด และตัวอย่าง / Every API endpoint, access, modes and examples | [คู่มือ API](th/api-reference.md) | [API reference](en/api-reference.md) |
 
 คู่มือ Deploy ทั้งสองหัวข้อตรวจจากซอร์สวันที่ **28 ตุลาคม 2026** ครอบคลุมคำสั่งสำหรับ Linux/Windows และการส่ง environment จากเครื่องผู้ deploy ไปยังเซิร์ฟเวอร์ / Both deployment guides were reviewed against source on **28 October 2026** and cover Linux/Windows commands plus runtime configuration handoff from the deployment machine to the application server.
@@ -29,8 +30,8 @@ PDF ชุดนี้มีเนื้อหาเต็มตามคู่�
 | --- | --- | --- | ---: | --- |
 | Nuxt | ไทย | [UNXO-deploy-nuxt-th.pdf](pdf/UNXO-deploy-nuxt-th.pdf) | 7 | [HTML](pdf/UNXO-deploy-nuxt-th.html) |
 | Nuxt | English | [UNXO-deploy-nuxt-en.pdf](pdf/UNXO-deploy-nuxt-en.pdf) | 7 | [HTML](pdf/UNXO-deploy-nuxt-en.html) |
-| Smart Contract | ไทย | [UNXO-deploy-contracts-th.pdf](pdf/UNXO-deploy-contracts-th.pdf) | 6 | [HTML](pdf/UNXO-deploy-contracts-th.html) |
-| Smart Contract | English | [UNXO-deploy-contracts-en.pdf](pdf/UNXO-deploy-contracts-en.pdf) | 6 | [HTML](pdf/UNXO-deploy-contracts-en.html) |
+| Smart Contract | ไทย | [UNXO-deploy-contracts-th.pdf](pdf/UNXO-deploy-contracts-th.pdf) | 7 | [HTML](pdf/UNXO-deploy-contracts-th.html) |
+| Smart Contract | English | [UNXO-deploy-contracts-en.pdf](pdf/UNXO-deploy-contracts-en.pdf) | 8 | [HTML](pdf/UNXO-deploy-contracts-en.html) |
 
 สร้างใหม่จาก Markdown ด้วย `npm run docs:deploy:pdf` (`npm.cmd run docs:deploy:pdf` บน PowerShell) ใช้ Microsoft Edge แบบ headless และฟอนต์/dependencies ในโปรเจกต์ ไม่อ่าน private `.env` ไม่ต้องเปิดแอปหรือเชื่อมฐานข้อมูล เพิ่ม `-- --preview` เพื่อเก็บภาพแต่ละหน้าและภาพรวมใน `.data/deploy-doc-preview` ตัวสร้างตรวจว่าเนื้อหาและ code blocks ครบตามต้นฉบับ ไม่มีข้อความล้นหน้า และ PDF ฝังฟอนต์พร้อม Unicode mappings จำนวนหน้าอาจเปลี่ยนเมื่อแก้ source ควรตรวจและอัปเดตตารางนี้หลังสร้างใหม่
 

@@ -26,7 +26,7 @@ if (-not (Test-Path -LiteralPath .env)) { Copy-Item -LiteralPath .env.example -D
 | `REFERRAL_OWNER_ADDRESS` | Public initial owner of both contracts; receives the initial token supply and controls owner-only operations. To manage distributor fees in the app, link this external wallet to an admin account |
 | `REFERRAL_FEE_RECIPIENT_ADDRESS` | Public initial platform payout address; may differ from the owner |
 | `REFERRAL_DEPLOYER_PRIVATE_KEY` | Separate deployment-only signing key; its wallet pays test POL gas. Deployment does not automatically make it the owner |
-| `NUXT_REFERRAL_AUTHORITY_PRIVATE_KEY` | Server-only quote signer for eligibility/genealogy; its public address must match the distributor's `quoteSigner()` |
+| `NUXT_REFERRAL_AUTHORITY_PRIVATE_KEY` | Server-only signer for placement, eligibility and completed cycles; its public address must match `quoteSigner()` and needs test POL to relay automatic upgrades |
 | Member wallet | Signs its own approvals/purchases and pays its network fees |
 
 Use a dedicated authority key. Keep the owner's signing key in its external wallet. Never put any private key in `NUXT_PUBLIC_*`, commit it, or paste it into a deployment log. Existing environment values take precedence over Node's `.env` loading; avoid stale shell/CI overrides when reviewing or broadcasting.
@@ -152,7 +152,7 @@ Use the explorer's Read Contract view or an RPC reader to compare:
 
 | Contract read | Expected result |
 | --- | --- |
-| Distributor `distributionVersion()` | `2` |
+| Distributor `distributionVersion()` | `3` |
 | Distributor `paymentToken()` | `NUXT_EVM_TOKEN_ADDRESS` |
 | Distributor `owner()` | Intended owner; initially `REFERRAL_OWNER_ADDRESS` |
 | Distributor `feeRecipient()` | Intended recipient; initially `REFERRAL_FEE_RECIPIENT_ADDRESS` |
@@ -164,7 +164,11 @@ Sign in at `/admin/login` before linking the owner wallet. Verify contract statu
 
 The token mints **1,000,000 tUSDT** to its initial owner. Each wallet can call `faucet()` once for **400,000 tUSDT**, or receive tokens from the owner; the owner can also mint. The faucet is a contract call, not an npm script or a supplied general member faucet UI. Every sending wallet still needs **test POL** for gas.
 
-Use a test member wallet on Amoy to buy level 1 for **10 tUSDT**. Approve the exact token price and sign the purchase in the connected wallet. Wait for configured confirmations, then check level activation, transaction hash and allocation/accounting history. The server does not precheck purchase POL balances, so make sure the member is funded. Contract-mode payments do not fall back to internal ledger credit.
+Use a test member wallet on Amoy to buy level 1 for **10 tUSDT**. The confirmation offers an exact-price approval or a finite approval for this and the remaining levels to enable automatic upgrades. At level 1 that ceiling is **327,670 tUSDT**; only the current price is charged now. Sign the purchase, wait for confirmations, then check activation, hash and accounting history. The server does not precheck purchase POL balances. Contract-mode payments do not fall back to internal ledger credit.
+
+Version 3 pays matrix ancestors **10% / 20% / 50%** at steps 1–3, continuous binary unilevel ancestors **1% each for fifteen steps starting at the parent**, and the platform **5%**. Missing or locked recipients' shares go to the platform. Recipients must own the purchased level. Matrix and unilevel recipients can differ. See [current payment rules](../matrix-payments.md) and [ภาษาไทย](../th/matrix-payments.md).
+
+A full paid matrix has **2 / 4 / 8 descendants**, three steps below its owner. Completion opens another same-level slot and queues a full-price next-level purchase from the member's wallet. The worker checks every fifteen seconds. Insufficient token balance or approval leaves the upgrade queued. Fund the public `quoteSigner()` wallet with test POL for relayer gas. The authority attests cycle completion; the contract checks the signature, sequential level and one-time cycle hash before spending approved tokens.
 
 ## 7. Replace only the distributor
 
@@ -173,6 +177,18 @@ The contracts are **not upgradeable**. Editing Solidity does not update deployed
 Finish pending purchases, approvals, transfers and fee updates before changing configuration. Schedule a maintenance window and prevent new application writes during the switch. Back up PostgreSQL, private environment and the **original** `.data/contracts` before running preparation/compilation against changed source, because those commands overwrite build artifacts. Keep the reused token's original build records too.
 
 With the current token and distributor still configured, review:
+
+Both public address fields must be filled for replacement. For the installation recorded on 28 October 2026, the existing values were:
+
+```dotenv
+NUXT_EVM_TOKEN_ADDRESS=0x8B8B3C4115d1F520688F5d0537b6854eb4258065
+NUXT_REFERRAL_CONTRACT_ADDRESS=0x485cC2Cd52fBC7adeEAdf175b37f9c50741FdCB6
+NUXT_REFERRAL_PAYMENT_MODE=contract
+```
+
+These are public addresses, not private keys. Confirm them against your current installation before using them; after a successful replacement, keep the newly saved distributor address. Blank addresses do not mean that the contracts have disappeared from the chain. In PowerShell use `npm.cmd` if execution policy blocks `npm`.
+
+Prepare the replacement without sending a transaction:
 
 ```bash
 npm run contracts:deploy -- --replace-distributor
@@ -184,9 +200,28 @@ Review `.data/contracts/replacement-plan.json`. Replace `CURRENT_DISTRIBUTOR_ADD
 npm run contracts:deploy -- --replace-distributor --previous-contract CURRENT_DISTRIBUTOR_ADDRESS --broadcast
 ```
 
+For the recorded distributor above, the complete PowerShell command is:
+
+```powershell
+npm.cmd run contracts:deploy -- --replace-distributor --previous-contract 0x485cC2Cd52fBC7adeEAdf175b37f9c50741FdCB6 --broadcast
+```
+
+The reviewed plan must show `distributionVersion: 3`, `broadcast: false`, the intended owner/fee/authority, the existing token, the exact old distributor in `replaces`, and `missing: []`. Adding `--broadcast` sends the deployment and spends the deployer's test POL. Wait for `Deployment confirmed` and the saved new address. If interrupted, resume the same command using its saved progress.
+
 The script checks the old distributor's token, deploys only the new distributor, preserves the original deployment progress, and saves replacement records to `.data/contracts/replacement-ADDRESS.json` and `.data/contracts/latest-replacement.json`. The local `.env` is updated to the new distributor; publish that value to the Nuxt runtime environment and restart.
 
 Repeat source verification and readiness checks. Existing database accounts and paid-level accounting are retained; no database reset is required. Previous purchases remain transactions of the old contract. Never clear the configured address to force a fresh two-contract deployment when the intention is replacement.
+
+After the confirmed replacement, run:
+
+```powershell
+npm.cmd run db:migrate
+npm.cmd run contracts:verify -- --dry-run
+npm.cmd run contracts:verify
+npm.cmd run build
+```
+
+Restart the application with the new runtime configuration. Migration `0013_matrix_slots_and_auto_upgrades.sql` preserves paid levels, adds matrix slots and durable upgrade jobs, and avoids retroactive automatic charges for pre-existing full matrices. Members must approve the **new distributor** before it can spend their tokens; old allowances do not transfer. Recheck `distributionVersion() == 3`, token, signer, pause state and relayer gas before reopening purchases.
 
 ## 8. Recovery and configuration changes
 

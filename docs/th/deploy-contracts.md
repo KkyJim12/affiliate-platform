@@ -26,7 +26,7 @@ if (-not (Test-Path -LiteralPath .env)) { Copy-Item -LiteralPath .env.example -D
 | `REFERRAL_OWNER_ADDRESS` | Public address ของเจ้าของเริ่มต้นของทั้งสอง contract ได้รับ token ชุดแรกและสั่ง owner-only operations หากต้องการจัดการค่าธรรมเนียมในแอป ให้ link external wallet นี้กับบัญชี admin |
 | `REFERRAL_FEE_RECIPIENT_ADDRESS` | Public address ผู้รับส่วนแบ่งแพลตฟอร์มเริ่มต้น เป็นคนละ address กับ owner ได้ |
 | `REFERRAL_DEPLOYER_PRIVATE_KEY` | Key แยกสำหรับเซ็น deploy เท่านั้น wallet นี้จ่าย test POL เป็น gas แต่ไม่ได้เป็น owner โดยอัตโนมัติ |
-| `NUXT_REFERRAL_AUTHORITY_PRIVATE_KEY` | Key ฝั่ง server สำหรับเซ็น quote ยืนยันสิทธิ์/สายแนะนำ public address ต้องตรงกับ `quoteSigner()` ของ distributor |
+| `NUXT_REFERRAL_AUTHORITY_PRIVATE_KEY` | Key ฝั่ง server เซ็นรับรองผัง สิทธิ์ และรอบที่ครบ public address ต้องตรง `quoteSigner()` และมี test POL ส่งอัปเกรดอัตโนมัติ |
 | Wallet สมาชิก | เซ็น approval/การซื้อของตัวเองและจ่าย network fees |
 
 ใช้ authority key แยกเฉพาะงานนี้ เก็บ signing key ของ owner ไว้ใน external wallet อย่าเก็บ private key ใน `NUXT_PUBLIC_*`, commit เข้า Git หรือวางลง deployment log ตัวแปรจาก environment ที่ process รับมามีลำดับความสำคัญเหนือไฟล์ `.env` ของ Node จึงต้องตรวจค่า override เก่าใน shell/CI ก่อน review และ broadcast
@@ -152,7 +152,7 @@ NUXT_REFERRAL_MIN_CONFIRMATIONS=2
 
 | ค่าที่อ่านจาก contract | ผลที่ควรได้ |
 | --- | --- |
-| Distributor `distributionVersion()` | `2` |
+| Distributor `distributionVersion()` | `3` |
 | Distributor `paymentToken()` | ตรงกับ `NUXT_EVM_TOKEN_ADDRESS` |
 | Distributor `owner()` | Owner ที่ตั้งใจใช้ เริ่มต้นคือ `REFERRAL_OWNER_ADDRESS` |
 | Distributor `feeRecipient()` | ผู้รับที่ตั้งใจใช้ เริ่มต้นคือ `REFERRAL_FEE_RECIPIENT_ADDRESS` |
@@ -164,7 +164,13 @@ NUXT_REFERRAL_MIN_CONFIRMATIONS=2
 
 Token จะ mint **1,000,000 tUSDT** ให้ initial owner แต่ละ wallet เรียก `faucet()` ได้ครั้งเดียวเพื่อรับ **400,000 tUSDT** หรือรับ token จาก owner ซึ่งสามารถ mint เพิ่มได้ Faucet เป็นการเรียก contract ไม่ใช่ npm script และยังไม่มีหน้า faucet ทั่วไปให้สมาชิกใน workflow นี้ ทุก wallet ที่ส่งธุรกรรมยังต้องมี **test POL** สำหรับ gas
 
-ใช้ wallet สมาชิกทดสอบบน Amoy ซื้อเลเวล 1 ราคา **10 tUSDT** อนุมัติ token ตามราคาจริงและเซ็นซื้อใน connected wallet รอ confirmations ที่ตั้งไว้ แล้วตรวจ activation ของเลเวล, transaction hash และประวัติแบ่งจ่าย/บัญชี Server ไม่ตรวจยอด POL ล่วงหน้าสำหรับการซื้อ จึงต้องเติมให้ wallet ก่อน การจ่ายแบบ contract ไม่ fallback ไปใช้เครดิต ledger ภายใน
+ใช้กระเป๋าสมาชิกทดสอบบน Amoy ซื้อเลเวล 1 ราคา **10 tUSDT** หน้ายืนยันให้เลือกอนุมัติเฉพาะราคาซื้อ หรืออนุมัติวงเงินจำกัดสำหรับเลเวลนี้และเลเวลที่เหลือเพื่อเปิดอัปเกรดอัตโนมัติ สำหรับเลเวล 1 วงเงินสูงสุดคือ **327,670 tUSDT** แต่จะหักเฉพาะราคาซื้อปัจจุบันก่อน เซ็นซื้อ รอ confirmations แล้วตรวจ activation, transaction hash และประวัติแบ่งจ่าย Server ไม่ตรวจยอด POL ล่วงหน้าสำหรับการซื้อ การจ่ายแบบ contract ไม่ fallback ไปใช้เครดิต ledger ภายใน
+
+เวอร์ชัน 3 จ่ายแมทริกซ์ **10% / 20% / 50%** ให้ผู้รับเหนือผู้ซื้อ 1–3 ขั้น ยูนิเลเวลไบนารีต่อเนื่องจ่าย **ขั้นละ 1% จำนวน 15 ขั้น เริ่มจากผู้ปกครองตามตำแหน่งของผู้ซื้อ** และแพลตฟอร์มรับพื้นฐาน **5%** ผู้รับต้องซื้อปลดล็อกเลเวลเดียวกับรายการซื้อแล้ว ส่วนของช่องว่างหรือผู้ที่ยังไม่ปลดล็อกจะไปแพลตฟอร์ม ผู้รับของสองผังอาจเป็นคนละคน อ่าน [กติกาการจ่ายฉบับภาษาไทย](matrix-payments.md)
+
+แมทริกซ์ที่ชำระครบมีสมาชิกด้านล่าง **2 / 4 / 8 คน** รวม 3 ขั้น เมื่อครบจะเปิดช่องใหม่ในเลเวลเดิมและเข้าคิวซื้อเลเวลถัดไปเต็มราคาโดยหักจากกระเป๋าสมาชิก Worker ตรวจทุก 15 วินาที หากยอดโทเคนหรือวงเงินอนุมัติไม่พอ รายการจะรอในคิว เติม test POL ให้กระเป๋า public address จาก `quoteSigner()` เพื่อจ่าย gas ของการอัปเกรด Authority รับรองว่ารอบครบแล้ว ส่วนสัญญาตรวจลายเซ็น ลำดับเลเวล และ hash ของรอบที่ใช้ได้ครั้งเดียวก่อนหักโทเคนที่อนุมัติไว้
+
+คำศัพท์ที่ใช้: **Deploy = เผยแพร่สัญญาบนเชน**, **Distributor = สัญญาแบ่งจ่าย**, **Approve/allowance = อนุมัติ/วงเงินให้สัญญาหักโทเคน**, **Broadcast = ส่งธุรกรรมขึ้นเครือข่าย**, **Verify = ยืนยันซอร์สบน explorer**, **Relayer = กระเป๋าที่ส่งธุรกรรมอัปเกรดและจ่าย gas**, **Restart = เริ่มบริการแอปใหม่เพื่อโหลดค่าล่าสุด**
 
 ## 7. เปลี่ยนเฉพาะ distributor
 
@@ -173,6 +179,18 @@ Contract ชุดนี้ **ไม่รองรับ upgrade ใน address
 จัดการ purchases, approvals, transfers และ fee updates ที่ค้างให้เสร็จก่อนเปลี่ยน configuration กำหนดช่วง maintenance และหยุดรับการเขียนผ่านแอประหว่างสลับ สำรอง PostgreSQL, private environment และ **`.data/contracts` เดิม** ก่อน prepare/compile source ที่เปลี่ยนแล้ว เพราะคำสั่งเหล่านี้เขียนทับ build artifacts เก็บ build records เดิมของ token ที่จะใช้ต่อไว้ด้วย
 
 โดยยังคง token และ distributor ปัจจุบันใน configuration ให้ตรวจแผน:
+
+การเปลี่ยนเฉพาะสัญญาแบ่งจ่ายต้องกรอก public address ทั้งสองรายการให้ครบ สำหรับระบบที่บันทึกไว้วันที่ 28 ตุลาคม 2026 ค่าเดิมคือ:
+
+```dotenv
+NUXT_EVM_TOKEN_ADDRESS=0x8B8B3C4115d1F520688F5d0537b6854eb4258065
+NUXT_REFERRAL_CONTRACT_ADDRESS=0x485cC2Cd52fBC7adeEAdf175b37f9c50741FdCB6
+NUXT_REFERRAL_PAYMENT_MODE=contract
+```
+
+สองค่านี้เป็น **ที่อยู่สาธารณะ ไม่ใช่ private key** ตรวจให้ตรงกับระบบของตนก่อนใช้ หากเปลี่ยนสัญญาสำเร็จไปแล้วให้ใช้ address ใหม่ที่สคริปต์บันทึก ไม่ใส่ address เก่าทับกลับ ช่องว่างใน `.env` ไม่ได้ทำให้สัญญาบนเชนหายไป หาก PowerShell บล็อก `npm` ให้ใช้ `npm.cmd` แทน
+
+เตรียมแผนโดยยังไม่ส่งธุรกรรม:
 
 ```bash
 npm run contracts:deploy -- --replace-distributor
@@ -184,9 +202,28 @@ npm run contracts:deploy -- --replace-distributor
 npm run contracts:deploy -- --replace-distributor --previous-contract CURRENT_DISTRIBUTOR_ADDRESS --broadcast
 ```
 
+สำหรับ distributor เดิมที่แสดงด้านบน คำสั่ง PowerShell เต็มคือ:
+
+```powershell
+npm.cmd run contracts:deploy -- --replace-distributor --previous-contract 0x485cC2Cd52fBC7adeEAdf175b37f9c50741FdCB6 --broadcast
+```
+
+ก่อนใช้คำสั่งส่งจริง แผนต้องแสดง `distributionVersion: 3`, `broadcast: false`, owner/ผู้รับค่าธรรมเนียม/authority ที่ตั้งใจใช้, token เดิม, distributor เดิมตรงใน `replaces` และ `missing: []` การเพิ่ม `--broadcast` จะส่งธุรกรรมและใช้ test POL ของ deployer รอข้อความ `Deployment confirmed` และ address ใหม่ที่บันทึกไว้ หากถูกขัดจังหวะให้รันคำสั่งเดิมต่อจาก progress ที่เก็บไว้
+
 สคริปต์ตรวจ token ของ distributor เดิม deploy เฉพาะ distributor ใหม่ เก็บ deployment progress เดิมไว้ และบันทึก replacement ลง `.data/contracts/replacement-ADDRESS.json` กับ `.data/contracts/latest-replacement.json` จากนั้นอัปเดต `.env` ในเครื่องให้ใช้ distributor ใหม่ ต้องส่งค่านี้ไปยัง Nuxt runtime environment และ restart ด้วย
 
 ทำ source verification และรายการตรวจความพร้อมซ้ำ บัญชีและข้อมูล paid-level accounting เดิมในฐานข้อมูลยังอยู่ ไม่ต้อง reset ฐานข้อมูล การซื้อก่อนหน้ายังคงเป็นธุรกรรมของ contract เก่า อย่าล้าง configured address เพื่อบังคับ deploy ทั้งสอง contract ใหม่ หากต้องการเพียง replacement
+
+เมื่อยืนยันการ deploy แล้ว รันตามลำดับ:
+
+```powershell
+npm.cmd run db:migrate
+npm.cmd run contracts:verify -- --dry-run
+npm.cmd run contracts:verify
+npm.cmd run build
+```
+
+เริ่มบริการแอปใหม่ให้โหลด runtime configuration ล่าสุด Migration `0013_matrix_slots_and_auto_upgrades.sql` เก็บ paid levels เดิม เพิ่มช่องแมทริกซ์และคิวอัปเกรดถาวร และไม่หักอัปเกรดย้อนหลังจากแมทริกซ์เก่าที่เต็มอยู่แล้ว สมาชิกต้องอนุมัติ **distributor ใหม่** เพราะวงเงินเดิมไม่ย้ายตาม ตรวจ `distributionVersion() == 3`, token, signer, pause state และ POL ของ relayer ก่อนเปิดให้ซื้ออีกครั้ง
 
 ## 8. การกู้คืนและเปลี่ยน configuration
 

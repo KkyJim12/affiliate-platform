@@ -2,7 +2,7 @@
 
 [Documentation index](../README.md) · [ภาษาไทย](../th/operations.md) · [System](system-guide.md) · [Payments](payments-and-conditions.md) · [API](api-reference.md)
 
-Reviewed **27 October 2026**, revision `3ffa828`. Commands below are operator instructions; writing this documentation did not deploy contracts, reset databases or transfer assets.
+Reviewed **28 October 2026**, revision `614d7cd`. Commands below are operator instructions; writing this documentation did not deploy contracts, reset databases or transfer assets.
 
 ## 1. Local installation
 
@@ -51,7 +51,7 @@ Nuxt runtime settings are mapped from the corresponding `NUXT_*` environment nam
 | `NUXT_EVM_MIN_CONFIRMATIONS` | Confirmation policy for generic evidence/send helpers; sends default to two |
 | `NUXT_EVM_EXPLORER_API_KEY` | Private Etherscan V2 key with Amoy access for indexed wallet history; absent/failing key produces unavailable history |
 | `NUXT_REFERRAL_PAYMENT_MODE` | `contract`; `ledger` takes effect only with embedded wallet mode |
-| `NUXT_REFERRAL_CONTRACT_ADDRESS` | Distributor address; new purchases require distribution version 2 |
+| `NUXT_REFERRAL_CONTRACT_ADDRESS` | Distributor address; new purchases require distribution version 3 |
 | `NUXT_REFERRAL_AUTHORITY_PRIVATE_KEY` | Private runtime quote signer; its address must match on-chain `quoteSigner` |
 | `NUXT_REFERRAL_MIN_CONFIRMATIONS` | `2`; accepted referral confirmation settings are 1–100 |
 | `NUXT_REFERRAL_MIN_GAS_BALANCE` | `0.003` POL minimum displayed administrative gas budget; not a purchase POL precheck |
@@ -113,12 +113,13 @@ This deploys a new distributor against the existing token and retains original d
 | `referral_chain_fee_updates`, `referral_chain_transactions` | Embedded fee updates and durable signed transaction outbox |
 | `evm_sends`, `external_wallet_operations` | Embedded send quotes/submissions and connected send/fee intents |
 | `referral_code_aliases`, `referral_id_counter` | Old invitation aliases and sequential numeric member IDs |
-| `referral_placements` | Retained binary-placement data; current displayed/payment tree follows `users.sponsor_id` |
+| `referral_placements` | Continuous binary unilevel placement, starting payments at the buyer's parent |
+| `matrix_slots`, `matrix_auto_upgrades` | Per-level three-step matrix cycles, paid eligibility and durable wallet-funded upgrade jobs; fund `quoteSigner()` with test POL for relayer gas |
 | `schema_migrations` | Applied migration names, SHA-256 checksums and timestamps, managed by the migration runner |
 
 Internal money is BIGINT in millionths, checked as nonnegative safe integers. Account names and wallet addresses have case-insensitive uniqueness rules. Request keys, purchased levels, transaction hashes and settlement references have relevant uniqueness constraints. Ledger transfers lock affected wallets consistently; sponsor graph writes use an advisory transaction lock; wallet chain operations use per-account advisory coordination. DB changes and accounting records commit together.
 
-Migrations currently run from `0001` through `0012`; startup applies pending migrations before serving. `npm run db:status` reads history; `npm run db:migrate` applies pending SQL. A pending batch and its history commit in one transaction. Concurrent migrators serialize through an advisory lock. Checksums normalize Windows line endings; editing/removing an applied migration stops validation/startup. Add a new numbered migration instead. Individual migration rollback is not implemented.
+Migrations currently run from `0001` through `0013`; startup applies pending migrations before serving. `npm run db:status` reads history; `npm run db:migrate` applies pending SQL. A pending batch and its history commit in one transaction. Concurrent migrators serialize through an advisory lock. Checksums normalize Windows line endings; editing/removing an applied migration stops validation/startup. Add a new numbered migration instead. Individual migration rollback is not implemented.
 
 ### Backups, reset and old SQLite import
 
@@ -190,7 +191,7 @@ For documentation-only changes, verify local links, API route coverage and finan
 | Wallet login rejects host | Match the exact scheme/host/port with `NUXT_PUBLIC_APP_URL` and restart |
 | New member cannot register | Check `registrationOpen`, invite activation/status, wallet address uniqueness and mode |
 | Member password login absent/rejected | It is disabled by default; linked external accounts use wallet sign-in. Admins use `/admin/login` |
-| Contract unavailable | Check Amoy RPC/80002, deployed code, version 2, token match, authority signer match and server environment |
+| Contract unavailable | Check Amoy RPC/80002, deployed code, version 3, token match, authority signer match and server environment |
 | Purchase cannot advance | Confirm next level, available configured token, pause state, pending operations and quote expiry/config nonce |
 | Purchase pending | Preserve ID/hash; check canonical receipt, confirmations, POL and RPC; allow worker reconciliation before retrying |
 | Send pending after replacement | Preserve original/new hashes and inspect sender/nonce/receipt. General send replacement discovery is absent; do not issue another payment blindly |

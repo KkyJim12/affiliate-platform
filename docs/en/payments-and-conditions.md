@@ -1,11 +1,11 @@
 # UNXO payments and conditions
 
-> Distribution version 3 supersedes the payment and tree rules reviewed below. See [current binary matrix, unilevel and automatic-upgrade rules](../matrix-payments.md). The older schedule below describes historical versions 1?2.
+Version 3: [matrix, unilevel and automatic-upgrade details](../matrix-payments.md) · [ภาษาไทย](../th/payments-and-conditions.md).
 
 
 [Documentation index](../README.md) · [ภาษาไทย](../th/payments-and-conditions.md) · [System guide](system-guide.md) · [Operations](operations.md) · [API](api-reference.md)
 
-Reviewed **27 October 2026**, source revision `3ffa828`. This document specifies implemented payment rules and identifies undefined policies. It does not create a refund policy, commercial guarantee or legally adopted terms of service.
+Reviewed **28 October 2026**, source revision `614d7cd`. This document specifies implemented version-3 payment rules and identifies undefined policies. It does not create a refund policy, commercial guarantee or legally adopted terms of service.
 
 ## 1. Networks, assets and payment modes
 
@@ -58,47 +58,47 @@ For a purchase price `P`, the distributor emits nineteen allocations:
 
 | Allocation | Recipient depth | Rate | Amount at P = 10 |
 | --- | --- | ---: | ---: |
-| Direct | Sponsor ancestor 1 | 50% | 5.00 |
-| Direct | Sponsor ancestor 2 | 20% | 2.00 |
-| Direct | Sponsor ancestor 3 | 10% | 1.00 |
-| Bonus | Each ancestor depth 1–15 | 1% per depth; 15% total | 0.10 per depth; 1.50 total |
+| Matrix | Parent slot, step 1 | 10% | 1.00 |
+| Matrix | Ancestor slot, step 2 | 20% | 2.00 |
+| Matrix | Ancestor slot, step 3 | 50% | 5.00 |
+| Unilevel | Binary placement parent through step 15 | 1% per step; 15% total | 0.10 per step; 1.50 total |
 | Base platform fee | Current fee recipient | 5% | 0.50 |
 | **Total** | | **100%** | **10.00** |
 
-Direct and bonus shares overlap: with fifteen eligible ancestors, depths 1/2/3 receive 51%/21%/11%; depths 4–15 receive 1% each. These are purchase-based payouts, not periodic interest or salary. An invitation alone does not pay a commission.
+The two trees may have different recipients. If members at the same depths coincide and all qualify, steps 1/2/3 receive combined shares of 11%/21%/51%; later steps receive 1%. An invitation alone does not pay a commission.
 
 ### Who qualifies as an upline?
 
-The API traverses the buyer's actual `sponsor_id` chain for up to fifteen ancestors. At quote preparation an eligible recipient must:
+Matrix ancestry follows the purchased level's slot parents for three steps. Unilevel follows `referral_placements` for fifteen steps, starting at the buyer's parent. At quote preparation an eligible recipient must:
 
-1. Have an activated referral code.
+1. Have purchased and unlocked the buyer's purchased level.
 2. Have an active account.
 3. Have a linked connected wallet in external mode, an embedded EVM wallet in embedded contract mode, or an internal ledger wallet in legacy ledger mode.
 
-The reviewed code **does not require an upline to own the buyer's purchased level**, have two direct referrals, complete a binary matrix, meet turnover targets or purchase a monthly renewal. Eligibility is attested by the server and snapshotted in the signed purchase quote. The contract does not independently query PostgreSQL membership or suspension status.
+Eligibility is attested by the server and snapshotted in the signed quote. The contract does not independently read PostgreSQL placement or suspension state. Matching purchased-level eligibility is required; monthly qualification is not implemented.
 
-### Missing recipients and highest-upline allocation
+### Missing or locked recipients
 
-Let `H` be the greatest ancestor depth among eligible uplines, within the first fifteen:
+Each share remains at its specified depth in its own tree:
 
 - Each direct share remains at its original depth. Missing/ineligible direct shares go to the platform fee recipient.
-- A bonus at a missing/ineligible depth **below H** also goes to the platform. Other ancestors do not move into that gap.
-- Bonus depths **after H** are combined into the highest eligible upline at depth H, in addition to its own 1%.
+- Every missing or locked unilevel share goes to the platform, including trailing depths.
+- Unused shares never combine into another member's payment.
 - If no ancestor is eligible, all direct and bonus shares go to the platform recipient, together with its base 5%.
 
-“Highest” means the furthest eligible ancestor in the chain, rather than the highest paid rank. A platform receipt can therefore exceed 5%. A recipient may receive several transfers from the same purchase.
+A platform receipt can exceed 5%. The same wallet may receive one matrix share and one unilevel share.
 
 ### Worked examples for a 10-token purchase
 
 | Eligible uplines | Result |
 | --- | --- |
-| All fifteen | Depth 1: 5.10; depth 2: 2.10; depth 3: 1.10; depths 4–15: 0.10 each; platform: 0.50 |
-| Only depth 1 | Depth 1: 6.50 (5.00 direct + the full 1.50 bonus pool); platform: 3.50 |
-| Depths 1–5 | Depth 1: 5.10; depth 2: 2.10; depth 3: 1.10; depth 4: 0.10; depth 5: 1.10; platform: 0.50 |
-| Depths 1, 3, 4, 5; depth 2 ineligible | Depth 1: 5.10; depth 3: 1.10; depth 4: 0.10; depth 5: 1.10; platform: 2.60, including depth 2's direct 2.00 and bonus 0.10 |
+| All positions eligible in both trees | Members: 9.50 total; platform: 0.50 |
+| Only the same parent in both trees | Parent: 1.10 (matrix 1.00 + unilevel 0.10); platform: 8.90 |
+| Only the matrix parent | Parent: 1.00; platform: 9.00 |
+| Only unilevel steps 1–5 | Five members: 0.10 each; platform: 9.50 |
 | None | Platform: 10.00 |
 
-Every example conserves the full purchase price. Rank projections depend on hypothetical qualifying purchases and are not guaranteed receipts. Matrix placement and display calculations do not add another payment or reinvestment charge.
+Every example conserves the full price. Registration reserves locked slots at all fifteen levels. Each matrix has two branches and three descendant rows (2/4/8); unilevel continues for fifteen steps. When the owner and fourteen descendants are paid at that level, the matrix recycles and queues the full next-level price from the member's wallet. A low balance or allowance keeps the upgrade queued. A finite approval for all levels starts at 327,670 tokens; only the current price is charged immediately. The quote authority relays upgrades and needs test POL. Level 15 recycles without level 16; a manually purchased next level is not charged again. See [complete cycle and approval rules](../matrix-payments.md).
 
 ## 4. Connected-wallet purchase lifecycle
 
@@ -112,9 +112,9 @@ sequenceDiagram
   participant Worker
   Member->>App: Choose next level
   App->>API: Prepare(level, requestKey)
-  API->>API: Validate ancestry, level, token and distributor v2
+  API->>API: Validate both trees, paid eligibility and distributor v3
   API-->>App: Persisted authorization and unsigned calls
-  App->>Wallet: Approve exact token amount if needed
+  App->>Wallet: Approve current price or finite remaining-level amount
   Wallet->>Contract: Signed purchase transaction
   App->>API: Confirm purchase ID and transaction hash
   Worker->>Contract: Read canonical receipt and events
@@ -122,11 +122,11 @@ sequenceDiagram
 ```
 
 1. Use the account's linked address on Amoy and select the next level.
-2. The server checks the distributor, token, pause state, authority signer, previous level, recipients, balance and allowance. New purchases require `distributionVersion() == 2`.
-3. A persisted EIP-712 authorization binds the unique purchase ID, buyer, next/previous levels, fifteen recipient slots, fee recipient, config nonce, deadline, chain and distributor.
+2. The server checks the distributor, token, pause state, authority signer, previous level, recipients, balance and allowance. New purchases require `distributionVersion() == 3`.
+3. A persisted EIP-712 authorization binds the ID, buyer, next/previous levels, eighteen recipient slots, fee recipient, config nonce, deadline, chain, distributor and matrix-cycle hash (zero for a manual purchase).
 4. External purchase quotes expire ten minutes after the latest chain timestamp used to prepare them. Embedded purchase quotes use one hour.
-5. When allowance is insufficient, the wallet signs an exact-price approval. A nonzero insufficient allowance first requires a reset to zero. Existing sufficient allowance needs no new approval.
-6. The wallet signs the purchase. The authority signature alone cannot spend buyer funds.
+5. The wallet approves the current price or the finite remaining-level ceiling selected for automatic upgrades. A nonzero insufficient allowance first requires a reset to zero. Existing sufficient allowance needs no new approval.
+6. The wallet signs a manual purchase. An automatic upgrade uses an authority-signed completed-cycle quote and a relayer transaction; it can spend the member's previously approved tokens.
 7. The contract collects the full price and pays the nineteen shares atomically. No purchase money is retained by the distributor after success.
 8. The platform waits for a canonical receipt and the configured number of confirmations, **two by default**, and checks sender, target, calldata, completion event and all nineteen share events.
 9. Only then does PostgreSQL record the paid level/commissions and activate a previously inactive member code. These commission records do not credit the legacy wallet again.
@@ -189,7 +189,7 @@ The sender provides their password, recipient numeric member ID, amount and requ
 
 ### Legacy level purchases
 
-Explicit embedded + ledger mode debits existing credits and allocates the same percentage schedule and trailing-bonus rule. Eligible uplines receive completed internal commission credits. Platform/base/missing-recipient shares become `payable` records at the snapshotted fee address: **they have not been transferred on-chain**.
+Explicit embedded + ledger mode debits existing credits and uses the same version-3 shares and matching-level eligibility. Completed matrices queue credit-funded upgrades. Eligible uplines receive completed internal commission credits. Platform/base/missing-recipient shares become `payable` records: **they have not been transferred on-chain**.
 
 `GET /api/admin/referral-accounting` groups those legacy payables by address. The project has no automatic payout executor or settlement endpoint for those platform payables. Historical paid records are not redistributed retroactively. Changing the legacy fee address affects future purchases only; an empty fee address blocks new ledger purchases.
 
@@ -214,7 +214,7 @@ There is no daily/monthly payout scheduler: qualifying contract commissions tran
 
 ## 10. Code references
 
-- [Prices, shares and highest-upline selection](../../shared/compensation.ts)
+- [Prices and fixed-depth shares](../../shared/compensation.ts)
 - [Distributor rules and owner controls](../../contracts/ReferralDistributor.sol), [test token and faucet](../../contracts/AmoyTestUSDT.sol)
 - [External eligibility/authorization](../../server/utils/external-wallet.ts), [receipt verification](../../server/lib/referral-chain.ts), [accounting and recovery](../../server/utils/referral-chain.ts)
 - [Send rules](../../server/lib/evm-send.ts), [worker](../../server/plugins/referral-reconciliation.ts)

@@ -220,7 +220,7 @@ Build release ใหม่แยกจากโฟลเดอร์ที่ก
 | HTTP 502 | Node service ทำงานหรือไม่, host/port ที่รับ request และ proxy upstream |
 | Wallet login ได้ 403/503 | `NUXT_PUBLIC_APP_URL` ต้องตรง, forwarded host/scheme และ environment เก่าใน process |
 | Cookie หรือ write request ถูกปฏิเสธ | HTTPS, proxy headers, Origin ของ browser และโดเมนหลัก |
-| Contract ใช้ไม่ได้ | Amoy RPC/80002, token/distributor ที่ถูกต้อง, version 2 และ quote signer ที่ตรงกัน |
+| Contract ใช้ไม่ได้ | Amoy RPC/80002, token/distributor ที่ถูกต้อง, version 3 และ quote signer ที่ตรงกัน เติม test POL ให้ signer สำหรับอัปเกรดอัตโนมัติ |
 | การซื้อค้าง | เก็บ purchase ID/hash ตรวจ RPC/receipt/confirmations และรอ reconciliation ก่อนส่งเงินซ้ำ |
 | Migration history/checksum ไม่ตรง | คืน SQL ที่ apply แล้วให้ตรงต้นฉบับ และเพิ่ม forward migration ใหม่เมื่อต้องเปลี่ยน schema |
 

@@ -1,11 +1,11 @@
 # UNXO system guide
 
-> Distribution version 3 supersedes the payment and tree rules reviewed below. See [current binary matrix, unilevel and automatic-upgrade rules](../matrix-payments.md). The older schedule below describes historical versions 1?2.
+Version-3 placement and payment rules: [matrix and automatic upgrades](../matrix-payments.md).
 
 
 [Documentation index](../README.md) · [ภาษาไทย](../th/system-guide.md) · [Payments and conditions](payments-and-conditions.md) · [Operations](operations.md) · [API](api-reference.md)
 
-Source review: **27 October 2026**, revision `3ffa828`. This guide covers the repository implementation. Live balances, contract addresses, operational settings and deployment health were not audited.
+Source review: **28 October 2026**, revision `614d7cd`. This guide covers the version-3 repository implementation. Live balances, operational settings and deployment health were not audited for this documentation update.
 
 ## 1. Purpose and scope
 
@@ -34,7 +34,7 @@ flowchart LR
   API --> AUTH[Server quote authority]
   AUTH --> Q[EIP-712 purchase authorization]
   Q --> UI
-  EW --> CONTRACT[ReferralDistributor v2]
+  EW --> CONTRACT[ReferralDistributor v3]
   CONTRACT --> TOKEN[Configured ERC-20]
   TOKEN --> RECIPIENTS[Eligible uplines and platform recipient]
   API --> WORKER[15-second reconciliation worker]
@@ -133,9 +133,9 @@ Every account receives a numeric `memberId`, starting from `1`. Its `referralCod
 
 An invite in `?ref=` can prefill sign-in from any page. The latest valid-looking incoming code is remembered in the browser tab; the server still validates sponsor availability. A sponsor must be activated and active. A member without a sponsor can attach one later, without a linking charge. An established sponsor cannot be replaced; self-sponsorship and cycles are rejected. Pending purchases block sponsor changes.
 
-Current public/member tree rendering follows **actual sponsor relationships**, ordered by registration time and ID. All direct referrals remain beneath their sponsor, including a third or later child. Two empty branches are a visual preview, rather than a limit of two direct referrals. Paths use sibling indices separated by `/`, such as `0/2/1`, for up to fifteen generations. Public tree requests allow `levels=1..15`, default `3`, clamped at the fifteenth generation.
+Public/member trees use **binary placement**, with two branches per slot. Extra invitations spill into available positions beneath existing referrals; the inviter's identity remains in `users.sponsor_id`. Matrix view covers three descendant steps (four rows with the owner), with purchase-level and cycle selectors. Unilevel view covers fifteen continuous steps. Paths contain only `0` and `1`, separated by `/`, such as `0/1/0`. The API defaults to a three-step unilevel window; the UI initially selects matrix view.
 
-The schema still contains `referral_placements` and binary-placement triggers from migration 0012. These are retained data; the current tree endpoint reads `users.sponsor_id`, and payment ancestry also follows the sponsor chain. A binary-looking diagram does not establish a separate binary payout engine.
+`referral_placements` stores continuous unilevel placement. Migration 0013 adds per-level `matrix_slots` and durable `matrix_auto_upgrades`. Matrix payments follow three slot ancestors; unilevel payments follow fifteen placement ancestors from the parent. Recipients must have unlocked the purchased level. A paid 2/4/8 matrix opens a same-level slot and queues a full-price wallet-funded next level; insufficient balance or approval leaves it queued. The quote authority attests completion and pays relayer gas using test POL.
 
 Authenticated referral lists and private network explorers cover up to fifteen generations and return at most 500 members with a `truncated` flag. Direct-count totals are separate. The public tree exposes numeric IDs, parent links and paths; it excludes names, internal UUIDs, credentials, balances, wallet addresses and account status. It does not require activation or a session merely to search an existing member ID.
 
@@ -153,7 +153,7 @@ Thai is the initial UI locale, regardless of browser language. `loop_locale` pre
 
 ## 8. Implemented limits
 
-Rank/matrix calculations are illustrations. The full 2/4/8 example gives `3.4 × price` across fourteen hypothetical purchases; fields such as `firstCycle = 0.8 × price` and `allocated = 0.2 × price` are display calculations. There is no implemented matrix recycling or automatic reinvestment engine behind those figures. Sample visitor members and “Qualified” labels do not prove actual paid eligibility.
+Rank projections remain illustrations. At 10%/20%/50%, a paid 2/4/8 matrix has a hypothetical gross matrix total of `5 × price`, before the separate full-price next-level purchase. Actual recycling and automatic upgrades use paid slot completion, durable jobs and wallet funds. The old `firstCycle`/`allocated` display fields do not reserve commissions. Sample visitor members and “Qualified” labels do not prove paid eligibility.
 
 The repository does not implement bank/card checkout, fiat cash-out, a credit-to-token redemption API, recurring subscriptions, KYC, tax reporting, refund processing, password recovery or wallet replacement. No expiry/renewal schedule for paid levels is enforced in the reviewed code. Conditions that need an operator policy are listed in the [payment guide](payments-and-conditions.md).
 

@@ -1,5 +1,7 @@
 # Binary matrix and unilevel payments (distribution version 3)
 
+[ภาษาไทย](th/matrix-payments.md) · [Documentation index](README.md) · [Deploy contracts](en/deploy-contracts.md)
+
 Level 1 costs 10 token units. Each subsequent level doubles, up to level 15.
 Members can purchase the next level themselves or receive a wallet-funded
 automatic upgrade after completing a paid matrix. The supplied deployment uses

@@ -9,7 +9,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const output = path.join(root, "docs", "pdf");
 const previews = path.join(root, ".data", "doc-summary-preview");
 const preview = process.argv.includes("--preview");
-const reviewedOn = "2026-10-27";
+const reviewedOn = "2026-10-28";
 const index = await readFile(path.join(root, "docs", "README.md"), "utf8");
 const revision = index.match(/revision `([a-f0-9]+)`/)?.[1];
 assert(revision, "The documentation index must identify its reviewed source revision.");
@@ -44,7 +44,7 @@ assert.equal(cumulative, 327670);
 
 const content = {
   en: {
-    lang: "en", name: "English", date: "27 October 2026", summary: "PROJECT SUMMARY", footer: "System · payments · conditions", page: "Page",
+    lang: "en", name: "English", date: "28 October 2026", summary: "PROJECT SUMMARY · V3", footer: "System · payments · conditions", page: "Page",
     titles: ["The system at a glance", "Payments & fifteen levels", "How commissions are paid", "Operations & key conditions"],
     leads: [
       "A concise guide to UNXO's member workspace, referral network, wallets and administrator tools.",
@@ -60,7 +60,7 @@ const content = {
     capabilities: [
       ["Member workspace", "Overview, referrals, wallet, explorer, FAQ, rank examples and analytics."],
       ["Accounts", "Wallet-message sign-in and identification by unique numeric member ID."],
-      ["Referral network", "Actual sponsor ancestry, public ID search, fifteen generations and CSV/SVG exports."],
+      ["Referral network", "Binary matrix (3 steps), continuous unilevel (15 steps), two branches, ID search and exports."],
       ["EVM wallet", "Linked address, POL/token reads, signed sends and indexed transaction history."],
       ["Administrator", "Credential login, member status management, suspend/reactivate, settings and audit."],
       ["Presentation", "Thai/English, light/dark themes, mobile layouts, keyboard controls and reduced motion."]
@@ -69,7 +69,7 @@ const content = {
     architecture: ["Nuxt / Vue UI", "Nitro API", "PostgreSQL"],
     architectureText: "The API attests eligibility; the wallet signs. ReferralDistributor v3 pays recipients on Amoy. A worker verifies receipts before recording activation and earnings.",
     rolesTitle: "Separate authorities",
-    roles: "Members sign transfers; admins manage accounts. Contract owners alone change on-chain settings or pause. Quote authorities attest eligibility and cannot sign a buyer's transfer.",
+    roles: "Members approve tokens. Owners configure contracts. The authority attests placement, eligibility and cycles, and relays approved upgrades using its test POL.",
     dataTitle: "Three balances with different meanings",
     balances: "Token holdings, confirmed commission history and legacy credits are separate. Linking does not move assets or convert credits.",
     modesHeaders: ["Mode", "Payment source / signer"],
@@ -80,21 +80,21 @@ const content = {
     flowTitle: "Default purchase flow",
     steps: [
       ["Prepare", "Check next level, token balance, ancestry, authority and distributor v3."],
-      ["Approve", "Wallet approves the exact price; reset a nonzero insufficient allowance first."],
+      ["Approve", "Approve this price or a finite ceiling for remaining levels. Reset a nonzero insufficient allowance first."],
       ["Purchase", "Wallet signs; the contract collects and distributes all nineteen shares atomically."],
-      ["Confirm", "Canonical receipt + all events + two confirmations by default activate the level in the app."]
+      ["Confirm", "A verified receipt, nineteen share events and two confirmations by default activate the paid level."]
     ],
     status: "<strong>Tracking:</strong> awaiting_signature → pending → confirmed / failed. External purchase quotes last ten minutes. Reuse the operation's request key on retries; a timeout does not prove failure.",
-    commissionLabels: ["Direct 1", "Direct 2", "Direct 3", "Bonuses", "Platform"],
+    commissionLabels: ["Matrix 1", "Matrix 2", "Matrix 3", "Unilevel", "Platform"],
     allocationHeaders: ["Allocation", "Rate", "At a 10-token purchase"],
-    allocationRows: [["Direct · depths 1 / 2 / 3", "10% / 20% / 50%", "1.00 / 2.00 / 5.00"], ["Bonus · depths 1–15", "1% each · 15% total", "0.10 each · 1.50 total"], ["Base platform share", "5%", "0.50"]],
-    overlap: "Direct and bonus shares overlap: with fifteen eligible uplines, depths 1/2/3 receive 51%/21%/11%; depths 4–15 receive 1% each.",
+    allocationRows: [["Matrix · steps 1 / 2 / 3", "10% / 20% / 50%", "1.00 / 2.00 / 5.00"], ["Unilevel · parent through step 15", "1% each · 15% total", "0.10 each · 1.50 total"], ["Base platform share", "5%", "0.50"]],
+    overlap: "The trees can have different recipients. Examples below assume the same members and eligibility at matching depths; combined first-three shares are then 11% / 21% / 51%.",
     eligibilityTitle: "Who can receive an upline payment?",
     eligibility: "Purchased matching level + active account + wallet for the selected mode. Eligibility is snapshotted in the quote.",
     redirectTitle: "Missing or locked recipients",
     redirects: [
       "Missing/ineligible <strong>direct</strong> shares go to the platform; ancestors do not move into those gaps.",
-      "Every missing or locked unilevel depth pays the platform. No shares combine into another member?s payout.",
+      "Every missing or locked unilevel depth pays the platform. No shares combine into another member's payout.",
       "With no eligible ancestor, the platform receives the full price. Its actual receipt can exceed the base 5%."
     ],
     examplesTitle: "Examples · price 10", examplesHeaders: ["Eligible uplines", "Result in token units"],
@@ -104,7 +104,7 @@ const content = {
       ["Depth 2 gap; 1,3,4,5 eligible", `Depths 1/3/4/5: ${[1,3,4,5].map(gap).join(" / ")}; platform: ${gap(0)}.`],
       ["None", `Platform: <strong>${none(0)}</strong>.`]
     ],
-    commissionNote: "Payouts arise from purchases, not invitations alone. Matrix/rank projections are illustrations: paid matrices recycle and queue wallet-funded upgrades; returns are not guaranteed. On-chain commissions are already transferred to recipient wallets; legacy credits are not credited again.",
+    commissionNote: "A paid 2/4/8 matrix opens a new same-level slot and queues a full-price next level from the member's wallet. Low balance/approval keeps it queued. Initial all-level approval caps at 327,670 tokens; the current purchase alone is charged now. Level 15 recycles without level 16.",
     controlsTitle: "Accounts, permissions and controls",
     controls: [
       "Member wallet sign-in uses a single-use five-minute message. Sessions last seven days; passwords are disabled for members by default. Admins use /admin/login.",
@@ -122,10 +122,10 @@ const content = {
     limits: "Approvals, purchases and sends need POL gas, including reverted attempts. A failed purchase reverts its token payouts, while separate approvals/gas can remain. No fiat checkout/cash-out, refund workflow, credit-to-token redemption, MFA, password recovery or linked-wallet replacement is implemented. Refund entitlements, withdrawal fees and commercial guarantees are not defined by the code.",
     readingTitle: "Full documentation", reading: "The complete guides are in the repository, alongside this summary:",
     readingLabels: ["System guide", "Payments and conditions", "Operations and recovery", "All 52 API routes"],
-    scope: "Source review: 27 October 2026 · revision " + revision + ". This summarizes implemented behavior; it does not certify a live deployment."
+    scope: "Source review: 28 October 2026 · revision " + revision + ". Version-3 rules; this does not certify a live deployment."
   },
   th: {
-    lang: "th", name: "ภาษาไทย", date: "27 ตุลาคม 2026", summary: "สรุปเอกสารโครงการ", footer: "ระบบ · การจ่ายเงิน · เงื่อนไข", page: "หน้า",
+    lang: "th", name: "ภาษาไทย", date: "28 ตุลาคม 2026", summary: "สรุปเอกสารโครงการ · V3", footer: "ระบบ · การจ่ายเงิน · เงื่อนไข", page: "หน้า",
     titles: ["ภาพรวมระบบ UNXO", "การชำระเงินและเลเวล (Level)", "การแบ่งจ่ายค่าคอมมิชชัน", "การดูแลระบบและเงื่อนไขสำคัญ"],
     leads: [
       "สรุปพื้นที่สมาชิก เครือข่ายผู้แนะนำ กระเป๋าเงิน และเครื่องมือผู้ดูแลของโปรเจกต์ UNXO",
@@ -141,7 +141,7 @@ const content = {
     capabilities: [
       ["พื้นที่สมาชิก", "ภาพรวม ผู้แนะนำ กระเป๋า Explorer, FAQ ตัวอย่าง rank และ analytics"],
       ["บัญชีผู้ใช้", "ลงชื่อเข้าด้วยลายเซ็นกระเป๋า และระบุสมาชิกด้วย ID ตัวเลขที่ไม่ซ้ำ"],
-      ["เครือข่าย", "สาย sponsor จริง ค้นหา ID สาธารณะ สูงสุด 15 รุ่น และส่งออก CSV/SVG"],
+      ["เครือข่าย", "ช่องละ 2 สาขา แมทริกซ์รอบละ 3 ขั้น และยูนิเลเวลต่อเนื่อง 15 ขั้น ค้นหา ID สาธารณะและส่งออกข้อมูล"],
       ["กระเป๋า EVM", "ที่อยู่ที่ผูก ยอด POL/โทเคน ส่งสินทรัพย์ด้วยลายเซ็น และประวัติจาก indexer"],
       ["ผู้ดูแล", "Login ด้วยข้อมูลบัญชี จัดการสถานะสมาชิก ระงับ/คืนสถานะ ตั้งค่า และ audit"],
       ["หน้าจอ", "ไทย/อังกฤษ ธีมสว่าง/มืด มือถือ แป้นพิมพ์ และ reduced motion"]
@@ -150,7 +150,7 @@ const content = {
     architecture: ["Nuxt / Vue UI", "Nitro API", "PostgreSQL"],
     architectureText: "API รับรองสายผู้แนะนำและสิทธิ์ กระเป๋าภายนอกลงนามซื้อ ส่วน ReferralDistributor v3 โอนเงินบน Amoy จากนั้น worker ตรวจ receipt ก่อนบันทึกเลเวล (Level) และรายได้ในแอป",
     rolesTitle: "แยกอำนาจแต่ละบทบาท",
-    roles: "สมาชิกควบคุมธุรกรรมกระเป๋า ผู้ดูแลจัดการบัญชีในแอป เฉพาะ owner สัญญาจึงเปลี่ยนผู้รับ ผู้ลงนาม หรือ pause บนเชนได้ Quote authority ลงนามโอนแทนผู้ซื้อไม่ได้",
+    roles: "สมาชิกอนุมัติโทเคน ผู้ดูแลจัดการบัญชี Owner ตั้งค่าสัญญา Authority รับรองผัง สิทธิ์ และรอบที่ครบ แล้วส่งอัปเกรดอัตโนมัติด้วยวงเงินที่สมาชิกอนุมัติ ต้องมี test POL จ่าย gas",
     dataTitle: "ยอดเงิน 3 แบบมีความหมายต่างกัน",
     balances: "สินทรัพย์บนเชน ประวัติคอมมิชชันที่ยืนยันแล้ว และเครดิตภายในเดิมเป็นคนละส่วน การผูกกระเป๋าไม่ย้ายสินทรัพย์เก่าหรือแปลงเครดิตให้",
     modesHeaders: ["โหมด", "แหล่งเงิน / ผู้ลงนาม"],
@@ -161,21 +161,21 @@ const content = {
     flowTitle: "ลำดับซื้อแบบค่าเริ่มต้น",
     steps: [
       ["เตรียม", "ตรวจเลเวล (Level) ถัดไป ยอดโทเคน สายผู้แนะนำ authority และ distributor v3"],
-      ["อนุมัติ", "Approve เท่าราคาซื้อ ถ้า allowance เดิมไม่เป็นศูนย์แต่ไม่พอ ให้ reset ก่อน"],
+      ["อนุมัติ", "เลือกราคาซื้อครั้งนี้ หรือวงเงินจำกัดสำหรับเลเวลที่เหลือเพื่อเปิดอัปเกรดอัตโนมัติ Reset วงเงินเดิมที่ไม่พอก่อน"],
       ["ซื้อ", "กระเป๋าลงนาม สัญญารับเงินและโอนทั้ง 19 ส่วนแบบ atomic"],
       ["ยืนยัน", "ตรวจ canonical receipt และ events ครบ พร้อม confirmation เริ่มต้น 2 ครั้ง จึงรับรองเลเวล (Level) ในแอป"]
     ],
     status: "<strong>สถานะ:</strong> awaiting_signature → pending → confirmed / failed Quote ภายนอกอายุ 10 นาที Retry ใช้ request key เดิม การ timeout ไม่ใช่หลักฐานว่าจ่ายล้มเหลว",
-    commissionLabels: ["ตรงชั้น 1", "ตรงชั้น 2", "ตรงชั้น 3", "โบนัส", "แพลตฟอร์ม"],
+    commissionLabels: ["แมทริกซ์ 1", "แมทริกซ์ 2", "แมทริกซ์ 3", "ยูนิเลเวล", "แพลตฟอร์ม"],
     allocationHeaders: ["ส่วนแบ่ง", "อัตรา", "เมื่อซื้อ 10 โทเคน"],
-    allocationRows: [["จ่ายตรง · ชั้น 1 / 2 / 3", "10% / 20% / 50%", "1.00 / 2.00 / 5.00"], ["โบนัส · ชั้น 1–15", "ชั้นละ 1% · รวม 15%", "ชั้นละ 0.10 · รวม 1.50"], ["ส่วนแพลตฟอร์มพื้นฐาน", "5%", "0.50"]],
-    overlap: "รับจ่ายตรงและโบนัสร่วมกันได้ ถ้ามีผู้มีสิทธิ์ครบ 15 ชั้น ชั้น 1/2/3 รับรวม 51%/21%/11% ส่วนชั้น 4–15 รับชั้นละ 1%",
+    allocationRows: [["แมทริกซ์ · ขั้น 1 / 2 / 3", "10% / 20% / 50%", "1.00 / 2.00 / 5.00"], ["ยูนิเลเวล · parent ถึงขั้น 15", "ขั้นละ 1% · รวม 15%", "ขั้นละ 0.10 · รวม 1.50"], ["ส่วนแพลตฟอร์มพื้นฐาน", "5%", "0.50"]],
+    overlap: "สองผังอาจจ่ายคนละคน ตัวอย่างด้านล่างสมมติสมาชิกและสิทธิ์ตรงกันทุกขั้น หากรับทั้งสองแผน ขั้น 1/2/3 จึงรวมเป็น 11% / 21% / 51%",
     eligibilityTitle: "ใครมีสิทธิ์รับส่วนของผู้แนะนำ",
-    eligibility: "ต้องเปิดรหัสแนะนำแล้ว บัญชี active และมีกระเป๋าตามโหมดที่ใช้งาน Server บันทึกสิทธิ์ตอนเตรียม quote ไม่บังคับซื้อ rank เท่าผู้ซื้อ มีลูกตรงสองคน หรือผ่านคุณสมบัติรายเดือน",
-    redirectTitle: "ผู้รับที่ขาดสิทธิ์และผู้แนะนำชั้นสูงสุด",
+    eligibility: "ต้องซื้อเลเวลเดียวกับรายการซื้อแล้ว บัญชี active และมีกระเป๋าตามโหมดที่ใช้งาน Server บันทึกสิทธิ์ตอนเตรียม quote ช่องที่ยังล็อกไม่รับส่วนของเลเวลนั้น",
+    redirectTitle: "กรณีไม่มีผู้รับหรือช่องยังล็อก",
     redirects: [
       "ส่วน<strong>จ่ายตรง</strong>ที่ไม่มีผู้มีสิทธิ์ไปแพลตฟอร์ม ไม่เลื่อนคนอื่นขึ้นมาแทนช่องนั้น",
-      "ช่องโบนัสที่ไม่มีสิทธิ์ก่อนถึงผู้มีสิทธิ์ที่ไกลที่สุดไปแพลตฟอร์ม แต่โบนัส<strong>ส่วนท้าย</strong>ที่เหลือรวมให้ผู้มีสิทธิ์ที่ไกลที่สุดคนนั้น",
+      "ยูนิเลเวลที่ขาดผู้รับหรือยังล็อกไปแพลตฟอร์มทุกขั้น ไม่รวมส่วนที่เหลือให้ผู้แนะนำคนอื่น",
       "ถ้าไม่มีผู้มีสิทธิ์เลย แพลตฟอร์มรับทั้งหมด ยอดที่แพลตฟอร์มรับจริงจึงอาจมากกว่าส่วนพื้นฐาน 5%"
     ],
     examplesTitle: "ตัวอย่าง · ซื้อราคา 10", examplesHeaders: ["ผู้มีสิทธิ์", "ผลในหน่วยโทเคน"],
@@ -185,11 +185,11 @@ const content = {
       ["มี 1,3,4,5 แต่ชั้น 2 ไม่มีสิทธิ์", `ชั้น 1/3/4/5: ${[1,3,4,5].map(gap).join(" / ")}; แพลตฟอร์ม ${gap(0)}`],
       ["ไม่มีเลย", `แพลตฟอร์ม <strong>${none(0)}</strong>`]
     ],
-    commissionNote: "คอมมิชชันเกิดจากการซื้อ ไม่ใช่แค่เชิญสมัคร ตัวเลข matrix/rank เป็นภาพประกอบ ไม่มีระบบ recycle หรือรับประกันรายได้ โทเคนคอมมิชชันอยู่ในกระเป๋าผู้รับแล้ว ไม่เพิ่มเครดิต ledger ซ้ำ",
+    commissionNote: "แมทริกซ์ชำระครบ 2/4/8 เปิดช่องเลเวลเดิมใหม่และเข้าคิวหักราคาเลเวลถัดไปเต็มจากกระเป๋า เงินหรือวงเงินไม่พอให้รอ วงเงินรวมเริ่มต้นสูงสุด 327,670 โทเคน แต่หักเฉพาะรายการปัจจุบันก่อน เลเวล 15 เปิดรอบใหม่ได้โดยไม่มีเลเวล 16",
     controlsTitle: "บัญชี สิทธิ์ และสวิตช์ควบคุม",
     controls: [
       "Member wallet login ใช้ข้อความครั้งเดียวอายุ 5 นาที Session 7 วัน ปิด member password login โดยเริ่มต้น ผู้ดูแลใช้ /admin/login",
-      "Sponsor ต้อง active และเปิดสิทธิ์ ผูกได้ครั้งเดียว ห้ามตนเอง/วงจร ลูกตรงทุกคนอยู่ใต้ sponsor จริง รวมคนที่ 3 เป็นต้นไป",
+      "Sponsor ต้อง active และเปิดสิทธิ์ ผูกได้ครั้งเดียว ห้ามตนเอง/วงจร ตำแหน่งละ 2 สาขา ผู้เชิญเพิ่มลงช่องว่างต่อใต้สมาชิกเดิม",
       "ปิดสมัครหยุดบัญชีใหม่ ปิด funding หยุดเฉพาะขอเติมเครดิตเดิม Pause สัญญาใช้ owner การระงับบัญชีไม่อายัดกระเป๋าภายนอก"
     ],
     legacyTitle: "การตรวจรับเงินเดิมแยกจาก on-chain",
@@ -203,7 +203,7 @@ const content = {
     limits: "Approve ซื้อ และส่งต้องมี POL gas รวมกรณี revert หาก purchase ล้มเหลวจะย้อนการจ่ายโทเคนทั้งหมด แต่ approve/gas แยกอาจคงอยู่ ยังไม่มีชำระ/ถอนเงินสด คืนเงิน แปลงเครดิตเป็นโทเคน MFA กู้รหัสผ่าน หรือเปลี่ยนกระเป๋าที่ผูก โค้ดไม่ได้กำหนดสิทธิ์คืนเงิน ค่าถอน หรือการรับประกันเชิงพาณิชย์",
     readingTitle: "เอกสารฉบับเต็ม", reading: "อ่านรายละเอียดใน repository ซึ่งเก็บคู่มือไว้ควบคู่กับไฟล์สรุปนี้:",
     readingLabels: ["คู่มือระบบ", "การจ่ายเงินและเงื่อนไข", "ติดตั้ง ดูแล และกู้สถานะ", "API ทั้ง 52 เส้นทาง"],
-    scope: "ตรวจโค้ด 27 ตุลาคม 2026 · revision " + revision + " สรุปสิ่งที่รองรับในโปรเจกต์ ไม่ได้ตรวจรับรอง deployment ที่เปิดอยู่"
+    scope: "ตรวจโค้ด 28 ตุลาคม 2026 · revision " + revision + " กติกาเวอร์ชัน 3 ไม่ได้รับรองสถานะ deployment ที่เปิดอยู่"
   }
 };
 
@@ -226,7 +226,7 @@ body{font-family:Summary,sans-serif;font-size:9pt;line-height:1.6;-webkit-print-
 .brand{font-family:Manrope,Summary,sans-serif;font-size:19pt;letter-spacing:3px;font-weight:800}.brand i{color:#b38a3d;font-style:normal}
 .edition{text-align:right;color:#686b61;font-size:7.3pt}.eyebrow{font-size:7.2pt;letter-spacing:1.7px;color:#8c6629;font-weight:700;margin:0 0 2mm}
 h1{font-size:26pt;font-weight:750;line-height:1.22;letter-spacing:-.7px;margin:0 0 3mm;font-family:Manrope,Summary,sans-serif}
-[lang=th] h1{font-family:Summary,sans-serif;font-size:24pt;line-height:1.5;letter-spacing:-.4px}h2{font-size:12pt;line-height:1.4;margin:5mm 0 2.5mm;font-weight:750}
+.sheet[lang=th] h1{font-family:Summary,sans-serif;font-size:24pt;line-height:1.5;letter-spacing:-.4px}h2{font-size:12pt;line-height:1.4;margin:5mm 0 2.5mm;font-weight:750}
 h3{font-size:9pt;margin:0 0 1.4mm;font-weight:750}p{margin:0 0 2.4mm}.lead{font-size:10pt;line-height:1.65;color:#5c6258;margin:0 0 4mm;max-width:166mm}
 .callout{background:#f4eddf;border-left:3px solid #b38a3d;padding:3mm 4mm;border-radius:0 5px 5px 0;margin:3mm 0}
 .callout h3{font-size:7.5pt;letter-spacing:.6px;color:#825c21}.callout p:last-child,.box p:last-child{margin-bottom:0}

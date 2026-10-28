@@ -220,7 +220,7 @@ Keep the previous artifact for application rollback, but confirm that it support
 | HTTP 502 | Node service running, listening host/port and proxy upstream |
 | Wallet login returns 403/503 | Exact `NUXT_PUBLIC_APP_URL`, forwarded host/scheme and stale process environment |
 | Cookie or write request rejected | HTTPS, proxy headers, matching browser Origin and canonical domain |
-| Contract unavailable | Amoy RPC/80002, correct token/distributor, version 2 and matching quote signer |
+| Contract unavailable | Amoy RPC/80002, correct token/distributor, version 3 and matching quote signer; fund the signer with test POL for automatic upgrades |
 | Pending purchase | Preserve purchase ID/hash, inspect RPC/receipts/confirmations and allow reconciliation; avoid submitting a second payment blindly |
 | Migration history/checksum mismatch | Restore the original applied SQL; create a new forward migration for changes |
 

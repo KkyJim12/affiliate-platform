@@ -2,7 +2,7 @@
 
 [สารบัญเอกสาร](../README.md) · [English](../en/operations.md) · [ระบบ](system-guide.md) · [การจ่ายเงิน](payments-and-conditions.md) · [API](api-reference.md)
 
-ตรวจสอบวันที่ **27 ตุลาคม 2026** revision `3ffa828` คำสั่งด้านล่างเป็นคู่มือสำหรับผู้ปฏิบัติงาน การจัดทำเอกสารครั้งนี้ไม่ได้ deploy สัญญา reset ฐานข้อมูล หรือโอนสินทรัพย์
+ตรวจสอบวันที่ **28 ตุลาคม 2026** revision `614d7cd` คำสั่งด้านล่างเป็นคู่มือสำหรับผู้ปฏิบัติงาน การจัดทำเอกสารครั้งนี้ไม่ได้ deploy สัญญา reset ฐานข้อมูล หรือโอนสินทรัพย์
 
 ## 1. ติดตั้งในเครื่อง
 
@@ -51,7 +51,7 @@ Nuxt runtime อ่านค่าจาก environment ชื่อ `NUXT_*` �
 | `NUXT_EVM_MIN_CONFIRMATIONS` | จำนวน confirmation สำหรับ generic evidence/send โดย Send เริ่มต้น 2 |
 | `NUXT_EVM_EXPLORER_API_KEY` | Etherscan V2 key ส่วนตัวที่อ่าน Amoy ได้สำหรับประวัติกระเป๋า ถ้าไม่มี/เสียจะแสดงไม่พร้อม |
 | `NUXT_REFERRAL_PAYMENT_MODE` | `contract`; `ledger` มีผลเฉพาะ embedded wallet mode |
-| `NUXT_REFERRAL_CONTRACT_ADDRESS` | ที่อยู่ distributor การซื้อใหม่ต้องเป็น distribution version 2 |
+| `NUXT_REFERRAL_CONTRACT_ADDRESS` | ที่อยู่ distributor การซื้อใหม่ต้องเป็น distribution version 3 |
 | `NUXT_REFERRAL_AUTHORITY_PRIVATE_KEY` | Private key ลงนาม quote ตอนรัน ที่อยู่ต้องตรง `quoteSigner` บนเชน |
 | `NUXT_REFERRAL_MIN_CONFIRMATIONS` | `2`; รับค่า policy การยืนยัน referral 1–100 |
 | `NUXT_REFERRAL_MIN_GAS_BALANCE` | `0.003` POL เป็นงบแสดงขั้นต่ำงานผู้ดูแล ไม่ใช่การตรวจก่อนซื้อ |
@@ -113,12 +113,13 @@ npm run contracts:deploy -- --replace-distributor --previous-contract <CURRENT_D
 | `referral_chain_fee_updates`, `referral_chain_transactions` | Embedded fee updates และ outbox signed transactions |
 | `evm_sends`, `external_wallet_operations` | Embedded send quotes/รายการส่ง และ connected send/fee intents |
 | `referral_code_aliases`, `referral_id_counter` | รหัสเชิญเดิมและลำดับรหัสตัวเลข |
-| `referral_placements` | ข้อมูล binary ที่เก็บไว้ ผังและการจ่ายปัจจุบันอิง `users.sponsor_id` |
+| `referral_placements` | ผังยูนิเลเวลไบนารีต่อเนื่อง เริ่มจ่ายจาก parent ตามตำแหน่งของผู้ซื้อ |
+| `matrix_slots`, `matrix_auto_upgrades` | รอบแมทริกซ์แยกเลเวลลึก 3 ขั้น สิทธิ์ซื้อแล้ว และคิวหักเงินอัปเกรดถาวร เติม test POL ให้ `quoteSigner()` สำหรับ gas ของ relayer |
 | `schema_migrations` | ชื่อ migration, SHA-256 checksum และเวลา จัดการโดย migration runner |
 
 เงินภายในใช้ BIGINT หน่วยหนึ่งในล้าน ตรวจว่าไม่ติดลบและอยู่ใน safe integer ชื่อบัญชีและที่อยู่กระเป๋ามีข้อกำหนด unique แบบไม่แยกตัวพิมพ์ Request key เลเวล (Level) ที่ซื้อ hash ธุรกรรม และ reference ตรวจรับเงินมี unique constraints ตามส่วนงาน โอน ledger ล็อกกระเป๋าตามลำดับ เปลี่ยนสายผู้แนะนำใช้ advisory transaction lock และงานเชนใช้การควบคุมแยกตามบัญชี ข้อมูลและบัญชีที่เกี่ยวข้อง commit พร้อมกัน
 
-Migration ปัจจุบันเรียง `0001` ถึง `0012` Server ทำ pending migrations ก่อนเปิดให้บริการ `npm run db:status` อ่านประวัติ ส่วน `npm run db:migrate` รัน SQL ที่ยังไม่ใช้ ทั้ง batch และ history commit ใน transaction เดียว ป้องกันรันแข่งด้วย advisory lock Checksum ปรับ line ending Windows ให้ตรงกัน หากแก้/ลบ migration ที่ใช้แล้วจะตรวจไม่ผ่านและหยุดเริ่มระบบ ต้องเพิ่มไฟล์เลขใหม่ ไม่มี rollback migration แยกรายตัว
+Migration ปัจจุบันเรียง `0001` ถึง `0013` Server ทำ pending migrations ก่อนเปิดให้บริการ `npm run db:status` อ่านประวัติ ส่วน `npm run db:migrate` รัน SQL ที่ยังไม่ใช้ ทั้ง batch และ history commit ใน transaction เดียว ป้องกันรันแข่งด้วย advisory lock Checksum ปรับ line ending Windows ให้ตรงกัน หากแก้/ลบ migration ที่ใช้แล้วจะตรวจไม่ผ่านและหยุดเริ่มระบบ ต้องเพิ่มไฟล์เลขใหม่ ไม่มี rollback migration แยกรายตัว
 
 ### สำรอง Reset และนำเข้า SQLite เดิม
 
@@ -190,7 +191,7 @@ API ใช้ `no-store` Proxy ที่แชร์ต้องเคารพ�
 | Wallet login ปฏิเสธ host | ตั้ง scheme/host/port ให้ตรง `NUXT_PUBLIC_APP_URL` และ restart |
 | สมาชิกใหม่สมัครไม่ได้ | ตรวจ `registrationOpen`, activation/status ของ invite, wallet uniqueness และ mode |
 | ไม่มี/ใช้ member password login ไม่ได้ | ค่าเริ่มต้นปิดไว้ บัญชี external ที่ผูกแล้วใช้กระเป๋า ผู้ดูแลใช้ `/admin/login` |
-| สัญญาไม่พร้อม | ตรวจ RPC/80002, code ที่ deploy, version 2, token, authority signer และ environment ของ server |
+| สัญญาไม่พร้อม | ตรวจ RPC/80002, code ที่ deploy, version 3, token, authority signer และ environment ของ server |
 | ซื้อเลเวล (Level) ต่อไม่ได้ | ตรวจเลเวล (Level) ถัดไป โทเคนพอ pause รายการค้าง อายุ quote และ config nonce |
 | Purchase pending | เก็บ ID/hash ตรวจ receipt canonical, confirmations, POL และ RPC ให้ worker ตรวจต่อก่อนลองใหม่ |
 | Send pending หลัง replace | เก็บ hash เดิม/ใหม่ ตรวจผู้ส่ง nonce และ receipt ยังไม่มี auto-discovery สำหรับ Send อย่าส่งซ้ำทันที |
