@@ -76,12 +76,13 @@ const number = (value: number) => value.toLocaleString(localeTag.value);
       </div>
       <div v-if="mode === 'matrix'" class="binary-tree-options">
         <AppDropdown v-model="programLevel" :label="t('ranksPage.selectLevel')" compact :options="Array.from({ length: 15 }, (_,index) => ({ value: index + 1,label: t('ranksPage.level') + ' ' + (index + 1) }))" />
-        <AppDropdown v-if="(tree?.cycles?.length ?? 0) > 1" v-model="cycle" :label="t('matrix.slot')" compact :options="(tree?.cycles ?? []).map(value => ({ value,label: t('matrix.slotNumber', { number: value + 1 }) }))" />
+        <AppDropdown v-if="(tree?.cycles?.length ?? 0) > 1" v-model="cycle" :label="t('matrix.slot')" compact :options="(tree?.cycles ?? []).map(value => ({ value,label: value === 0 ? t('matrix.initialSlot') : t('matrix.rebirthNumber', { number: value }) }))" />
       </div>
     </div>
     <p class="binary-tree-note">{{ t(mode === 'matrix' ? 'matrix.treeHint' : 'matrix.unilevelHint') }}</p>
     <div v-if="error" class="binary-tree-message" role="alert"><AppIcon name="Search" :size="28" /><p>{{ failed }}</p><button class="button button-outline button-small" @click="refresh()">{{ t('publicTree.retry') }}</button></div>
     <template v-else-if="tree">
+      <p v-if="mode === 'matrix'" class="binary-tree-note" data-testid="matrix-slot-summary">{{ t('matrix.slotProgress', { number: cycle + 1, filled: tree.levels.reduce((total, row) => total + row.filled, 0), capacity: 14 }) }}</p>
       <div class="binary-tree-header">
         <div>
           <span class="eyebrow">{{ t('publicTree.structure') }}</span>

@@ -2,7 +2,7 @@
 
 [Documentation index](../README.md) · [ภาษาไทย](../th/operations.md) · [System](system-guide.md) · [Payments](payments-and-conditions.md) · [API](api-reference.md)
 
-Reviewed **28 October 2026**, revision `614d7cd`. Commands below are operator instructions; writing this documentation did not deploy contracts, reset databases or transfer assets.
+Reviewed **28 October 2026**, revision `cf2583b` plus the rebirth and unilevel-upgrade changes in the working tree. Commands below are operator instructions; writing this documentation did not deploy contracts, reset databases or transfer assets.
 
 ## 1. Local installation
 

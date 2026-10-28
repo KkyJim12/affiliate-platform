@@ -165,9 +165,9 @@ export async function reconcileChainPurchase(purchase: ChainPurchaseRow): Promis
       evidence.status, evidence.receipt.blockNumber, evidence.receipt.blockHash, new Date().toISOString(), purchase.id, evidence.receipt.hash);
     if (evidence.status === "confirmed") {
       await unlockMatrixLevel(purchase.user_id, purchase.level);
-      await db().execute("UPDATE matrix_auto_upgrades SET status = 'completed',last_error = NULL WHERE purchase_id = $1", purchase.id);
+      await db().execute("UPDATE referral_auto_upgrades SET status = 'completed',last_error = NULL WHERE purchase_id = $1", purchase.id);
     } else {
-      await db().execute("UPDATE matrix_auto_upgrades SET status = 'queued',purchase_id = NULL,last_error = 'The upgrade transaction reverted; it will be retried.' WHERE purchase_id = $1", purchase.id);
+      await db().execute("UPDATE referral_auto_upgrades SET status = 'queued',purchase_id = NULL,last_error = 'The upgrade transaction reverted; it will be retried.' WHERE purchase_id = $1", purchase.id);
     }
   });
   return (await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE id = $1", purchase.id))!;
@@ -234,27 +234,27 @@ export async function reconcilePendingChainOperations() {
     for (const row of purchases) { try { await reconcileChainPurchase(row); } catch { /* Retry on the next reconciliation pass. */ } }
     const updates = await db().all<FeeUpdateRow>("SELECT * FROM referral_chain_fee_updates WHERE status = 'pending' ORDER BY created_at LIMIT 5");
     for (const row of updates) { try { await reconcileFeeUpdate(row); } catch { /* Preserve indeterminate transactions. */ } }
-    await processMatrixAutoUpgrades();
+    await processReferralAutoUpgrades();
   } finally { sweeping = false; }
 }
 
-async function processMatrixAutoUpgrades() {
+async function processReferralAutoUpgrades() {
   const reader = referralChainClient();
   if (!reader) return;
   // One persisted relayer transaction at a time, across app instances. This
   // avoids reusing an authority nonce when broadcasting times out.
   await withWalletLock("referral-auto-upgrade-relayer", async () => {
     if (await db().one("SELECT id FROM referral_chain_purchases WHERE signing_mode = 'automatic' AND status = 'pending' LIMIT 1")) return;
-    const jobs = await db().all<{ cycle_id: string; user_id: string; level: number }>("SELECT * FROM matrix_auto_upgrades WHERE status = 'queued' ORDER BY COALESCE(last_attempt_at,created_at),cycle_id LIMIT 20");
+    const jobs = await db().all<{ cycle_id: string; user_id: string; level: number }>("SELECT * FROM referral_auto_upgrades WHERE status = 'queued' ORDER BY COALESCE(last_attempt_at,created_at),level,cycle_id LIMIT 20");
     for (const job of jobs) {
-      await db().execute("UPDATE matrix_auto_upgrades SET last_attempt_at = $1 WHERE cycle_id = $2", new Date().toISOString(),job.cycle_id);
+      await db().execute("UPDATE referral_auto_upgrades SET last_attempt_at = $1 WHERE cycle_id = $2", new Date().toISOString(),job.cycle_id);
       try {
         const purchase = await withWalletLock(job.user_id, () => transaction(async () => {
           await db().execute("SELECT pg_advisory_xact_lock(782438, 2)");
           if (await db().one("SELECT user_id FROM user_access WHERE user_id = $1 AND status <> 'active'",job.user_id)) throw new Error("Waiting for an active member account.");
           const program = await referralProgram(job.user_id);
           if (program.currentLevel >= job.level) {
-            await db().execute("UPDATE matrix_auto_upgrades SET status = 'superseded',last_error = NULL WHERE cycle_id = $1", job.cycle_id);
+            await db().execute("UPDATE referral_auto_upgrades SET status = 'superseded',last_error = NULL WHERE cycle_id = $1", job.cycle_id);
             return null;
           }
           if (program.nextLevel !== job.level || await pendingChainPurchase(job.user_id)) return null;
@@ -277,10 +277,10 @@ async function processMatrixAutoUpgrades() {
           await db().execute(`INSERT INTO referral_chain_purchases
             (id,user_id,request_key,level,amount,chain_id,contract_address,token_address,buyer_address,fee_recipient_address,payload,status,signing_mode,transaction_hash,created_at,updated_at)
             VALUES($1,$2,$3,$4,$5,80002,$6,$7,$8,$9,$10,'pending','automatic',$11,$12,$12)`,
-            id,job.user_id,`matrix-auto:${id}`,job.level,levelPrice(job.level) * ledgerScale,getAddress(reader.config.contractAddress),
+            id,job.user_id,`referral-auto:${id}`,job.level,levelPrice(job.level) * ledgerScale,getAddress(reader.config.contractAddress),
             getAddress(reader.config.tokenAddress),wallet.address,state.feeRecipient,JSON.stringify(payload),prepared[0]!.hash,timestamp);
           await saveTransactions(job.user_id, id, prepared);
-          await db().execute("UPDATE matrix_auto_upgrades SET status = 'pending',purchase_id = $1,last_error = NULL WHERE cycle_id = $2", id,job.cycle_id);
+          await db().execute("UPDATE referral_auto_upgrades SET status = 'pending',purchase_id = $1,last_error = NULL WHERE cycle_id = $2", id,job.cycle_id);
           return (await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE id = $1", id))!;
         }));
         if (purchase) { await reconcileChainPurchase(purchase); break; }
@@ -288,7 +288,7 @@ async function processMatrixAutoUpgrades() {
         // Persist only our own public explanations, never RPC payloads or raw txs.
         const message = error instanceof Error && /^(Waiting for |Automatic upgrades are paused)/.test(error.message)
           ? error.message : "Automatic upgrade will retry when the contract and relayer are available.";
-        await db().execute("UPDATE matrix_auto_upgrades SET last_error = $1 WHERE cycle_id = $2 AND status = 'queued'", message,job.cycle_id);
+        await db().execute("UPDATE referral_auto_upgrades SET last_error = $1 WHERE cycle_id = $2 AND status = 'queued'", message,job.cycle_id);
       }
     }
   }).catch(() => {});

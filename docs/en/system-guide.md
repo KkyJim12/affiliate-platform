@@ -5,7 +5,7 @@ Version-3 placement and payment rules: [matrix and automatic upgrades](../matrix
 
 [Documentation index](../README.md) · [ภาษาไทย](../th/system-guide.md) · [Payments and conditions](payments-and-conditions.md) · [Operations](operations.md) · [API](api-reference.md)
 
-Source review: **28 October 2026**, revision `614d7cd`. This guide covers the version-3 repository implementation. Live balances, operational settings and deployment health were not audited for this documentation update.
+Source review: **28 October 2026**, revision `cf2583b` plus the rebirth and unilevel-upgrade changes in the working tree. This guide covers the version-3 repository implementation. Live balances, operational settings and deployment health were not audited for this documentation update.
 
 ## 1. Purpose and scope
 
@@ -135,7 +135,7 @@ An invite in `?ref=` can prefill sign-in from any page. The latest valid-looking
 
 Public/member trees use **binary placement**, with two branches per slot. Extra invitations spill into available positions beneath existing referrals; the inviter's identity remains in `users.sponsor_id`. Matrix view covers three descendant steps (four rows with the owner), with purchase-level and cycle selectors. Unilevel view covers fifteen continuous steps. Paths contain only `0` and `1`, separated by `/`, such as `0/1/0`. The API defaults to a three-step unilevel window; the UI initially selects matrix view.
 
-`referral_placements` stores continuous unilevel placement. Migration 0013 adds per-level `matrix_slots` and durable `matrix_auto_upgrades`. Matrix payments follow three slot ancestors; unilevel payments follow fifteen placement ancestors from the parent. Recipients must have unlocked the purchased level. A paid 2/4/8 matrix opens a same-level slot and queues a full-price wallet-funded next level; insufficient balance or approval leaves it queued. The quote authority attests completion and pays relayer gas using test POL.
+`referral_placements` stores continuous unilevel placement. Migration 0013 adds per-level `matrix_slots`; migration 0014 adds incremental `unilevel_progress` and the shared durable `referral_auto_upgrades` queue. Matrix payments follow three slot ancestors; unilevel payments follow fifteen placement ancestors from the parent. Recipients must have unlocked the purchased level. Each paid 2/4/8 matrix slot opens a rebirth with the same rules. A full fifteen-row unilevel tree has 65,534 paid descendants and does not rebirth. Each new completion reserves a full-price wallet purchase of the next unowned level, up to 15. Rebirths can advance later levels even when their source slot is level 1. Insufficient balance or approval leaves jobs queued. The quote authority attests completion and pays relayer gas using test POL. Existing version-3 distributors support both completion proofs without redeployment.
 
 Authenticated referral lists and private network explorers cover up to fifteen generations and return at most 500 members with a `truncated` flag. Direct-count totals are separate. The public tree exposes numeric IDs, parent links and paths; it excludes names, internal UUIDs, credentials, balances, wallet addresses and account status. It does not require activation or a session merely to search an existing member ID.
 

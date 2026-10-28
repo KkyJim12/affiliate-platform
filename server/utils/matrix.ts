@@ -8,8 +8,8 @@ export async function unlockMatrixLevel(userId: string, level: number, database 
   await database.execute("SELECT pg_advisory_xact_lock(782438, 2)");
   await database.execute("UPDATE matrix_slots SET unlocked = TRUE WHERE user_id = $1 AND level <= $2", userId, level);
   const full = await database.all<MatrixSlot>(`WITH RECURSIVE ancestors AS (
-    SELECT id,parent_id,0 AS depth FROM matrix_slots WHERE user_id = $1 AND level = $2
-    UNION ALL SELECT s.id,s.parent_id,a.depth+1 FROM ancestors a JOIN matrix_slots s ON s.id = a.parent_id WHERE a.depth < 3
+    SELECT id,parent_id,0 AS depth FROM matrix_slots WHERE user_id = $1 AND level <= $2
+    UNION SELECT s.id,s.parent_id,a.depth+1 FROM ancestors a JOIN matrix_slots s ON s.id = a.parent_id WHERE a.depth < 3
   ), descendants AS (
     SELECT s.id AS root,s.id,0 AS depth,s.unlocked FROM matrix_slots s WHERE s.id IN (SELECT id FROM ancestors)
     UNION ALL SELECT d.root,s.id,d.depth+1,s.unlocked FROM descendants d JOIN matrix_slots s ON s.parent_id = d.id WHERE d.depth < 3
@@ -19,14 +19,25 @@ export async function unlockMatrixLevel(userId: string, level: number, database 
   const now = new Date().toISOString();
   for (const slot of full) {
     await database.execute("UPDATE matrix_slots SET completed_at = $1 WHERE id = $2 AND completed_at IS NULL", now, slot.id);
-    // Recycle even at the final level. Extra cycles are separate roots so a
-    // matrix always displays exactly three descendant rows.
-    await database.execute(`INSERT INTO matrix_slots(id,user_id,level,cycle,unlocked,created_at)
-      VALUES($1,$2,$3,$4,TRUE,$5) ON CONFLICT(user_id,level,cycle) DO NOTHING`,
-      `matrix:${slot.level}:${slot.user_id}:${slot.cycle + 1}`, slot.user_id, slot.level, slot.cycle + 1, now);
-    if (slot.level < 15) await database.execute(`INSERT INTO matrix_auto_upgrades(cycle_id,user_id,level,created_at)
-      VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING`, slot.id, slot.user_id, slot.level + 1, now);
+    // Preserve every older cycle. Ensure an available rebirth even when later
+    // slots are already structurally full but some members have not paid yet.
+    const available = await database.one(`WITH RECURSIVE positions AS (
+      SELECT id AS root,id,0 AS depth FROM matrix_slots WHERE user_id = $1 AND level = $2 AND completed_at IS NULL
+      UNION ALL SELECT p.root,s.id,p.depth+1 FROM positions p JOIN matrix_slots s ON s.parent_id = p.id WHERE p.depth < 3
+    ) SELECT root FROM positions GROUP BY root HAVING COUNT(*) < 15 LIMIT 1`, slot.user_id,slot.level);
+    if (!available) {
+      const next = await database.one<{ cycle: number }>("SELECT MAX(cycle) + 1 AS cycle FROM matrix_slots WHERE user_id = $1 AND level = $2",slot.user_id,slot.level);
+      await database.execute(`INSERT INTO matrix_slots(id,user_id,level,cycle,unlocked,created_at) VALUES($1,$2,$3,$4,TRUE,$5)`,
+        `matrix:${slot.level}:${slot.user_id}:${next!.cycle}`,slot.user_id,slot.level,next!.cycle,now);
+    }
+    await database.execute("SELECT queue_referral_upgrade($1,$2,$3,'matrix',$1)",slot.id,slot.user_id,slot.level);
   }
+  // Reconcile imported lower levels too. The progress function walks at most
+  // fifteen placement ancestors and never recycles the continuous unilevel tree.
+  const tiers = await database.all<{ level: number }>(`SELECT s.level FROM matrix_slots s
+    LEFT JOIN unilevel_progress p ON p.user_id = s.user_id AND p.level = s.level
+    WHERE s.user_id = $1 AND s.cycle = 0 AND s.unlocked AND (s.level = $2 OR p.user_id IS NULL) ORDER BY s.level`,userId,level);
+  for (const tier of tiers) await database.execute("SELECT refresh_unilevel_progress($1,$2)",userId,tier.level);
 }
 
 export const matrixCycleHash = (cycleId: string) => hashId(cycleId);

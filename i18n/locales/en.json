@@ -1149,10 +1149,13 @@
     "unilevel": "Unilevel",
     "slot": "Matrix slot",
     "slotNumber": "Slot {number}",
-    "treeHint": "Two branches per slot, three descendant rows (four rows including you). A full paid matrix opens another slot and queues the next level.",
-    "unilevelHint": "Continuous binary placement, up to 15 steps. Extra invitations spill into the first available position below your referrals.",
+    "initialSlot": "Initial slot",
+    "rebirthNumber": "Rebirth {number}",
+    "slotProgress": "Slot {number}: {filled}/{capacity} positions occupied. All positions must own this level to complete the slot.",
+    "treeHint": "Two branches per slot and three descendant rows. Each full paid slot opens a rebirth slot and queues your next unowned level, up to level 15. Rebirth slots fill the same way.",
+    "unilevelHint": "Continuous binary placement with 15 descendant rows (65,534 positions). When you and every position own a level, its completion queues your next unowned level, up to level 15. The tree continues without rebirth.",
     "autoApproval": "Enable automatic upgrades: approve up to {amount} {symbol} for this and remaining levels.",
-    "approvalHint": "Only this purchase is charged now. When a paid matrix fills, the next-level price is deducted from your wallet using its token approval. You can revoke approval in your wallet. Insufficient funds or approval keeps the upgrade queued.",
+    "approvalHint": "Only this purchase is charged now. A full paid matrix slot or 15-step unilevel tree queues your next unowned level, up to level 15. Its full price is deducted from your wallet using token approval. You can revoke approval in your wallet. Insufficient funds or approval keeps the upgrade queued.",
     "upgradeQueued": "Automatic upgrade to level {level} is queued.",
     "upgradeWaiting": "Waiting for funds, token approval or the upgrade service."
   }

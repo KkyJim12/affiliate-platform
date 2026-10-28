@@ -72,26 +72,26 @@ export async function buyReferralLevel(userId: string, level: number, requestKey
 }
 
 let upgrading = false;
-export async function processLedgerMatrixUpgrades() {
+export async function processLedgerReferralUpgrades() {
   if (upgrading || referralPaymentMode() !== "ledger") return;
   upgrading = true;
   try {
-    const jobs = await db().all<{ cycle_id: string; user_id: string; level: number }>("SELECT * FROM matrix_auto_upgrades WHERE status = 'queued' ORDER BY COALESCE(last_attempt_at,created_at) LIMIT 20");
+    const jobs = await db().all<{ cycle_id: string; user_id: string; level: number }>("SELECT * FROM referral_auto_upgrades WHERE status = 'queued' ORDER BY COALESCE(last_attempt_at,created_at),level,cycle_id LIMIT 20");
     for (const job of jobs) {
-      await db().execute("UPDATE matrix_auto_upgrades SET last_attempt_at = $1 WHERE cycle_id = $2", new Date().toISOString(),job.cycle_id);
+      await db().execute("UPDATE referral_auto_upgrades SET last_attempt_at = $1 WHERE cycle_id = $2", new Date().toISOString(),job.cycle_id);
       try {
         if (await db().one("SELECT user_id FROM user_access WHERE user_id = $1 AND status <> 'active'",job.user_id)) continue;
         {
           const current = await db().one("SELECT COALESCE(MAX(level),0) AS level FROM referral_purchases WHERE user_id = $1", job.user_id);
           if (current!.level >= job.level) {
-            await db().execute("UPDATE matrix_auto_upgrades SET status = 'superseded',last_error = NULL WHERE cycle_id = $1", job.cycle_id);
+            await db().execute("UPDATE referral_auto_upgrades SET status = 'superseded',last_error = NULL WHERE cycle_id = $1", job.cycle_id);
             continue;
           }
-          await buyReferralLevel(job.user_id, job.level, `matrix-auto:${job.cycle_id}`);
-          await db().execute("UPDATE matrix_auto_upgrades SET status = 'completed',last_error = NULL WHERE cycle_id = $1", job.cycle_id);
+          await buyReferralLevel(job.user_id, job.level, `referral-auto:${job.cycle_id}`);
+          await db().execute("UPDATE referral_auto_upgrades SET status = 'completed',last_error = NULL WHERE cycle_id = $1", job.cycle_id);
         }
       } catch {
-        await db().execute("UPDATE matrix_auto_upgrades SET last_error = 'Waiting for enough available wallet credit for the next level.' WHERE cycle_id = $1 AND status = 'queued'", job.cycle_id);
+        await db().execute("UPDATE referral_auto_upgrades SET last_error = 'Waiting for enough available wallet credit for the next level.' WHERE cycle_id = $1 AND status = 'queued'", job.cycle_id);
       }
     }
   } finally { upgrading = false; }

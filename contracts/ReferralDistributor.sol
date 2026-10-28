@@ -99,7 +99,9 @@ contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable 
         _purchase(quote, uplines, signature);
     }
 
-    /// @dev The quote authority attests a completed matrix. The member must have
+    /// @dev The quote authority attests a completed matrix or unilevel tree.
+    /// The legacy matrixCycle field binds either program's completion ID.
+    /// The member must have
     /// approved enough tokens in advance; no wallet key or signature is held here.
     function autoUpgrade(Purchase calldata quote, address[18] calldata uplines, bytes calldata signature)
         external nonReentrant whenNotPaused

@@ -2,9 +2,9 @@
 
 [การเปลี่ยนระบบและ API มาใช้ ID สมาชิก / Member ID update](member-id-update.md): current login, registration, read-only identity, searches and compatibility details.
 
-ตรวจสอบจากซอร์สโค้ดวันที่ **28 ตุลาคม 2026** (Asia/Bangkok), revision `614d7cd` พร้อมการปรับปรุงเอกสารเวอร์ชัน 3 ใน working tree เอกสารอธิบายสิ่งที่โปรเจกต์รองรับ ไม่ได้ยืนยันสถานะการตั้งค่าหรือการ deploy ของระบบที่เปิดใช้งานจริง
+ตรวจสอบจากซอร์สโค้ดวันที่ **28 ตุลาคม 2026** (Asia/Bangkok), revision `cf2583b` พร้อมระบบรีเบิร์ธและอัปเกรดยูนิเลเวลใน working tree เอกสารอธิบายสิ่งที่โปรเจกต์รองรับ ไม่ได้ยืนยันสถานะการตั้งค่าหรือการ deploy ของระบบที่เปิดใช้งานจริง
 
-Reviewed against source on **28 October 2026** (Asia/Bangkok), revision `614d7cd` with the version-3 documentation updates in the working tree. These documents describe implemented behavior, rather than certifying a live deployment or its configuration.
+Reviewed against source on **28 October 2026** (Asia/Bangkok), revision `cf2583b` with the rebirth and unilevel-upgrade changes in the working tree. These documents describe implemented behavior, rather than certifying a live deployment or its configuration.
 
 | เนื้อหา / Topic | ภาษาไทย | English |
 | --- | --- | --- |

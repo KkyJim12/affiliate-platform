@@ -354,3 +354,81 @@ test("matrix placement attaches existing root branches when a sponsor is linked 
   assert.equal(placement.user_id,'a');
   await assert.rejects(db.execute("UPDATE users SET sponsor_id='c' WHERE id='a'"),{code:'23514'});
 }));
+
+test("successive matrix rebirths reserve the next unowned levels, preserve old slots and stop upgrading at 15", () => isolated(async db => {
+  await migrate(db.pool,sources);
+  await db.execute("INSERT INTO users VALUES('rebirth','rebirth_owner','hash','rebirth',NULL,'2026-10-28')");
+  await db.transaction(()=>unlockMatrixLevel('rebirth',1,db));
+  for (let cycle=0;cycle<3;cycle++) {
+    for (let child=0;child<14;child++) {
+      const id = `rebirth-${cycle}-${child}`;
+      await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,'rebirth','2026-10-28')",id);
+      await db.transaction(()=>unlockMatrixLevel(id,1,db));
+    }
+    await db.transaction(()=>unlockMatrixLevel('rebirth',1,db));
+  }
+  assert.deepEqual((await db.all("SELECT level FROM referral_auto_upgrades WHERE user_id='rebirth' ORDER BY level")).map(row=>row.level),[2,3,4]);
+  assert.deepEqual((await db.all("SELECT cycle FROM matrix_slots WHERE user_id='rebirth' AND level=1 ORDER BY cycle")).map(row=>row.cycle),[0,1,2,3]);
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM matrix_slots WHERE user_id='rebirth' AND level=1 AND completed_at IS NOT NULL")).count,3);
+  await db.transaction(()=>unlockMatrixLevel('rebirth',15,db));
+  for (let child=0;child<14;child++) {
+    const id = `rebirth-final-${child}`;
+    await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,'rebirth','2026-10-28')",id);
+    await db.transaction(()=>unlockMatrixLevel(id,1,db));
+  }
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM referral_auto_upgrades WHERE user_id='rebirth'")).count,3);
+  assert.equal((await db.one("SELECT MAX(cycle) AS cycle FROM matrix_slots WHERE user_id='rebirth' AND level=1")).cycle,4);
+}));
+
+test("historical full unilevel trees do not charge; a new fifteen-row completion queues once after all 65,534 descendants pay", { timeout:180000 }, () => isolated(async db => {
+  // Build a large legacy tree directly in this disposable schema. Suppress only
+  // registration placement while importing its already determined binary edges.
+  await migrate(db.pool,sources.filter(item=>!item.name.startsWith('0014_')));
+  await db.execute("ALTER TABLE users DISABLE TRIGGER users_place_binary_referral");
+  await db.execute("ALTER TABLE users DISABLE TRIGGER users_place_matrix_slots");
+  await db.execute(`INSERT INTO users(id,username,password_hash,referral_code,sponsor_id,created_at)
+    SELECT 'uni-' || n,'uni_' || n,'hash','uni-' || n,NULL,'2026-10-28' FROM generate_series(1,65535) n`);
+  await db.execute(`INSERT INTO referral_placements(user_id,parent_id,slot)
+    SELECT 'uni-' || n,'uni-' || (n/2),(n%2)::SMALLINT FROM generate_series(2,65535) n`);
+  await db.execute(`INSERT INTO matrix_slots(id,user_id,level,cycle,unlocked,created_at)
+    SELECT 'matrix:' || tier || ':uni-' || n || ':0','uni-' || n,tier,0,tier=1 OR n<>65535,'2026-10-28'
+    FROM generate_series(1,65535) n CROSS JOIN generate_series(1,2) tier`);
+  await db.execute("ALTER TABLE users ENABLE TRIGGER users_place_binary_referral");
+  await db.execute("ALTER TABLE users ENABLE TRIGGER users_place_matrix_slots");
+  await migrate(db.pool,sources);
+  assert.equal((await db.one("SELECT complete_depth FROM unilevel_progress WHERE user_id='uni-1' AND level=1")).complete_depth,15);
+  assert.ok((await db.one("SELECT completed_at FROM unilevel_progress WHERE user_id='uni-1' AND level=1")).completed_at);
+  assert.deepEqual(await db.one("SELECT complete_depth,completed_at FROM unilevel_progress WHERE user_id='uni-1' AND level=2"),{complete_depth:14,completed_at:null});
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM referral_auto_upgrades")).count,0);
+  await db.transaction(()=>unlockMatrixLevel('uni-65535',2,db));
+  assert.equal((await db.one("SELECT complete_depth FROM unilevel_progress WHERE user_id='uni-1' AND level=2")).complete_depth,15);
+  assert.ok((await db.one("SELECT completed_at FROM unilevel_progress WHERE user_id='uni-1' AND level=2")).completed_at);
+  assert.deepEqual(await db.all("SELECT user_id,level,source,source_level FROM referral_auto_upgrades"),[{user_id:'uni-1',level:3,source:'unilevel',source_level:2}]);
+  await db.transaction(()=>unlockMatrixLevel('uni-65535',2,db));
+  await db.transaction(()=>unlockMatrixLevel('uni-1',2,db));
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM referral_auto_upgrades")).count,1);
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM referral_placements")).count,65534);
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM matrix_slots WHERE user_id='uni-1' AND level=1")).count,1);
+}));
+
+test("the shared upgrade queue preserves existing matrix jobs and their error history", () => isolated(async db => {
+  await migrate(db.pool,sources.filter(item=>!item.name.startsWith('0014_')));
+  await db.execute("INSERT INTO users VALUES('preserved','preserved_member','hash','preserved',NULL,'2026-10-28')");
+  await db.execute(`INSERT INTO matrix_auto_upgrades(cycle_id,user_id,level,last_error,created_at)
+    VALUES('matrix:1:preserved:0','preserved',2,'Waiting for token approval.','2026-10-28')`);
+  await migrate(db.pool,sources);
+  assert.deepEqual(await db.one("SELECT cycle_id,user_id,level,source,source_level,slot_id,status,last_error FROM referral_auto_upgrades"),{
+    cycle_id:'matrix:1:preserved:0',user_id:'preserved',level:2,source:'matrix',source_level:1,slot_id:'matrix:1:preserved:0',status:'queued',last_error:'Waiting for token approval.'
+  });
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM matrix_auto_upgrades")).count,1);
+}));
+
+test("late attachment of a paid unilevel branch refreshes its new ancestors", () => isolated(async db => {
+  await migrate(db.pool,sources);
+  await db.execute("INSERT INTO users VALUES('up','uni_up','hash','up',NULL,'2026-10-28'),('left','uni_left','hash','left','up','2026-10-28'),('right','uni_right','hash','right',NULL,'2026-10-28')");
+  for (const id of ['up','left','right']) await db.transaction(()=>unlockMatrixLevel(id,1,db));
+  assert.equal((await db.one("SELECT complete_depth FROM unilevel_progress WHERE user_id='up'")).complete_depth,0);
+  await db.execute("UPDATE users SET sponsor_id='up' WHERE id='right'");
+  assert.equal((await db.one("SELECT complete_depth FROM unilevel_progress WHERE user_id='up'")).complete_depth,1);
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM referral_auto_upgrades")).count,0);
+}));

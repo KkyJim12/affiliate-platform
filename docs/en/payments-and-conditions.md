@@ -5,7 +5,7 @@ Version 3: [matrix, unilevel and automatic-upgrade details](../matrix-payments.m
 
 [Documentation index](../README.md) · [ภาษาไทย](../th/payments-and-conditions.md) · [System guide](system-guide.md) · [Operations](operations.md) · [API](api-reference.md)
 
-Reviewed **28 October 2026**, source revision `614d7cd`. This document specifies implemented version-3 payment rules and identifies undefined policies. It does not create a refund policy, commercial guarantee or legally adopted terms of service.
+Reviewed **28 October 2026**, source revision `cf2583b` plus the rebirth and unilevel-upgrade changes in the working tree. This document specifies implemented version-3 payment rules and identifies undefined policies. It does not create a refund policy, commercial guarantee or legally adopted terms of service.
 
 ## 1. Networks, assets and payment modes
 
@@ -98,7 +98,7 @@ A platform receipt can exceed 5%. The same wallet may receive one matrix share a
 | Only unilevel steps 1–5 | Five members: 0.10 each; platform: 9.50 |
 | None | Platform: 10.00 |
 
-Every example conserves the full price. Registration reserves locked slots at all fifteen levels. Each matrix has two branches and three descendant rows (2/4/8); unilevel continues for fifteen steps. When the owner and fourteen descendants are paid at that level, the matrix recycles and queues the full next-level price from the member's wallet. A low balance or allowance keeps the upgrade queued. A finite approval for all levels starts at 327,670 tokens; only the current price is charged immediately. The quote authority relays upgrades and needs test POL. Level 15 recycles without level 16; a manually purchased next level is not charged again. See [complete cycle and approval rules](../matrix-payments.md).
+Every example conserves the full price. Registration reserves locked slots at all fifteen levels. Each matrix has two branches and three descendant rows (2/4/8). When its owner and fourteen descendants own that level, the slot completes and opens a rebirth with the same rules. Unilevel completes once per level when the owner and all 65,534 descendants within fifteen rows own that level; it continues without rebirth. Each new completion queues the member's next unowned level, up to 15, at its full price from the wallet. Multiple completions reserve successive levels; a manually purchased reserved level is not charged again. A low balance or allowance keeps the upgrade queued. A finite approval for all levels starts at 327,670 tokens; only the current price is charged immediately. The quote authority relays upgrades and needs test POL. Matrix rebirths continue at level 15 without level 16. See [complete cycle and approval rules](../matrix-payments.md).
 
 ## 4. Connected-wallet purchase lifecycle
 
@@ -189,7 +189,7 @@ The sender provides their password, recipient numeric member ID, amount and requ
 
 ### Legacy level purchases
 
-Explicit embedded + ledger mode debits existing credits and uses the same version-3 shares and matching-level eligibility. Completed matrices queue credit-funded upgrades. Eligible uplines receive completed internal commission credits. Platform/base/missing-recipient shares become `payable` records: **they have not been transferred on-chain**.
+Explicit embedded + ledger mode debits existing credits and uses the same version-3 shares and matching-level eligibility. Completed matrix slots and unilevel trees queue credit-funded upgrades. Eligible uplines receive completed internal commission credits. Platform/base/missing-recipient shares become `payable` records: **they have not been transferred on-chain**.
 
 `GET /api/admin/referral-accounting` groups those legacy payables by address. The project has no automatic payout executor or settlement endpoint for those platform payables. Historical paid records are not redistributed retroactively. Changing the legacy fee address affects future purchases only; an empty fee address blocks new ledger purchases.
 

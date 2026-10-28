@@ -37,7 +37,7 @@ export async function referralProgram(userId: string): Promise<ReferralProgram> 
     const chain = await db().one("SELECT COALESCE(MAX(level), 0) AS level FROM referral_chain_purchases WHERE user_id = $1 AND status = 'confirmed'", userId);
     const level = Math.max(chain!.level, purchase?.level ?? (row.code ? 1 : 0));
     const settings = await db().one("SELECT fee_recipient_address FROM platform_settings WHERE id = 1") as { fee_recipient_address: string };
-    const autoUpgrade = await db().one<{ level: number; status: string; lastError: string | null }>("SELECT level,status,last_error AS \"lastError\" FROM matrix_auto_upgrades WHERE user_id = $1 AND status IN ('queued','pending') ORDER BY level,created_at LIMIT 1", userId);
+    const autoUpgrade = await db().one<{ level: number; status: string; lastError: string | null }>("SELECT level,status,last_error AS \"lastError\" FROM referral_auto_upgrades WHERE user_id = $1 AND status IN ('queued','pending') ORDER BY level,created_at LIMIT 1", userId);
     return { autoUpgrade: autoUpgrade ?? null, price: referralPrice, code: row.code, activatedAt: row.activatedAt, transactionId: row.transactionId,
         currentLevel: level, maxLevel: maxReferralLevel, nextLevel: level < maxReferralLevel ? level + 1 : null,
         nextPrice: level < maxReferralLevel ? levelPrice(level + 1) : null, feeConfigured: !!settings.fee_recipient_address,

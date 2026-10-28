@@ -1,7 +1,7 @@
 import { createTestAdmin, memberIdFor } from "./member-fixtures";
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
-import { Contract, JsonRpcProvider, Wallet, getBytes, parseEther, toBeHex, type BaseWallet } from 'ethers';
+import { Contract, JsonRpcProvider, Wallet, getBytes, id, parseEther, toBeHex, type BaseWallet } from 'ethers';
 import { openTestDatabase } from './database';
 import { hashPassword } from '../server/lib/password';
 import type { ExternalPurchase, WalletCall } from '../shared/connected-wallet';
@@ -639,4 +639,33 @@ test('a full paid matrix triggers exactly one relayed wallet debit and unlocks t
     await root.get('/api/referrals/chain/status');
     expect(await token.getFunction('balanceOf')(rootWallet.address)).toBe(121400000n);
   } finally { await root.dispose();provider.destroy();await database.close(); }
+});
+
+test('a queued unilevel completion uses the relayer and member approval without creating a matrix rebirth', async ({playwright})=>{
+  test.setTimeout(120000);
+  const provider=rpc(),database=openTestDatabase(),api=await playwright.request.newContext({baseURL:origin});
+  const wallet=Wallet.createRandom().connect(provider);
+  try {
+    const owner=await login(api,wallet);await fund(wallet,provider);await buy(api,wallet,1,true,true);
+    const completion=`unilevel:1:${owner.id}`;
+    // The migration suite verifies detection against all 65,534 descendants.
+    // Here seed its persisted completion to exercise on-chain dispatch/recovery.
+    await database.transaction(async()=>{
+      await database.execute("UPDATE unilevel_progress SET complete_depth=15,completed_at=$1 WHERE user_id=$2 AND level=1",new Date().toISOString(),owner.id);
+      await database.execute("SELECT queue_referral_upgrade($1,$2,1,'unilevel')",completion,owner.id);
+    });
+    await expect.poll(async()=>{
+      await api.get('/api/referrals/chain/status');
+      return (await database.one("SELECT status FROM referral_auto_upgrades WHERE cycle_id=$1",completion))?.status;
+    },{timeout:60000,intervals:[1000,3000]}).toBe('completed');
+    const purchase=await database.one("SELECT payload,transaction_hash FROM referral_chain_purchases WHERE user_id=$1 AND level=2 AND signing_mode='automatic'",owner.id);
+    expect(purchase!.payload.quote.matrixCycle).toBe(id(completion));
+    expect((await provider.getTransaction(purchase!.transaction_hash))!.from).toBe(new Wallet(process.env.NUXT_REFERRAL_AUTHORITY_PRIVATE_KEY!).address);
+    const token=new Contract(process.env.NUXT_EVM_TOKEN_ADDRESS!,['function balanceOf(address) view returns(uint256)'],provider);
+    expect(await token.getFunction('balanceOf')(wallet.address)).toBe(70_000_000n);
+    expect((await (await api.get('/api/referrals/program')).json()).currentLevel).toBe(2);
+    expect((await database.one("SELECT COUNT(*) AS count FROM matrix_slots WHERE user_id=$1 AND level=1",owner.id))!.count).toBe(1);
+    await api.get('/api/referrals/chain/status');
+    expect(await token.getFunction('balanceOf')(wallet.address)).toBe(70_000_000n);
+  } finally {await api.dispose();provider.destroy();await database.close();}
 });

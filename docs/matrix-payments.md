@@ -4,7 +4,7 @@
 
 Level 1 costs 10 token units. Each subsequent level doubles, up to level 15.
 Members can purchase the next level themselves or receive a wallet-funded
-automatic upgrade after completing a paid matrix. The supplied deployment uses
+automatic upgrade after completing a paid matrix slot or unilevel tree. The supplied deployment uses
 Amoy test tokens.
 
 ## Trees and slots
@@ -20,6 +20,8 @@ remains unchanged when an invitation spills over beneath another member.
 - **Unilevel:** two children per member with continuous breadth-first spillover.
   Payments and the tree view cover fifteen ancestors, starting with the buyer's
   placement parent. This tree continues through matrix cycle boundaries.
+  A full fifteen-row binary tree contains 65,534 descendants; its owner and
+  every descendant must own the same purchase level to complete it.
 
 Registration reserves positions at all levels. A position is locked until its
 owner purchases that level. It does not earn that level's commissions while
@@ -62,9 +64,20 @@ With all recipients eligible, members receive 9.50 total and the platform 0.50.
 
 When the owner and all fourteen descendant slots are unlocked at a level, the
 backend records that cycle's completion once and ensures another same-level
-slot exists. It queues one purchase of the next level. Level 15 recycles without
-queuing level 16. If a member has already bought the next level, the queue entry
-is superseded without a further charge.
+slot with space exists. This is a **rebirth**: a separate slot at the same level,
+with the same two branches and three rows, while the previous slot stays intact.
+Each rebirth can fill and complete again.
+
+Each newly completed matrix slot queues one purchase of the member's next
+unowned level, through level 15. For example, completing the first level-1 slot
+buys level 2; completing a level-1 rebirth after that buys level 3. Simultaneous
+completions reserve distinct successive levels. If the member manually buys a
+reserved level first, that job is superseded without a duplicate charge.
+
+The unilevel tree completes once per paid level when its owner and all 65,534
+descendants within fifteen rows own that level. It queues the next unowned level
+through the same worker. Unilevel does not create rebirth slots or move members.
+Neither program purchases level 16; matrix rebirths continue at the maximum.
 
 The upgrade costs the **full next-level price**, deducted from the member's
 wallet; commissions are not withheld or reserved. A confirmed upgrade unlocks
@@ -78,12 +91,14 @@ An insufficient balance or allowance leaves the upgrade queued. Replenishing
 the wallet allows an already-approved upgrade to retry. No member private key
 is required in connected-wallet mode.
 
-The quote authority attests the completed cycle using a signed `matrixCycle`
+The quote authority attests either program's completion using a signed `matrixCycle`
 hash. `autoUpgrade` accepts a relayer, checks the quote and sequential level,
 and consumes the cycle hash once. A failed transfer reverts all state and
 payouts, including cycle consumption. A dedicated quote authority remains
 trusted for placement, paid-level eligibility, legacy levels **and cycle
 completion**; those facts live in PostgreSQL, not in on-chain tree storage.
+The field name remains compatible with version 3: matrix proofs hash the slot
+ID, while unilevel proofs hash `unilevel:<paid level>:<member UUID>`.
 
 The existing 15-second worker persists signed relayer transactions before
 broadcast and serializes the relayer nonce across instances. Fund the public
@@ -103,6 +118,25 @@ upgrade jobs, reconstructs placement in registration order and preserves paid
 levels. Historical payments and sponsor IDs are unchanged. Pre-existing full
 matrices do not trigger retrospective automatic charges. Existing confirmed
 version-1 and version-2 receipts retain their original accounting rules.
+
+Migration `0014_unilevel_completion_and_rebirth.sql` preserves existing jobs in
+the shared `referral_auto_upgrades` queue, adds incremental unilevel progress,
+and records historical full unilevel trees without retrospective charges.
+`matrix_auto_upgrades` remains a matrix-only compatibility view. A payment
+updates at most fifteen unilevel ancestors instead of scanning 65,534 members.
+This application update uses the existing version-3 contract ABI and requires
+no replacement if the configured distributor already reports version 3.
+
+For an existing version-3 installation:
+
+```sh
+npm run db:migrate
+npm run build
+```
+
+Restart the application using its existing environment. Startup also applies
+pending migrations. The replacement instructions below apply to older contract
+versions; they are not required for this completion and rebirth update.
 
 The distributor is not upgradeable. Updating application source cannot change
 an existing deployment. Finish pending purchases before changing addresses. To

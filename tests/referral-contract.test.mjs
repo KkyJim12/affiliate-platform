@@ -132,6 +132,24 @@ test('automatic upgrades spend only approved funds, bind the completed cycle, an
   } finally { await f.close(); }
 });
 
+test('matrix rebirth and unilevel completion proofs fund successive upgrades through level 15', async () => {
+  const f=await fixture();
+  try {
+    await f.buy(await f.quote(1));
+    await (await f.token.connect(f.buyer).approve(await f.contract.getAddress(),327660000000n)).wait();
+    for (let level=2;level<=15;level++) {
+      const completion=id(level%2 ? `unilevel:${level-1}:member` : `matrix:1:member:${level/2-1}`);
+      const signed=await f.quote(level,{matrixCycle:completion});
+      await (await f.contract.connect(f.owner).autoUpgrade(signed.value,signed.uplines,signed.signature)).wait();
+      assert.equal(await f.contract.levelOf(await f.buyer.getAddress()),BigInt(level));
+      assert.equal(await f.contract.upgradedCycles(completion),true);
+      await assert.rejects(f.contract.connect(f.owner).autoUpgrade(signed.value,signed.uplines,signed.signature));
+    }
+    assert.equal(await f.token.balanceOf(await f.buyer.getAddress()),72330000000n);
+    assert.equal(await f.token.allowance(await f.buyer.getAddress(),await f.contract.getAddress()),0n);
+  } finally { await f.close(); }
+});
+
 test('forged recipients/signatures, wrong buyers, replay, stale fees and expired quotes cannot spend funds', async () => {
   const f = await fixture();
   try {

@@ -104,7 +104,7 @@ const content = {
       ["Depth 2 gap; 1,3,4,5 eligible", `Depths 1/3/4/5: ${[1,3,4,5].map(gap).join(" / ")}; platform: ${gap(0)}.`],
       ["None", `Platform: <strong>${none(0)}</strong>.`]
     ],
-    commissionNote: "A paid 2/4/8 matrix opens a new same-level slot and queues a full-price next level from the member's wallet. Low balance/approval keeps it queued. Initial all-level approval caps at 327,670 tokens; the current purchase alone is charged now. Level 15 recycles without level 16.",
+    commissionNote: "Each paid 2/4/8 matrix slot opens a rebirth with the same rules. A full 15-row unilevel tree (65,534 paid descendants) also queues an upgrade. Each completion buys the next unowned level from wallet funds, up to 15. Low balance/approval keeps it queued. Initial approval caps at 327,670 tokens; only this purchase is charged now.",
     controlsTitle: "Accounts, permissions and controls",
     controls: [
       "Member wallet sign-in uses a single-use five-minute message. Sessions last seven days; passwords are disabled for members by default. Admins use /admin/login.",
@@ -185,7 +185,7 @@ const content = {
       ["มี 1,3,4,5 แต่ชั้น 2 ไม่มีสิทธิ์", `ชั้น 1/3/4/5: ${[1,3,4,5].map(gap).join(" / ")}; แพลตฟอร์ม ${gap(0)}`],
       ["ไม่มีเลย", `แพลตฟอร์ม <strong>${none(0)}</strong>`]
     ],
-    commissionNote: "แมทริกซ์ชำระครบ 2/4/8 เปิดช่องเลเวลเดิมใหม่และเข้าคิวหักราคาเลเวลถัดไปเต็มจากกระเป๋า เงินหรือวงเงินไม่พอให้รอ วงเงินรวมเริ่มต้นสูงสุด 327,670 โทเคน แต่หักเฉพาะรายการปัจจุบันก่อน เลเวล 15 เปิดรอบใหม่ได้โดยไม่มีเลเวล 16",
+    commissionNote: "แมทริกซ์ชำระครบ 2/4/8 เปิดรีเบิร์ธด้วยกติกาเดิม ยูนิเลเวล 15 ขั้นที่ชำระครบ 65,534 ตำแหน่งก็เข้าคิวอัปเกรด แต่ละครั้งซื้อเลเวลถัดไปที่ยังไม่มีจากเงินในกระเป๋า สูงสุดเลเวล 15 เงินหรือวงเงินไม่พอให้รอ วงเงินเริ่มต้นสูงสุด 327,670 โทเคน แต่หักเฉพาะรายการปัจจุบันก่อน",
     controlsTitle: "บัญชี สิทธิ์ และสวิตช์ควบคุม",
     controls: [
       "Member wallet login ใช้ข้อความครั้งเดียวอายุ 5 นาที Session 7 วัน ปิด member password login โดยเริ่มต้น ผู้ดูแลใช้ /admin/login",
