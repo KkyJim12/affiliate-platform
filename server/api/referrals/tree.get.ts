@@ -2,8 +2,7 @@ import { isMemberId } from "../../../shared/referral-code";
 import { treePathSlots, type ReferralTreeData } from "../../../shared/referral-tree";
 import { db } from "../../utils/database";
 
-// Show registered members at their reserved positions, including unpaid parents.
-// Matrix progress still counts only positions that have purchased this level.
+// Both programs display the same level/cycle placement used by commissions.
 export default defineEventHandler(async (event): Promise<ReferralTreeData> => {
   const query = getQuery(event);
   const id = typeof query.id === "string" ? query.id.trim() : "";
@@ -21,19 +20,14 @@ export default defineEventHandler(async (event): Promise<ReferralTreeData> => {
   const root = await db().one("SELECT id,referral_code FROM users WHERE referral_code = $1", id);
   if (!root) throw createError({ statusCode: 404, statusMessage: "No member was found with that ID." });
   const visibleDepth = Math.min(levels, maxDepth - slots.length);
-  const cycles = mode === "matrix" ? await db().all<{ cycle: number }>("SELECT cycle FROM matrix_slots WHERE user_id = $1 AND level = $2 AND opened ORDER BY cycle", root.id, level) : [];
-  if (mode === "matrix" && !cycles.some(item => item.cycle === cycle))
-    throw createError({ statusCode: 404, statusMessage: "This matrix slot does not exist." });
-  const source = mode === "matrix" ? `SELECT s.id,u.referral_code,NULL::TEXT AS parent_code,ARRAY[]::INTEGER[] AS path,s.unlocked AS purchased
-      FROM matrix_slots s JOIN users u ON u.id = s.user_id WHERE s.user_id = $1 AND s.level = $5 AND s.cycle = $6
+  const table = mode === "matrix" ? "matrix_slots" : "unilevel_slots";
+  const cycles = await db().all<{ cycle: number }>(`SELECT cycle FROM ${table} WHERE user_id = $1 AND level = $2 AND opened ORDER BY cycle`, root.id, level);
+  if (!cycles.some(item => item.cycle === cycle))
+    throw createError({ statusCode: 404, statusMessage: "This referral slot does not exist." });
+  const source = `SELECT s.id,u.referral_code,NULL::TEXT AS parent_code,ARRAY[]::INTEGER[] AS path,s.unlocked AS purchased
+      FROM ${table} s JOIN users u ON u.id = s.user_id WHERE s.user_id = $1 AND s.level = $5 AND s.cycle = $6
       UNION ALL SELECT s.id,u.referral_code,n.referral_code,n.path || s.branch::INTEGER,s.unlocked
-      FROM network n JOIN matrix_slots s ON s.parent_id = n.id JOIN users u ON u.id = s.user_id` :
-    `SELECT u.id,u.referral_code,NULL::TEXT AS parent_code,ARRAY[]::INTEGER[] AS path,
-      EXISTS(SELECT 1 FROM matrix_slots s WHERE s.user_id = u.id AND s.level = 1 AND s.cycle = 0 AND s.unlocked) AS purchased
-      FROM users u WHERE u.id = $1
-      UNION ALL SELECT u.id,u.referral_code,n.referral_code,n.path || p.slot::INTEGER,
-      EXISTS(SELECT 1 FROM matrix_slots s WHERE s.user_id = u.id AND s.level = 1 AND s.cycle = 0 AND s.unlocked)
-      FROM network n JOIN referral_placements p ON p.parent_id = n.id JOIN users u ON u.id = p.user_id`;
+      FROM network n JOIN ${table} s ON s.parent_id = n.id JOIN users u ON u.id = s.user_id`;
   const result = await db().one(`WITH RECURSIVE network AS (
     ${source} WHERE cardinality(n.path) < $2
   ) SELECT
@@ -45,7 +39,7 @@ export default defineEventHandler(async (event): Promise<ReferralTreeData> => {
     COALESCE((SELECT json_agg(counts) FROM (
       SELECT cardinality(path) AS depth,COUNT(*)::INTEGER AS filled FROM network WHERE ${mode === "matrix" ? "purchased AND" : ""} cardinality(path) > 0
       GROUP BY cardinality(path) ORDER BY depth
-    ) counts),'[]'::JSON) AS counts`, root.id,maxDepth,slots,slots.length + visibleDepth,...(mode === "matrix" ? [level,cycle] : []));
+    ) counts),'[]'::JSON) AS counts`, root.id,maxDepth,slots,slots.length + visibleDepth,level,cycle);
   const counts = result!.counts as { depth: number; filled: number }[];
   return { root: result!.root, path, maxDepth, visibleDepth,
     mode: mode as "matrix" | "unilevel", programLevel: level, cycle, cycles: cycles.map(item => item.cycle), members: result!.members,

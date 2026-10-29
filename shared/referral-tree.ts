@@ -3,7 +3,7 @@ export interface ReferralTreeMember {
   id: string;
   path: string;
   parentId: string | null;
-  // Selected matrix level, or level 1 in the continuous unilevel tree.
+  // Ownership of the selected program level at this placement slot.
   purchased: boolean;
 }
 export interface ReferralTreeData {

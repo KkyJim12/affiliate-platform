@@ -68,33 +68,34 @@ test("slot progress belongs to the signed-in member, counts each cycle independe
   } finally {await api.dispose();}
 });
 
-test("higher matrix levels show unpaid positions and update purchases at their original paths",async({request},info)=>{
+test("higher program levels place members by purchase order without reserving registration positions",async({request},info)=>{
   test.skip(info.project.name!=="desktop");
   const member=await fixture();
-  const tree=async(level:number)=> (await request.get(`/api/referrals/tree?id=${member.memberId}&mode=matrix&level=${level}`)).json();
+  const tree=async(level:number,mode='matrix')=> (await request.get(`/api/referrals/tree?id=${member.memberId}&mode=${mode}&level=${level}`)).json();
   const before=await tree(2);
   expect(before.root.purchased).toBe(true);
-  expect(before.members).toHaveLength(15);
-  expect(before.members.slice(1).every((row:{purchased:boolean})=>!row.purchased)).toBe(true);
+  expect(before.members).toEqual([before.root]);
   expect(before.levels.map((row:{filled:number})=>row.filled)).toEqual([0,0,0]);
   expect((await tree(1)).members).toHaveLength(15);
   await confirmedUpgrade(member.childIds[2]!,2);
   const grandchildOnly=await tree(2);
-  expect(grandchildOnly.members).toEqual(before.members.map((row:{id:string})=>({...row,purchased:row.id===member.memberId || row.id===member.children[2]})));
-  expect(grandchildOnly.levels.map((row:{filled:number})=>row.filled)).toEqual([0,1,0]);
+  expect(grandchildOnly.members).toEqual([before.root,{id:member.children[2],path:'0',parentId:member.memberId,purchased:true}]);
+  expect(grandchildOnly.levels.map((row:{filled:number})=>row.filled)).toEqual([1,0,0]);
   const branch=await (await request.get(`/api/referrals/tree?id=${member.memberId}&mode=matrix&level=2&path=0`)).json();
   expect(branch.members).toEqual(grandchildOnly.members.filter((row:{path:string})=>row.path==='0' || row.path.startsWith('0/')));
-  expect(branch.members).toContainEqual({id:member.children[2],path:'0/0',parentId:member.children[0],purchased:true});
+  expect(branch.members).toContainEqual({id:member.children[2],path:'0',parentId:member.memberId,purchased:true});
   await confirmedUpgrade(member.childIds[0]!,2);
   const upgraded=await tree(2);
-  expect(upgraded.members).toEqual(grandchildOnly.members.map((row:{id:string;purchased:boolean})=>({...row,purchased:row.purchased || row.id===member.children[0]})));
-  expect(upgraded.levels.map((row:{filled:number})=>row.filled)).toEqual([1,1,0]);
+  expect(upgraded.members).toEqual([...grandchildOnly.members,{id:member.children[0],path:'1',parentId:member.memberId,purchased:true}]);
+  expect(upgraded.levels.map((row:{filled:number})=>row.filled)).toEqual([2,0,0]);
   expect((await tree(3)).members).toEqual(before.members);
+  expect((await tree(2,'unilevel')).members).toEqual(upgraded.members);
+  expect((await tree(3,'unilevel')).members).toEqual(before.members);
   const database=openTestDatabase();
   try {
     const placement=await database.one(`SELECT p.user_id AS parent FROM matrix_slots s JOIN matrix_slots p ON p.id=s.parent_id
       WHERE s.user_id=$1 AND s.level=2 AND s.cycle=0`,member.childIds[2]);
-    expect(placement!.parent).toBe(member.childIds[0]);
+    expect(placement!.parent).toBe(member.owner);
   } finally {await database.close();}
 });
 
@@ -110,8 +111,7 @@ test("level-1 trees tag unpaid referrals and hide reserved rebirths until every 
   const descendant=await (await page.request.get(`/api/referrals/tree?id=${member.memberId}&mode=matrix&level=1`)).json();
   expect(descendant.members).toContainEqual({id:member.children[5],path:'1/1',parentId:member.children[1],purchased:true});
   const higher=await (await page.request.get(`/api/referrals/tree?id=${member.memberId}&mode=matrix&level=2`)).json();
-  expect(higher.members).toHaveLength(15);
-  expect(higher.members.slice(1).every((row:{purchased:boolean})=>!row.purchased)).toBe(true);
+  expect(higher.members).toEqual([higher.root]);
   expect((await page.request.post(`${origin}/api/auth/login`,{headers:{Origin:origin},data:{memberId:member.memberId,password}})).status()).toBe(200);
   await page.goto('/referrals');
   const catalog=page.getByTestId('matrix-slots');
@@ -142,7 +142,7 @@ test("completed cards show their own full referral branches across levels and re
       second.push(row!.referral_code);secondIds.push(id);
     }
     await database.execute("UPDATE matrix_slots SET unlocked=TRUE WHERE user_id=ANY($1::TEXT[]) AND level=1",secondIds);
-    await database.execute("UPDATE matrix_slots SET unlocked=TRUE WHERE user_id=ANY($1::TEXT[]) AND level=2",member.childIds.slice(0,14));
+    for(const id of member.childIds.slice(0,14)) await confirmedUpgrade(id,2);
     await database.execute("UPDATE matrix_slots SET completed_at=$1 WHERE user_id=$2 AND ((level=1 AND cycle=1) OR (level=2 AND cycle=0))",new Date().toISOString(),member.owner);
     const extra=randomUUID();
     await database.execute("INSERT INTO users VALUES($1,$2,'unused',$1,$3,$4)",extra,`new_cycle_${extra.slice(0,8)}`,member.owner,new Date().toISOString());
@@ -208,15 +208,14 @@ test("members browse slots, open each level and rebirth tree, and retain Thai/mo
   await catalog.locator('[data-testid="matrix-slot-card"][data-level="2"][data-cycle="0"]').click();
   await expect(page.locator('.slot-detail-heading')).toContainText('Level 2 · Initial slot');
   await expect(tree.getByTestId('matrix-slot-summary')).toContainText('Slot 1: 0/14');
-  await expect(tree.locator('[data-empty="true"]')).toHaveCount(0);
-  await expect(tree.getByTestId('not-purchased-tag')).toHaveCount(14);
+  await expect(tree.locator('[data-empty="true"]')).toHaveCount(14);
+  await expect(tree.getByTestId('not-purchased-tag')).toHaveCount(0);
   await confirmedUpgrade(member.childIds[2]!,2);
-  await expect(tree.locator('[data-path="0/0"]').getByTestId('not-purchased-tag')).toHaveCount(0,{timeout:25000});
-  await expect(tree.locator('[data-path="0"]')).toContainText('Unpaid');
+  await expect(tree.locator('[data-path="0"]')).toHaveAttribute('data-member-id',member.children[2]!,{timeout:25000});
   await expect(tree.getByTestId('matrix-slot-summary')).toContainText('Slot 1: 1/14');
   await confirmedUpgrade(member.childIds[0]!,2);
-  await expect(tree.locator('[data-path="0"]').getByTestId('not-purchased-tag')).toHaveCount(0,{timeout:25000});
-  await expect(tree.locator('[data-path="0/0"]')).toHaveAttribute('data-member-id',member.children[2]!);
+  await expect(tree.locator('[data-path="1"]')).toHaveAttribute('data-member-id',member.children[0]!,{timeout:25000});
+  await expect(tree.locator('[data-path="0"]')).toHaveAttribute('data-member-id',member.children[2]!);
   await catalog.getByRole('button',{name:'Back to all slots'}).click();
   await catalog.getByRole('combobox',{name:'Filter slots by level'}).click();
   await page.getByRole('option',{name:'Level 4',exact:true}).click();
@@ -226,6 +225,11 @@ test("members browse slots, open each level and rebirth tree, and retain Thai/mo
   expect((await (await page.request.get('/api/referrals/program')).json()).currentLevel).toBe(3);
   await page.getByRole('button',{name:'Unilevel',exact:true}).click();
   await expect(tree.getByRole('button',{name:'Level 15: 0 members',exact:true})).toBeVisible();
+  await expect(tree.getByRole('button',{name:'Binary matrix',exact:true})).toHaveCount(0);
+  await tree.getByRole('combobox',{name:'Explore the 15 purchase levels'}).click();
+  await page.getByRole('option',{name:/^level 2$/i}).click();
+  await expect(tree.locator('[data-path="0"]')).toHaveAttribute('data-member-id',member.children[2]!);
+  await expect(tree.locator('[data-path="1"]')).toHaveAttribute('data-member-id',member.children[0]!);
   await page.getByRole('button',{name:'List view',exact:true}).click();
   await expect(page.locator('.member-panel tbody tr')).toHaveCount(15);
   await page.getByRole('button',{name:'Matrix slots',exact:true}).click();
@@ -249,4 +253,34 @@ test("members browse slots, open each level and rebirth tree, and retain Thai/mo
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   expect(await catalog.innerText()).not.toContain('????');
   expect(errors).toEqual([]);
+});
+
+test("unilevel level and rebirth selectors show each slot's own branch",async({page})=>{
+  const member=await fixture(1),database=openTestDatabase();
+  await confirmedUpgrade(member.childIds[2]!,2);
+  try {
+    // Import a completed cycle, just as the matrix browsing fixtures do.
+    await database.execute("UPDATE unilevel_slots SET completed_at=$1 WHERE user_id=$2 AND level=2 AND cycle=0",new Date().toISOString(),member.owner);
+    await database.execute("SELECT place_program_slot($1,2,'unilevel',1)",member.owner);
+    await database.execute("UPDATE unilevel_slots SET unlocked=TRUE WHERE user_id=$1 AND level=2 AND cycle=1",member.owner);
+  } finally {await database.close();}
+  await confirmedUpgrade(member.childIds[0]!,2);
+  const initial=await (await page.request.get(`/api/referrals/tree?id=${member.memberId}&mode=unilevel&level=2&cycle=0`)).json();
+  const reborn=await (await page.request.get(`/api/referrals/tree?id=${member.memberId}&mode=unilevel&level=2&cycle=1`)).json();
+  expect(initial.members.map((row:{id:string})=>row.id)).toEqual([member.memberId,member.children[2]]);
+  expect(reborn.members.map((row:{id:string})=>row.id)).toEqual([member.memberId,member.children[0]]);
+  expect(reborn.cycles).toEqual([0,1]); expect(reborn.maxDepth).toBe(15);
+  expect((await page.request.get(`/api/referrals/tree?id=${member.memberId}&mode=unilevel&level=2&cycle=2`)).status()).toBe(404);
+  expect((await page.request.post('/api/auth/login',{headers:{Origin:origin},data:{memberId:member.memberId,password}})).status()).toBe(200);
+  await page.goto('/referrals');
+  await page.getByRole('button',{name:'Unilevel',exact:true}).click();
+  const tree=page.getByTestId('binary-referral-tree');
+  await tree.getByRole('combobox',{name:'Explore the 15 purchase levels'}).click();
+  await page.getByRole('option',{name:/^level 2$/i}).click();
+  await expect(tree.locator('[data-path="0"]')).toHaveAttribute('data-member-id',member.children[2]!);
+  await tree.getByRole('combobox',{name:'Program slot',exact:true}).click();
+  await page.getByRole('option',{name:'Rebirth 1',exact:true}).click();
+  await expect(tree.locator('[data-path="0"]')).toHaveAttribute('data-member-id',member.children[0]!);
+  await expect(tree.locator(`[data-member-id="${member.children[2]}"]`)).toHaveCount(0);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 });

@@ -28,7 +28,7 @@ try {
     url = `postgresql://unxo_test:${password}@127.0.0.1:${port}/unxo_test`;
   }
   if (!new URL(url).pathname.endsWith("_test")) throw new Error("TEST_DATABASE_URL must point to a disposable database whose name ends with _test.");
-  const args = mode === "db" ? ["--test", "tests/migrations.test.mjs"] : ["node_modules/@playwright/test/cli.js", "test", ...process.argv.slice(3)];
+  const args = mode === "db" ? ["--test", ...process.argv.slice(3), "tests/migrations.test.mjs"] : ["node_modules/@playwright/test/cli.js", "test", ...process.argv.slice(3)];
   const child = spawn(process.execPath, args, { stdio: "inherit", env: { ...process.env, DATABASE_URL: url, TEST_DATABASE_URL: url } });
   testExitCode = await new Promise((done, reject) => { child.once("error", reject); child.once("exit", code => done(code ?? 1)); });
 } catch (error) { console.error(error.message); testExitCode = 1; }

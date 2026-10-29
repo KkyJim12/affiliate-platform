@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { layoutReferralTree, referralTreeCard, referralTreeDepth, treeParentPath, treePathDepth, treePathSlots, type ReferralTreeData } from "#shared/referral-tree";
 
-const props = defineProps<{ memberId: string; initialLevel?: number; initialCycle?: number; initialMode?: "matrix" | "unilevel"; fixedSelection?: boolean; live?: boolean }>();
+const props = defineProps<{ memberId: string; initialLevel?: number; initialCycle?: number; initialMode?: "matrix" | "unilevel"; fixedSelection?: boolean; fixedProgram?: boolean; live?: boolean }>();
 const { t, localeTag } = useLoopI18n();
 const branch = ref("");
 const levels = ref(3);
@@ -75,11 +75,11 @@ const number = (value: number) => value.toLocaleString(localeTag.value);
 <template>
   <section class="binary-referral-tree" :aria-label="t('publicTree.treeLabel')" :aria-busy="status === 'pending'" data-testid="binary-referral-tree">
     <div v-if="!fixedSelection" class="binary-tree-toolbar">
-      <div role="group" :aria-label="t('matrix.program')" class="binary-tree-options">
+      <div v-if="!fixedProgram" role="group" :aria-label="t('matrix.program')" class="binary-tree-options">
         <button class="button button-outline button-small" :aria-pressed="mode === 'matrix'" @click="mode = 'matrix'">{{ t('matrix.binary') }}</button>
         <button class="button button-outline button-small" :aria-pressed="mode === 'unilevel'" @click="mode = 'unilevel'">{{ t('matrix.unilevel') }}</button>
       </div>
-      <div v-if="mode === 'matrix'" class="binary-tree-options">
+      <div class="binary-tree-options">
         <AppDropdown v-model="programLevel" :label="t('ranksPage.selectLevel')" compact :options="Array.from({ length: 15 }, (_,index) => ({ value: index + 1,label: t('ranksPage.level') + ' ' + (index + 1) }))" />
         <AppDropdown v-if="(tree?.cycles?.length ?? 0) > 1" v-model="cycle" :label="t('matrix.slot')" compact :options="(tree?.cycles ?? []).map(value => ({ value,label: value === 0 ? t('matrix.initialSlot') : t('matrix.rebirthNumber', { number: value }) }))" />
       </div>

@@ -18,16 +18,24 @@ remains unchanged when an invitation spills over beneath another member.
   first, left before right. When all three rows are occupied, overflow positions
   are reserved in future cycles. A rebirth opens at the same purchase level only
   after the owner and all fourteen positions purchase that level.
-- **Unilevel:** two children per member with continuous breadth-first spillover.
+- **Unilevel:** two children per slot with breadth-first spillover at each purchase level.
   Payments and the tree view cover fifteen ancestors, starting with the buyer's
-  placement parent. This tree continues through matrix cycle boundaries.
+  placement parent. Its slots and rebirths are independent of matrix cycles.
   A full fifteen-row binary tree contains 65,534 descendants; its owner and
   every descendant must own the same purchase level to complete it.
 
-Registration reserves positions at all levels. A position is locked until its
-owner purchases that level. It does not earn that level's commissions while
-locked. A registered member is not counted as a paid completion until unlocked.
-Slots at previously purchased levels stay unlocked.
+Registration previews level 1 in both programs and creates empty higher-level
+cards. Higher-level cards reserve no position. When a member enters a level,
+each program searches the original inviter's slots in cycle order, breadth
+first, left before right. Entry order determines placement independently at
+each level. The member's sponsor ID stays unchanged. An unpaid inviter can
+receive descendants in their placeholder slot but cannot earn commissions
+until they own that level. Previously purchased levels stay unlocked.
+
+For contract payments, entry is reserved when preparing the signed quote.
+That reservation survives confirmation delays and retries so the tree matches
+the signed recipients. Failed or expired quotes do not unlock the level.
+Ledger reservations roll back if the purchase fails.
 
 For example, User 2 in the first row of User 1's matrix views the same connected
 branch from User 2's own slot. Once User 1's 2/4/8 rows are paid, User 2 has two
@@ -35,17 +43,18 @@ inherited rows (2 + 4 members) and eight empty positions in their third row.
 User 2 or their placed downline can fill those positions. Extra invitations
 from User 1 enter User 1's rebirth instead. Completing User 2's slot opens User
 2's own rebirth and queues their next unowned level. After the wallet-funded
-upgrade confirms, User 2's reserved position in User 1's next-level matrix
-is marked as purchased. Members who have not bought that level remain visible
-with a "Not purchased yet" tag.
+upgrade enters the next level, User 2 takes the next available position under
+User 1 at that level. If another member entered that level first, that member
+keeps the earlier position. The level-1 position is not copied to level 2.
 
 The member referral page starts with a grid of matrix slots, including initial
 slots and rebirths at every purchase level. Cards show locked, filling or
 completed status, paid positions and reserved positions separately. Select a
 card to open that exact level and cycle, then return to the grid to choose
 another. The level filter and pagination support accounts with many rebirths.
-Locked cards preview reserved placement; opening one does not purchase a level.
-Every matrix level, including level 1, shows referred members when they join.
+Locked cards preview existing descendants; opening one does not purchase a level.
+Level 1 shows referred members when they register. Higher levels show members
+when they enter that level.
 Members who have not purchased the selected level carry a "Not purchased yet"
 tag. Tree counts show paid
 positions. Registration alone does not open a rebirth or trigger an upgrade.
@@ -57,17 +66,18 @@ connections remain visible at every level, so descendants retain their original
 paths. The open slot refreshes every fifteen seconds while the tab is visible.
 Opening a completed card shows all fourteen members in that exact level and
 cycle, even after later rebirths; the new slot has its own separate tree.
-Unilevel and the member list remain separate views on the same page.
+Unilevel and the member list remain separate views on the same page. The
+unilevel tree also provides purchase-level and rebirth-cycle selectors.
 
 `GET /api/referrals/slots?level=1&page=1` returns the signed-in member's own
 progress, with at most 24 cards per page. It accepts no other member's identity.
 The public tree component provides program, purchase-level and cycle selectors.
 `GET /api/referrals/tree?id=<numeric ID>&mode=matrix&level=1&cycle=0` displays a
-matrix; `mode=unilevel&levels=15` displays continuous placement. Paths contain
+matrix; `mode=unilevel&level=2&cycle=1&levels=15` displays that exact unilevel slot. Paths contain
 only `0` and `1` separated by `/`. The public endpoint returns numeric member
 IDs, placement and a `purchased` boolean on each member and root, without internal
 identifiers or wallets. In matrix mode `purchased` refers to the selected level;
-in unilevel mode it indicates ownership of level 1.
+in unilevel mode it also refers to the selected level.
 
 ## Purchase distribution
 
@@ -101,6 +111,13 @@ When the owner and all fourteen descendant slots are unlocked at a level, the
 backend records that cycle's completion once and opens the next same-level
 cycle. This is a **rebirth**: a separate slot at the same level,
 with the same two branches and three rows, while the previous slot stays intact.
+The new slot re-enters under the member's original referrer at the next
+available position. It does not retain the previous slot's position or become
+an isolated root when the member has a referrer. Placement excludes the member's
+existing descendant branches to avoid circular ancestry. If eligible positions
+are occupied, overflow can reserve a future referrer cycle until it opens.
+Creating a rebirth is not a separate token purchase. Later purchases beneath
+it distribute commissions through its new parent chain.
 Each rebirth can fill and complete again.
 Prepaid reserved cycles are checked in order when opened; each must satisfy
 the same paid completion rule before the following rebirth opens.
@@ -113,7 +130,9 @@ reserved level first, that job is superseded without a duplicate charge.
 
 The unilevel tree completes once per paid level when its owner and all 65,534
 descendants within fifteen rows own that level. It queues the next unowned level
-through the same worker. Unilevel does not create rebirth slots or move members.
+through the same worker and opens its next same-level unilevel slot under the
+original referrer. Later level entries follow that slot's fifteen parent steps
+at 1% each. Completed unilevel slots keep their existing descendants.
 Neither program purchases level 16; matrix rebirths continue at the maximum.
 
 The upgrade costs the **full next-level price**, deducted from the member's
@@ -135,7 +154,8 @@ payouts, including cycle consumption. A dedicated quote authority remains
 trusted for placement, paid-level eligibility, legacy levels **and cycle
 completion**; those facts live in PostgreSQL, not in on-chain tree storage.
 The field name remains compatible with version 3: matrix proofs hash the slot
-ID, while unilevel proofs hash `unilevel:<paid level>:<member UUID>`.
+ID, while initial unilevel proofs hash `unilevel:<paid level>:<member UUID>`.
+Unilevel rebirth proofs hash their slot ID, which also includes the cycle number.
 
 The existing 15-second worker persists signed relayer transactions before
 broadcast and serializes the relayer nonce across instances. Fund the public
@@ -167,6 +187,14 @@ no replacement if the configured distributor already reports version 3.
 Migration `0015_paid_matrix_rebirths.sql` separates reserved overflow from opened
 rebirths. It preserves placement, completed cycles and payment evidence while
 hiding future unqualified cycles. Apply it with the application update below.
+
+Migration `0016_dynamic_program_placement.sql` removes unpaid higher-level
+reservations, adds per-level unilevel slots, and reconnects opened rebirths.
+It preserves paid ancestry, outstanding signed quote reservations, historical
+allocations and upgrade jobs. Legacy unpaid parents needed by a paid branch
+remain attached. Existing full unilevel trees receive a new cycle without
+retroactive wallet charges. The existing version-3 ABI and percentages are
+unchanged; no distributor replacement is needed for this update.
 
 For an existing version-3 installation:
 

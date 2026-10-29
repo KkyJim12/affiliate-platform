@@ -90,7 +90,7 @@ test("paid binary matrices recycle and automatically debit the wallet for the ne
     expect((await database.one("SELECT COUNT(*) AS count FROM referral_purchases WHERE user_id=$1 AND level=3",rootId))!.count).toBe(1);
     await tree.getByRole("button",{name:"Binary matrix",exact:true}).click();
     await expect(tree.getByTestId('matrix-slot-summary')).toContainText('14/14 paid positions');
-    const slots=tree.getByRole('combobox',{name:'Matrix slot',exact:true});
+    const slots=tree.getByRole('combobox',{name:'Program slot',exact:true});
     await expect(slots).toContainText('Initial slot');
     await slots.click();
     await page.getByRole('option',{name:'Rebirth 1',exact:true}).click();
@@ -139,7 +139,7 @@ test("a referred member inherits two rows, their branch fills the last row and u
     await expect.poll(async()=> (await database.one("SELECT status FROM referral_auto_upgrades WHERE user_id=$1 AND level=2",member.id))?.status,{timeout:45000}).toBe('completed');
     expect((await matrix(member.code)).levels.map((row:{filled:number})=>row.filled)).toEqual([2,4,8]);
     const level2=await matrix(owner.code,2);
-    expect(level2.members).toHaveLength(15);
+    expect(level2.members).toHaveLength(2);
     expect(level2.members.filter((row:{purchased:boolean})=>row.purchased)).toEqual([level2.root,{id:member.code,path:'0',parentId:owner.code,purchased:true}]);
     expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",member.id))!.available).toBe(121_400_000);
     expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",owner.id))!.available).toBe(124_400_000);
