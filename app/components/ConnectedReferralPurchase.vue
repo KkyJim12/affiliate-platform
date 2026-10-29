@@ -26,8 +26,9 @@ async function refresh() {
     await recover();
     const state = await $fetch<ReferralChainStatus>("/api/referrals/chain/status"); emit("refreshed",state);
     const history = await $fetch<ChainPurchaseStatus[]>("/api/referrals/chain/purchases");
-    const latest = history.find(row => row.id === current.value?.id) ?? state.pending ?? history[0] ?? null;
-    if (latest?.status === "confirmed" && latest.level > (props.program?.currentLevel ?? 0)) emit("updated");
+    const latest = state.pending ?? history[0] ?? null;
+    if (latest?.status === "confirmed" && (latest.level > (props.program?.currentLevel ?? 0)
+      || latest.kind === 'rebirth' && (current.value?.id !== latest.id || current.value?.status !== 'confirmed'))) emit("updated");
     current.value = latest;
   } catch (failure) { error.value = failureMessage(failure); }
   finally { refreshing = false; }
@@ -49,7 +50,7 @@ async function purchase() {
   } catch (failure) { error.value = failureMessage(failure); await refresh(); }
   finally { busy.value = false; stage.value = ""; }
 }
-onMounted(() => { void refresh(); timer = setInterval(() => { if (!busy.value && pending.value) void refresh(); },4000); });
+onMounted(() => { void refresh(); timer = setInterval(() => { if (!busy.value && (pending.value || props.program?.autoUpgrade)) void refresh(); },4000); });
 onBeforeUnmount(() => clearInterval(timer));
 </script>
 <template>
@@ -62,7 +63,7 @@ onBeforeUnmount(() => clearInterval(timer));
       <p v-if="!canAfford && chain.balance !== null" class="referral-funding-hint" role="status">{{ t('onchain.tokenRequired', { required: formatUsdt(program?.nextPrice || 10),available: formatUsdt(Number(chain.balance)),symbol: chain.tokenSymbol }) }}</p>
       <p v-if="!chain.ready">{{ t('onchain.pausedOrUnavailable') }}</p>
     </template>
-    <p v-if="program?.autoUpgrade" role="status">{{ t('matrix.upgradeQueued', { level: program.autoUpgrade.level }) }} {{ program.autoUpgrade.lastError ? t('matrix.upgradeWaiting') : '' }}</p>
+    <p v-if="program?.autoUpgrade" role="status">{{ t(program.autoUpgrade.kind === 'rebirth' ? 'matrix.rebirthQueued' : 'matrix.upgradeQueued', { level: program.autoUpgrade.level }) }} {{ program.autoUpgrade.lastError ? t('matrix.upgradeWaiting') : '' }}</p>
     <p v-if="!chain?.configured" role="status">{{ chain?.error || t('onchain.notConfigured') }}</p>
     <div v-if="current" class="referral-chain-result" :class="current.status" data-testid="chain-purchase-status" aria-live="polite"><strong>{{ t(`connected.${current.status}`) }}</strong><p v-if="current.status === 'pending'">{{ t('onchain.pendingHint') }}</p><a v-if="current.explorerUrl" :href="current.explorerUrl" target="_blank" rel="noopener noreferrer">{{ t('onchain.viewTransaction') }}</a></div>
     <p v-if="error && !confirmOpen" class="auth-error" role="alert">{{ error }}</p><button class="text-action" :disabled="busy" @click="refresh">{{ t('onchain.refresh') }}</button>

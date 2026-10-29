@@ -609,7 +609,7 @@ test('a delayed guest session read does not replace a completed wallet sign-in',
   } finally { releaseSession(); provider.destroy(); }
 });
 
-test('a full paid matrix triggers exactly one relayed wallet debit and unlocks the next level', async ({ playwright }) => {
+test('a full paid matrix charges rebirth and upgrade separately and unlocks the next level', async ({ playwright }) => {
   test.setTimeout(180000);
   const provider=rpc(),database=openTestDatabase(),root=await playwright.request.newContext({baseURL:origin});
   const rootWallet=Wallet.createRandom().connect(provider);
@@ -629,7 +629,8 @@ test('a full paid matrix triggers exactly one relayed wallet debit and unlocks t
       return (await database.one("SELECT status FROM matrix_auto_upgrades WHERE user_id=$1 AND level=2",owner.id))?.status;
     },{timeout:60000,intervals:[1000,3000]}).toBe('completed');
     expect((await (await root.get('/api/referrals/program')).json()).currentLevel).toBe(2);
-    expect(await token.getFunction('balanceOf')(rootWallet.address)).toBe(121400000n);
+    expect(await token.getFunction('balanceOf')(rootWallet.address)).toBe(111400000n);
+    expect((await database.one("SELECT COUNT(*) AS count FROM referral_chain_purchases WHERE user_id=$1 AND rebirth_id IS NOT NULL AND status='confirmed'",owner.id))!.count).toBe(1);
     expect((await database.one("SELECT COUNT(*) AS count FROM referral_chain_purchases WHERE user_id=$1 AND level=2 AND status='confirmed' AND signing_mode='automatic'",owner.id))!.count).toBe(1);
     expect((await database.one("SELECT COUNT(*) AS count FROM matrix_slots WHERE user_id=$1 AND level=1",owner.id))!.count).toBe(2);
     const automatic=await database.one("SELECT transaction_hash FROM referral_chain_purchases WHERE user_id=$1 AND level=2",owner.id);
@@ -637,7 +638,7 @@ test('a full paid matrix triggers exactly one relayed wallet debit and unlocks t
     expect(tx!.from).toBe(new Wallet(process.env.NUXT_REFERRAL_AUTHORITY_PRIVATE_KEY!).address);
     expect(tx!.from).not.toBe(rootWallet.address);
     await root.get('/api/referrals/chain/status');
-    expect(await token.getFunction('balanceOf')(rootWallet.address)).toBe(121400000n);
+    expect(await token.getFunction('balanceOf')(rootWallet.address)).toBe(111400000n);
   } finally { await root.dispose();provider.destroy();await database.close(); }
 });
 
@@ -652,7 +653,9 @@ test('a queued unilevel completion uses the relayer and member approval without 
     // Here seed its persisted completion to exercise on-chain dispatch/recovery.
     await database.transaction(async()=>{
       await database.execute("UPDATE unilevel_progress SET complete_depth=15,completed_at=$1 WHERE user_id=$2 AND level=1",new Date().toISOString(),owner.id);
+      await database.execute("UPDATE unilevel_slots SET complete_depth=15,completed_at=$1 WHERE user_id=$2 AND level=1 AND cycle=0",new Date().toISOString(),owner.id);
       await database.execute("SELECT queue_referral_upgrade($1,$2,1,'unilevel')",completion,owner.id);
+      await database.execute("SELECT place_program_slot($1,1,'unilevel',1)",owner.id);
     });
     await expect.poll(async()=>{
       await api.get('/api/referrals/chain/status');
@@ -662,10 +665,10 @@ test('a queued unilevel completion uses the relayer and member approval without 
     expect(purchase!.payload.quote.matrixCycle).toBe(id(completion));
     expect((await provider.getTransaction(purchase!.transaction_hash))!.from).toBe(new Wallet(process.env.NUXT_REFERRAL_AUTHORITY_PRIVATE_KEY!).address);
     const token=new Contract(process.env.NUXT_EVM_TOKEN_ADDRESS!,['function balanceOf(address) view returns(uint256)'],provider);
-    expect(await token.getFunction('balanceOf')(wallet.address)).toBe(70_000_000n);
+    expect(await token.getFunction('balanceOf')(wallet.address)).toBe(60_000_000n);
     expect((await (await api.get('/api/referrals/program')).json()).currentLevel).toBe(2);
     expect((await database.one("SELECT COUNT(*) AS count FROM matrix_slots WHERE user_id=$1 AND level=1",owner.id))!.count).toBe(1);
     await api.get('/api/referrals/chain/status');
-    expect(await token.getFunction('balanceOf')(wallet.address)).toBe(70_000_000n);
+    expect(await token.getFunction('balanceOf')(wallet.address)).toBe(60_000_000n);
   } finally {await api.dispose();provider.destroy();await database.close();}
 });

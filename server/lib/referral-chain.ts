@@ -25,6 +25,7 @@ export interface PurchasePayload {
   recipients: { userId: string | null; reason: "upline" | "missing_upline" | "ineligible_upline" }[];
   signature: string;
   automaticApproval?: boolean;
+  rebirth?: boolean;
 }
 export interface PreparedChainTransaction { stage: string; hash: string; raw: string; nonce: number; to: string }
 export const distributorInterface = new Interface(referralContractAbi);
@@ -122,11 +123,13 @@ export class ReferralChainClient {
   }
 
   async prepareAutoUpgrade(payload: PurchasePayload, decimals: number) {
+    if (payload.rebirth && await this.contract.getFunction("rebirthVersion")().catch(() => 0n) !== 1n)
+      throw new Error("Waiting for deployment of the referral contract with paid rebirth support.");
     const price = BigInt(purchaseShares(payload.quote.level).reduce((sum, share) => sum + share.units, 0)) * 10n ** BigInt(decimals - 6);
     if (await this.token.getFunction("balanceOf")(payload.quote.buyer) < price) throw new Error("Waiting for sufficient token balance.");
     if (await this.token.getFunction("allowance")(payload.quote.buyer, this.config.contractAddress) < price) throw new Error("Waiting for token approval for automatic upgrades.");
     return this.prepareBatch(this.authority, [{ stage: "purchase", to: this.config.contractAddress,
-      data: distributorInterface.encodeFunctionData("autoUpgrade", [payload.quote, payload.uplines, payload.signature]), gasLimit: purchaseGasLimit }]);
+      data: distributorInterface.encodeFunctionData(payload.rebirth ? "rebirth" : "autoUpgrade", [payload.quote, payload.uplines, payload.signature]), gasLimit: purchaseGasLimit }]);
   }
 
   async prepareFeeUpdate(owner: Wallet, recipient: string, maxGasFee: bigint) {
@@ -196,7 +199,7 @@ export class ReferralChainClient {
     const tx = await this.provider.getTransaction(receipt.hash);
     const automatic = version === 3n && payload.quote.matrixCycle !== ZeroHash;
     const purchaseInterface = version === 3n ? distributorInterface : legacyDistributorInterface;
-    const expectedData = purchaseInterface.encodeFunctionData(automatic ? "autoUpgrade" : "purchase", [payload.quote, payload.uplines, payload.signature]);
+    const expectedData = purchaseInterface.encodeFunctionData(payload.rebirth ? "rebirth" : automatic ? "autoUpgrade" : "purchase", [payload.quote, payload.uplines, payload.signature]);
     if (!tx || tx.chainId !== BigInt(this.chainId) || tx.value !== 0n || (!automatic && getAddress(tx.from) !== getAddress(payload.quote.buyer))
       || !tx.to || getAddress(tx.to) !== getAddress(this.config.contractAddress) || tx.data !== expectedData) throw new Error("Purchase transaction does not match its authorization.");
     const events = this.events(receipt);

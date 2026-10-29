@@ -20,6 +20,7 @@ contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable 
 
     uint8 public constant MAX_LEVEL = 15;
     uint256 public constant distributionVersion = 3;
+    uint256 public constant rebirthVersion = 1;
     bytes32 public constant PURCHASE_TYPEHASH = keccak256(
         "Purchase(bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline,bytes32 matrixCycle)"
     );
@@ -32,6 +33,7 @@ contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable 
     mapping(address => uint8) public levelOf;
     mapping(bytes32 => bool) public purchased;
     mapping(bytes32 => bool) public upgradedCycles;
+    mapping(bytes32 => bool) public rebornCycles;
 
     struct Purchase {
         bytes32 id;
@@ -96,7 +98,7 @@ contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable 
         external nonReentrant whenNotPaused
     {
         if (quote.buyer != msg.sender || quote.matrixCycle != bytes32(0)) revert InvalidPurchase();
-        _purchase(quote, uplines, signature);
+        _purchase(quote, uplines, signature, false);
     }
 
     /// @dev The quote authority attests a completed matrix or unilevel tree.
@@ -109,12 +111,24 @@ contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable 
         if (quote.matrixCycle == bytes32(0) || upgradedCycles[quote.matrixCycle] || quote.previousLevel == 0)
             revert InvalidPurchase();
         upgradedCycles[quote.matrixCycle] = true;
-        _purchase(quote, uplines, signature);
+        _purchase(quote, uplines, signature, false);
     }
 
-    function _purchase(Purchase calldata quote, address[18] calldata uplines, bytes calldata signature) private {
+    /// @notice Pay the same-level re-entry cost using the new slot's signed uplines.
+    /// The completion is spent once, independently from its next-level upgrade.
+    function rebirth(Purchase calldata quote, address[18] calldata uplines, bytes calldata signature)
+        external nonReentrant whenNotPaused
+    {
+        if (quote.matrixCycle == bytes32(0) || rebornCycles[quote.matrixCycle] || quote.previousLevel == 0)
+            revert InvalidPurchase();
+        rebornCycles[quote.matrixCycle] = true;
+        _purchase(quote, uplines, signature, true);
+    }
+
+    function _purchase(Purchase calldata quote, address[18] calldata uplines, bytes calldata signature, bool reentry) private {
         if (quote.buyer == address(0) || quote.id == bytes32(0) || purchased[quote.id]) revert InvalidPurchase();
-        if (quote.level == 0 || quote.level > MAX_LEVEL || quote.level != quote.previousLevel + 1)
+        if (quote.level == 0 || quote.level > MAX_LEVEL || quote.previousLevel > MAX_LEVEL
+            || (reentry ? quote.level > quote.previousLevel : quote.level != quote.previousLevel + 1))
             revert InvalidLevel();
         uint8 previous = levelOf[quote.buyer];
         // A signed previousLevel bootstraps existing paid members exactly once.
@@ -133,7 +147,7 @@ contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable 
                 if (uplines[j] == uplines[i]) revert InvalidUplines();
         }
         purchased[quote.id] = true;
-        levelOf[quote.buyer] = quote.level;
+        levelOf[quote.buyer] = reentry ? quote.previousLevel : quote.level;
         uint256 price = priceForLevel(quote.level);
         uint256 beforeBalance = paymentToken.balanceOf(address(this));
         paymentToken.safeTransferFrom(quote.buyer, address(this), price);

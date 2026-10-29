@@ -32,8 +32,8 @@ async function refreshState() {
     emit("refreshed", state);
     history.value = purchases;
     const previous = current.value;
-    current.value = purchases.find(row => row.id === previous?.id) ?? state.pending ?? purchases[0] ?? null;
-    if (previous?.status === "pending" && current.value?.status === "confirmed" && !observed.has(current.value.id)) {
+    current.value = state.pending ?? purchases[0] ?? null;
+    if ((previous?.status === "pending" || current.value?.kind === 'rebirth') && current.value?.status === "confirmed" && !observed.has(current.value.id)) {
       observed.add(current.value.id);
       emit("updated"); notify(t("onchain.confirmedNotice"));
     }
@@ -65,7 +65,7 @@ onMounted(() => {
   mounted = true;
   // A status read can finalize a receipt after the parent's initial program read.
   if (current.value?.status === "confirmed" && current.value.level > (props.program?.currentLevel || 0)) emit("updated");
-  timer = setInterval(() => { if (mounted && (pending.value || current.value?.status === "pending") && !busy.value) void refreshState(); }, 4000);
+  timer = setInterval(() => { if (mounted && (pending.value || current.value?.status === "pending" || props.program?.autoUpgrade) && !busy.value) void refreshState(); }, 4000);
 });
 onBeforeUnmount(() => { mounted = false; password.value = ""; if (timer) clearInterval(timer); });
 </script>
@@ -93,7 +93,7 @@ onBeforeUnmount(() => { mounted = false; password.value = ""; if (timer) clearIn
       <p v-if="current.status === 'failed'">{{ t('onchain.revertedHint') }}</p>
       <a v-if="current.explorerUrl" :href="current.explorerUrl" target="_blank" rel="noopener noreferrer">{{ t('onchain.viewTransaction') }}<AppIcon name="ArrowUpRight" :size="14" /></a>
     </div>
-    <p v-if="program?.autoUpgrade" role="status">{{ t('matrix.upgradeQueued', { level: program.autoUpgrade.level }) }} {{ program.autoUpgrade.lastError ? t('matrix.upgradeWaiting') : '' }}</p>
+    <p v-if="program?.autoUpgrade" role="status">{{ t(program.autoUpgrade.kind === 'rebirth' ? 'matrix.rebirthQueued' : 'matrix.upgradeQueued', { level: program.autoUpgrade.level }) }} {{ program.autoUpgrade.lastError ? t('matrix.upgradeWaiting') : '' }}</p>
     <p v-if="error && !confirmOpen" class="auth-error" role="alert">{{ tr(error) }}</p>
     <button class="text-action" :disabled="refreshing || busy" @click="refreshState"><AppIcon name="RefreshCw" :size="14" />{{ t('onchain.refresh') }}</button>
     <ModalTransition><AppModal v-if="confirmOpen" :title="t('onchain.confirmTitle')" @close="closeConfirmation">

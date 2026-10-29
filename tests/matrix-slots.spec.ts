@@ -39,7 +39,7 @@ async function fixture(paidChildren=14) {
     }
     if(paidChildren>=14) {
       await database.execute("UPDATE matrix_slots SET completed_at=$1 WHERE user_id=$2 AND level=1 AND cycle=0",timestamp,owner);
-      await database.execute("UPDATE matrix_slots SET opened=TRUE WHERE user_id=$1 AND level=1 AND cycle=1",owner);
+      await database.execute("UPDATE matrix_slots SET opened=TRUE,rebirth_paid=TRUE,unlocked=TRUE WHERE user_id=$1 AND level=1 AND cycle=1",owner);
     }
     return {owner,memberId:member!.referral_code as string,children,childIds};
   } finally {await database.close();}
@@ -262,7 +262,7 @@ test("unilevel level and rebirth selectors show each slot's own branch",async({p
     // Import a completed cycle, just as the matrix browsing fixtures do.
     await database.execute("UPDATE unilevel_slots SET completed_at=$1 WHERE user_id=$2 AND level=2 AND cycle=0",new Date().toISOString(),member.owner);
     await database.execute("SELECT place_program_slot($1,2,'unilevel',1)",member.owner);
-    await database.execute("UPDATE unilevel_slots SET unlocked=TRUE WHERE user_id=$1 AND level=2 AND cycle=1",member.owner);
+    await database.execute("UPDATE unilevel_slots SET rebirth_paid=TRUE,unlocked=TRUE WHERE user_id=$1 AND level=2 AND cycle=1",member.owner);
   } finally {await database.close();}
   await confirmedUpgrade(member.childIds[0]!,2);
   const initial=await (await page.request.get(`/api/referrals/tree?id=${member.memberId}&mode=unilevel&level=2&cycle=0`)).json();

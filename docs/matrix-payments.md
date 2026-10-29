@@ -124,8 +124,14 @@ available position. It does not retain the previous slot's position or become
 an isolated root when the member has a referrer. Placement excludes the member's
 existing descendant branches to avoid circular ancestry. If eligible positions
 are occupied, overflow can reserve a future referrer cycle until it opens.
-Creating a rebirth is not a separate token purchase. Later purchases beneath
-it distribute commissions through its new parent chain.
+Each rebirth is a separate payment at the full source-level price: level 1
+costs 10 tokens, level 2 costs 20, level 3 costs 40, doubling through level 15.
+The member's wallet is debited once, and the price pays the new slot's parent
+chain using the existing 10% / 20% / 50% matrix, fifteen 1% unilevel and 5%
+platform shares. The other program uses its latest paid, opened slot at this
+level. Missing or ineligible parents still pay the platform. The rebirth stays
+unpaid until settlement; it cannot count as a paid parent or complete again.
+Reserved future cycles also stay unpaid until their own rebirth charges settle.
 Each rebirth can fill and complete again.
 Prepaid reserved cycles are checked in order when opened; each must satisfy
 the same paid completion rule before the following rebirth opens.
@@ -143,17 +149,32 @@ original referrer. Later level entries follow that slot's fifteen parent steps
 at 1% each. Completed unilevel slots keep their existing descendants.
 Neither program purchases level 16; matrix rebirths continue at the maximum.
 
-The upgrade costs the **full next-level price**, deducted from the member's
+The upgrade waits for its rebirth payment and costs the **full next-level price**, deducted separately from the member's
 wallet; commissions are not withheld or reserved. A confirmed upgrade unlocks
 the next level's slot and distributes its price using the same rules.
 
 In contract mode the purchase confirmation offers a finite token approval for
 this and the remaining levels. At level 1 the maximum is 327,670 tokens; this is
 an approval ceiling, not an immediate charge. Without this option, the purchase
-approves only its own price. Existing allowances can be revoked in the wallet.
+approves only its own price. Rebirth payments share this finite approval with
+upgrades, so repeated rebirths can require renewed approval. Existing allowances can be revoked in the wallet.
 An insufficient balance or allowance leaves the upgrade queued. Replenishing
 the wallet allows an already-approved upgrade to retry. No member private key
 is required in connected-wallet mode.
+
+Migration `0018_rebirth_payments.sql` enables charges for new completions only;
+existing opened cycles and queued upgrades are preserved without retroactive
+charges. Contract payments require a newly deployed distributor exposing
+`rebirthVersion() == 1`; older version-3 deployments keep rebirth charges queued
+with a deployment message. Build and restart the app after migration and update
+its contract configuration after deployment. No live deployment is performed by
+this source change.
+
+The `rebirth` contract method spends a signed completion once independently
+from `autoUpgrade`, charges the source-level price and preserves the buyer's
+highest owned level. Failed payments revert all transfers and replay state.
+Rebirth quotes hash `rebirth:<completion ID>`, separately from the existing
+upgrade proof for that completion.
 
 The quote authority attests either program's completion using a signed `matrixCycle`
 hash. `autoUpgrade` accepts a relayer, checks the quote and sequential level,
@@ -189,8 +210,8 @@ the shared `referral_auto_upgrades` queue, adds incremental unilevel progress,
 and records historical full unilevel trees without retrospective charges.
 `matrix_auto_upgrades` remains a matrix-only compatibility view. A payment
 updates at most fifteen unilevel ancestors instead of scanning 65,534 members.
-This application update uses the existing version-3 contract ABI and requires
-no replacement if the configured distributor already reports version 3.
+Migration 0014 itself uses the version-3 ABI. The paid rebirth behavior added in
+0018 requires the additional `rebirth` method and capability described above.
 
 Migration `0015_paid_matrix_rebirths.sql` separates reserved overflow from opened
 rebirths. It preserves placement, completed cycles and payment evidence while
@@ -202,7 +223,7 @@ It preserves paid ancestry, outstanding signed quote reservations, historical
 allocations and upgrade jobs. Legacy unpaid parents needed by a paid branch
 remain attached. Existing full unilevel trees receive a new cycle without
 retroactive wallet charges. The existing version-3 ABI and percentages are
-unchanged; no distributor replacement is needed for this update.
+unchanged for migration 0016. Paid rebirths introduced in 0018 require a replacement.
 
 For an existing version-3 installation:
 
@@ -212,8 +233,8 @@ npm run build
 ```
 
 Restart the application using its existing environment. Startup also applies
-pending migrations. The replacement instructions below apply to older contract
-versions; they are not required for this completion and rebirth update.
+pending migrations. The replacement instructions below also apply to existing
+version-3 distributors that do not expose `rebirthVersion() == 1`.
 
 The distributor is not upgradeable. Updating application source cannot change
 an existing deployment. Finish pending purchases before changing addresses. To

@@ -35,6 +35,25 @@ test('an older deployment without the new distribution version cannot accept new
   } finally { await f.close(); }
 });
 
+test('relayed rebirth receipts verify the debit, new uplines and exact method, including replacement recovery',async()=>{
+  const f=await fixture();
+  try {
+    for(const tx of await f.client.preparePurchase(f.buyer,f.payload,6)) await f.client.broadcast(tx.raw);
+    await (await f.token.connect(f.buyer.connect(f.provider)).approve(f.config.contractAddress,10_000_000n)).wait();
+    await f.provider.send('hardhat_setBalance',[f.client.authority.address,toBeHex(parseEther('1'))]);
+    const quote={...f.payload.quote,id:id('library-rebirth'),previousLevel:1,matrixCycle:id('library-completion')};
+    const payload={...f.payload,quote,rebirth:true,signature:await f.client.sign(quote)};
+    const batch=await f.client.prepareAutoUpgrade(payload,6);
+    for(const tx of batch) await f.client.broadcast(tx.raw);
+    const evidence=await f.client.verifyPurchase(null,payload);
+    assert.equal(evidence.status,'confirmed');
+    assert.equal(evidence.allocations.reduce((sum,share)=>sum+share.units,0),10_000_000);
+    assert.equal(await f.token.balanceOf(f.buyer.address),80_000_000n);
+    assert.equal(await f.contract.levelOf(f.buyer.address),1n);
+    await assert.rejects(f.client.verifyPurchase(batch[0].hash,{...payload,rebirth:false}),/authorization/);
+  } finally {await f.close();}
+});
+
 test('signed purchase batches bind chain, spender, exact allowance and nonce order without a gas quote', async () => {
   const f = await fixture();
   try {

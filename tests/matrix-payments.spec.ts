@@ -11,6 +11,56 @@ test.beforeEach(async()=>{
   try {await database.execute("DELETE FROM rate_limits");} finally {await database.close();}
 });
 
+test('rebirths debit 10, 20 and 40 separately, pay the new upper steps and leave unfunded upgrades queued',async({playwright},info)=>{
+  test.skip(info.project.name!=='desktop' || process.env.NUXT_REFERRAL_PAYMENT_MODE==='contract');
+  test.setTimeout(120000);
+  const database=openTestDatabase(),api=await playwright.request.newContext({baseURL:origin}),hash=await hashPassword(password);
+  const cases:{owner:string;sponsor:string;level:number;price:number;before:number;job:string}[]=[];
+  const create=async(sponsor:string|null)=>{
+    const id=randomUUID(),row=await database.one("INSERT INTO users VALUES($1,$2,$3,$1,$4,$5) RETURNING referral_code",id,`paid_${id.slice(0,8)}`,hash,sponsor,new Date().toISOString());
+    await database.execute("INSERT INTO wallets(id,user_id,available) VALUES($1,$2,1000000000)",`w-${id}`,id);
+    return {id,code:row!.referral_code};
+  };
+  const purchase=async(member:{code:unknown},level:number)=>{
+    await api.post('/api/auth/login',{headers:{Origin:origin},data:{memberId:member.code,password}});
+    for(let tier=1;tier<=level;tier++) {
+      const response=await api.post(tier===1?'/api/referrals/activate':'/api/referrals/upgrade',{headers:{Origin:origin},data:{password,level:tier,requestKey:randomUUID()}});
+      expect(response.status(),await response.text()).toBe(200);
+    }
+  };
+  try {
+    for(const level of [1,2,3]) {
+      const sponsor=await create(null);await purchase(sponsor,level);
+      const owner=await create(sponsor.id);await purchase(owner,level);
+      const completion=`matrix:${level}:${owner.id}:0`,job=`rebirth:${completion}`;
+      await database.transaction(async()=>{
+        await database.execute("SELECT pg_advisory_xact_lock(782438,2)");
+        await database.execute("UPDATE wallets SET available=0 WHERE user_id=$1",owner.id);
+        await database.execute("UPDATE matrix_slots SET completed_at=$1 WHERE id=$2",new Date().toISOString(),completion);
+        await database.execute("SELECT queue_referral_upgrade($1,$2,$3,'matrix',$1)",completion,owner.id,level);
+        await database.execute("SELECT place_program_slot($1,$2,'matrix',1)",owner.id,level);
+      });
+      const before=(await database.one("SELECT available FROM wallets WHERE user_id=$1",sponsor.id))!.available;
+      cases.push({owner:owner.id,sponsor:sponsor.id,level,price:10_000_000*2**(level-1),before,job});
+    }
+    await expect.poll(async()=> (await database.all("SELECT last_error FROM referral_auto_upgrades WHERE cycle_id=ANY($1::TEXT[])",cases.map(row=>row.job))).every(row=>!!row.last_error),{timeout:45000}).toBe(true);
+    for(const row of cases) {
+      expect((await database.one("SELECT unlocked FROM matrix_slots WHERE user_id=$1 AND level=$2 AND cycle=1",row.owner,row.level))!.unlocked).toBe(false);
+      await database.execute("UPDATE wallets SET available=$1 WHERE user_id=$2",row.price,row.owner);
+    }
+    await expect.poll(async()=> (await database.all("SELECT status FROM referral_auto_upgrades WHERE cycle_id=ANY($1::TEXT[])",cases.map(row=>row.job))).every(row=>row.status==='completed'),{timeout:45000}).toBe(true);
+    for(const row of cases) {
+      expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",row.owner))!.available).toBe(0);
+      expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",row.sponsor))!.available).toBe(row.before+row.price*11/100);
+      expect((await database.one("SELECT unlocked FROM matrix_slots WHERE user_id=$1 AND level=$2 AND cycle=1",row.owner,row.level))!.unlocked).toBe(true);
+      const totals=await database.one("SELECT COUNT(*) AS count,SUM(a.amount) AS amount FROM referral_allocations a JOIN referral_purchases p ON p.id=a.purchase_id WHERE p.rebirth_id=$1",row.job);
+      expect(totals).toEqual({count:19,amount:row.price});
+      expect((await database.one("SELECT COUNT(*) AS count FROM referral_purchases WHERE rebirth_id=$1",row.job))!.count).toBe(1);
+      expect((await database.one("SELECT status FROM referral_auto_upgrades WHERE cycle_id=$1",row.job.slice('rebirth:'.length)))!.status).toBe('queued');
+    }
+  } finally {await api.dispose();await database.close();}
+});
+
 test("paid binary matrices recycle and automatically debit the wallet for the next level", async ({ playwright, page }, info) => {
   test.skip(info.project.name !== "desktop" || process.env.NUXT_REFERRAL_PAYMENT_MODE === "contract");
   test.setTimeout(180000);
@@ -46,7 +96,8 @@ test("paid binary matrices recycle and automatically debit the wallet for the ne
     }
     await expect.poll(async () => (await database.one("SELECT status FROM matrix_auto_upgrades WHERE user_id=$1 AND level=2",rootId))?.status,
       { timeout: 45000 }).toBe("completed");
-    expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",rootId))!.available).toBe(121_400_000);
+    expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",rootId))!.available).toBe(111_400_000);
+    expect((await database.one("SELECT COUNT(*) AS count FROM referral_purchases WHERE user_id=$1 AND rebirth_id IS NOT NULL",rootId))!.count).toBe(1);
     expect((await database.one("SELECT COUNT(*) AS count FROM referral_purchases WHERE user_id=$1 AND level=2",rootId))!.count).toBe(1);
     const matrix = await (await api.get(`/api/referrals/tree?id=${rootCode}&mode=matrix`)).json();
     expect(matrix.maxDepth).toBe(3); expect(matrix.cycles).toEqual([0,1]);
@@ -79,13 +130,14 @@ test("paid binary matrices recycle and automatically debit the wallet for the ne
       const response=await post("/api/referrals/activate",{password,requestKey:randomUUID()});
       expect(response.status(),await response.text()).toBe(200);
     }
-    await expect.poll(async()=> (await database.one("SELECT last_error FROM referral_auto_upgrades WHERE user_id=$1 AND level=3",rootId))?.last_error,{timeout:45000}).toBeTruthy();
+    await expect.poll(async()=> (await database.one("SELECT last_error FROM referral_auto_upgrades WHERE user_id=$1 AND kind='rebirth' AND rebirth_cycle=2",rootId))?.last_error,{timeout:45000}).toBeTruthy();
     expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",rootId))!.available).toBe(5_100_000);
     expect((await database.one("SELECT COUNT(*) AS count FROM referral_purchases WHERE user_id=$1 AND level=3",rootId))!.count).toBe(0);
     const rebirth=await (await api.get(`/api/referrals/tree?id=${rootCode}&mode=matrix&cycle=1`)).json();
     expect(rebirth.cycles).toEqual([0,1,2]);
     expect(rebirth.levels.map((row:{filled:number})=>row.filled)).toEqual([2,4,8]);
-    await database.execute("UPDATE wallets SET available=available+40000000 WHERE user_id=$1",rootId);
+    expect((await database.one("SELECT unlocked FROM matrix_slots WHERE user_id=$1 AND level=1 AND cycle=2",rootId))!.unlocked).toBe(false);
+    await database.execute("UPDATE wallets SET available=available+50000000 WHERE user_id=$1",rootId);
     await expect.poll(async()=> (await database.one("SELECT status FROM referral_auto_upgrades WHERE user_id=$1 AND level=3",rootId))?.status,{timeout:45000}).toBe('completed');
     expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",rootId))!.available).toBe(5_100_000);
     expect((await database.one("SELECT COUNT(*) AS count FROM referral_purchases WHERE user_id=$1 AND level=3",rootId))!.count).toBe(1);
@@ -141,8 +193,8 @@ test("a referred member inherits two rows, their branch fills the last row and u
     const level2=await matrix(owner.code,2);
     expect(level2.members).toHaveLength(2);
     expect(level2.members.filter((row:{purchased:boolean})=>row.purchased)).toEqual([level2.root,{id:member.code,path:'0',parentId:owner.code,purchased:true}]);
-    expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",member.id))!.available).toBe(121_400_000);
-    expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",owner.id))!.available).toBe(124_400_000);
+    expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",member.id))!.available).toBe(111_400_000);
+    expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",owner.id))!.available).toBe(115_500_000);
     const memberExtra=await create(member.id,0);
     expect((await database.one("SELECT parent_id FROM matrix_slots WHERE user_id=$1 AND level=1 AND cycle=0",memberExtra.id))!.parent_id).toBe(`matrix:1:${member.id}:1`);
     expect((await database.one("SELECT parent_id FROM matrix_slots WHERE user_id=$1 AND level=2 AND cycle=0",member.id))!.parent_id).toBe(`matrix:2:${owner.id}:0`);

@@ -150,6 +150,55 @@ test('matrix rebirth and unilevel completion proofs fund successive upgrades thr
   } finally { await f.close(); }
 });
 
+test('paid rebirths charge their source level, pay the new parents and preserve owned levels through level 15', async () => {
+  const f=await fixture(18);
+  try {
+    await (await f.token.mint(await f.buyer.getAddress(),100000n*10n**18n)).wait();
+    for(let level=1;level<=15;level++) await f.buy(await f.quote(level));
+    const buyer=await f.buyer.getAddress(), target=f.uplines[4];
+    for(const level of [1,2,3,15]) {
+      const ancestors=Array(18).fill(ZeroAddress); ancestors[0]=target; ancestors[3]=target;
+      const signed=await f.quote(level,{previousLevel:15,matrixCycle:id(`rebirth-level-${level}`)},ancestors);
+      const price=await f.contract.priceForLevel(level), before=await f.token.balanceOf(buyer), paid=await f.token.balanceOf(target);
+      await (await f.token.connect(f.buyer).approve(await f.contract.getAddress(),price)).wait();
+      await assert.rejects(f.contract.connect(f.owner).autoUpgrade(signed.value,signed.uplines,signed.signature));
+      await assert.rejects(f.contract.connect(f.buyer).purchase(signed.value,signed.uplines,signed.signature));
+      await (await f.contract.connect(f.owner).rebirth(signed.value,signed.uplines,signed.signature)).wait();
+      assert.equal(await f.token.balanceOf(buyer),before-price);
+      assert.equal(await f.token.balanceOf(target),paid+price*11n/100n);
+      assert.equal(await f.contract.levelOf(buyer),15n);
+      assert.equal(await f.contract.rebornCycles(signed.value.matrixCycle),true);
+      await assert.rejects(f.contract.connect(f.owner).rebirth(signed.value,signed.uplines,signed.signature));
+      const replay=await f.quote(level,{previousLevel:15,matrixCycle:signed.value.matrixCycle},ancestors);
+      await assert.rejects(f.contract.connect(f.owner).rebirth(replay.value,replay.uplines,replay.signature));
+    }
+  } finally {await f.close();}
+});
+
+test('rebirths retry after insufficient allowance or failed payout without consuming the completion',async()=>{
+  const f=await fixture();
+  try {
+    await f.buy(await f.quote(1));
+    const signed=await f.quote(1,{previousLevel:1,matrixCycle:id('retry-rebirth')});
+    const pay=()=>f.contract.connect(f.owner).rebirth(signed.value,signed.uplines,signed.signature);
+    await assert.rejects(pay());
+    assert.equal(await f.contract.rebornCycles(signed.value.matrixCycle),false);
+    await (await f.token.connect(f.buyer).approve(await f.contract.getAddress(),10_000_000n)).wait();
+    await (await f.token.setBlocked(f.uplines[2])).wait();
+    const balance=await f.token.balanceOf(await f.buyer.getAddress());
+    await assert.rejects(pay());
+    assert.equal(await f.token.balanceOf(await f.buyer.getAddress()),balance);
+    assert.equal(await f.contract.rebornCycles(signed.value.matrixCycle),false);
+    await (await f.token.setBlocked(ZeroAddress)).wait();
+    await (await pay()).wait();
+    assert.equal(await f.contract.levelOf(await f.buyer.getAddress()),1n);
+    const upgrade=await f.quote(2,{matrixCycle:signed.value.matrixCycle});
+    await (await f.token.connect(f.buyer).approve(await f.contract.getAddress(),20_000_000n)).wait();
+    await (await f.contract.connect(f.owner).autoUpgrade(upgrade.value,upgrade.uplines,upgrade.signature)).wait();
+    assert.equal(await f.contract.levelOf(await f.buyer.getAddress()),2n);
+  } finally {await f.close();}
+});
+
 test('forged recipients/signatures, wrong buyers, replay, stale fees and expired quotes cannot spend funds', async () => {
   const f = await fixture();
   try {

@@ -15,7 +15,7 @@ export interface ReferralProgram {
   feeConfigured: boolean;
   latestPurchase: { level: number; amount: number; commissions: number; platformPayable: number } | null;
   sponsor: { code: string } | null;
-  autoUpgrade?: { level: number; status: string; lastError: string | null } | null;
+  autoUpgrade?: { level: number; kind?: 'upgrade' | 'rebirth'; status: string; lastError: string | null } | null;
 }
 
 export interface ReferralUpdate {

@@ -37,7 +37,7 @@ async function slotFixture() {
     }
     await db.execute("UPDATE matrix_slots SET unlocked=TRUE WHERE level=1 AND user_id=ANY($1::TEXT[])",children.slice(0,14).map(child=>child.id));
     await db.execute("UPDATE matrix_slots SET completed_at=$1 WHERE user_id=$2 AND level=1 AND cycle=0",new Date().toISOString(),root.id);
-    await db.execute("UPDATE matrix_slots SET opened=TRUE WHERE user_id=$1 AND level=1 AND cycle=1",root.id);
+    await db.execute("UPDATE matrix_slots SET opened=TRUE,rebirth_paid=TRUE,unlocked=TRUE WHERE user_id=$1 AND level=1 AND cycle=1",root.id);
     return {...root,children};
   } finally {await db.close();}
 }
@@ -67,8 +67,8 @@ test('public slot catalogs show the requested member, validate pagination, and k
     expect((await (await request.get(`/api/referrals/public-slots?id=${root.memberId}`)).json()).memberId).toBe(root.memberId);
     const now=new Date().toISOString();
     await db.execute("UPDATE matrix_slots SET completed_at=$1 WHERE user_id=$2 AND level=1 AND cycle=1",now,root.id);
-    for(let cycle=2;cycle<=12;cycle++) await db.execute(`INSERT INTO matrix_slots(id,user_id,level,cycle,unlocked,completed_at,created_at)
-      VALUES($1,$2,1,$3,TRUE,$4,$4)`,`matrix:1:${root.id}:${cycle}`,root.id,cycle,now);
+    for(let cycle=2;cycle<=12;cycle++) await db.execute(`INSERT INTO matrix_slots(id,user_id,level,cycle,unlocked,completed_at,created_at,rebirth_paid)
+      VALUES($1,$2,1,$3,TRUE,$4,$4,TRUE)`,`matrix:1:${root.id}:${cycle}`,root.id,cycle,now);
     await db.execute("INSERT INTO matrix_slots(id,user_id,level,cycle,unlocked,created_at) VALUES($1,$2,1,14,TRUE,$3)",`matrix:1:${root.id}:14`,root.id,now);
     const first=await (await request.get(`/api/referrals/public-slots?id=${root.memberId}`)).json();
     const second=await (await request.get(`/api/referrals/public-slots?id=${root.memberId}&page=2`)).json();

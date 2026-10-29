@@ -1,5 +1,6 @@
 export const referralContractAbi = [
   "function distributionVersion() view returns (uint256)",
+  "function rebirthVersion() view returns (uint256)",
   "function paymentToken() view returns (address)",
   "function tokenDecimals() view returns (uint8)",
   "function feeRecipient() view returns (address)",
@@ -13,6 +14,8 @@ export const referralContractAbi = [
   "function previewShares(uint8) view returns (uint256[19])",
   "function purchase((bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline,bytes32 matrixCycle) quote,address[18] uplines,bytes signature)",
   "function autoUpgrade((bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline,bytes32 matrixCycle) quote,address[18] uplines,bytes signature)",
+  "function rebirth((bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline,bytes32 matrixCycle) quote,address[18] uplines,bytes signature)",
+  "function rebornCycles(bytes32) view returns (bool)",
   "function upgradedCycles(bytes32) view returns (bool)",
   "function setFeeRecipient(address)",
   "event SharePaid(bytes32 indexed id,uint8 kind,uint8 depth,address indexed recipient,uint256 amount,bool redirected)",
@@ -35,6 +38,7 @@ export interface ChainPurchaseQuote {
 
 export interface ChainPurchaseStatus {
   id: string;
+  kind?: "purchase" | "rebirth";
   level: number;
   status: "awaiting_signature" | "pending" | "confirmed" | "failed";
   transactionHash: string | null;

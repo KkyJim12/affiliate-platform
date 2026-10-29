@@ -1,4 +1,4 @@
-import { referralRecipients, unlockMatrixLevel } from "./matrix";
+import { completeRebirth, rebirthRecipients, referralRecipients, unlockMatrixLevel, type ReferralJob } from "./matrix";
 import { createError } from "h3";
 import { ZeroHash, getAddress, id as hashId, parseUnits } from "ethers";
 import { ReferralChainClient, uplineHash, type PreparedChainTransaction, type PurchasePayload } from "../lib/referral-chain";
@@ -18,6 +18,7 @@ export interface ChainPurchaseRow {
   contract_address: string; token_address: string; buyer_address: string; fee_recipient_address: string;
   transaction_hash: string | null; payload: PurchasePayload; status: ChainPurchaseStatus["status"];
   signing_mode: "external" | "embedded" | "automatic";
+  rebirth_id?: string | null;
 }
 interface FeeUpdateRow {
   id: string; admin_id: string; request_key: string; contract_address: string; owner_address: string;
@@ -38,8 +39,8 @@ export function requireChainClient() {
   if (!result) throw createError({ statusCode: 503, statusMessage: "The referral smart contract is not configured yet." });
   return result;
 }
-export function chainPurchaseStatus(row: { id: string; level: number; status: ChainPurchaseStatus["status"]; transaction_hash: string | null }): ChainPurchaseStatus {
-  return { id: row.id, level: row.level, status: row.status, transactionHash: row.transaction_hash,
+export function chainPurchaseStatus(row: { id: string; level: number; status: ChainPurchaseStatus["status"]; transaction_hash: string | null; rebirth_id?: string | null }): ChainPurchaseStatus {
+  return { id: row.id, kind: row.rebirth_id ? "rebirth" : "purchase", level: row.level, status: row.status, transactionHash: row.transaction_hash,
     explorerUrl: row.transaction_hash ? `${appNetwork().explorerUrl}/tx/${row.transaction_hash}` : null };
 }
 export async function pendingChainPurchase(userId: string) {
@@ -164,7 +165,9 @@ export async function reconcileChainPurchase(purchase: ChainPurchaseRow): Promis
     await db().execute("UPDATE referral_chain_purchases SET status = $1, block_number = $2, block_hash = $3, updated_at = $4, transaction_hash = $6 WHERE id = $5",
       evidence.status, evidence.receipt.blockNumber, evidence.receipt.blockHash, new Date().toISOString(), purchase.id, evidence.receipt.hash);
     if (evidence.status === "confirmed") {
-      await unlockMatrixLevel(purchase.user_id, purchase.level);
+      const rebirth = await db().one<ReferralJob>("SELECT * FROM referral_auto_upgrades WHERE purchase_id=$1 AND kind='rebirth'",purchase.id);
+      if (rebirth) await completeRebirth(rebirth);
+      else await unlockMatrixLevel(purchase.user_id, purchase.level);
       await db().execute("UPDATE referral_auto_upgrades SET status = 'completed',last_error = NULL WHERE purchase_id = $1", purchase.id);
     } else {
       await db().execute("UPDATE referral_auto_upgrades SET status = 'queued',purchase_id = NULL,last_error = 'The upgrade transaction reverted; it will be retried.' WHERE purchase_id = $1", purchase.id);
@@ -245,26 +248,30 @@ async function processReferralAutoUpgrades() {
   // avoids reusing an authority nonce when broadcasting times out.
   await withWalletLock("referral-auto-upgrade-relayer", async () => {
     if (await db().one("SELECT id FROM referral_chain_purchases WHERE signing_mode = 'automatic' AND status = 'pending' LIMIT 1")) return;
-    const jobs = await db().all<{ cycle_id: string; user_id: string; level: number }>("SELECT * FROM referral_auto_upgrades WHERE status = 'queued' ORDER BY COALESCE(last_attempt_at,created_at),level,cycle_id LIMIT 20");
+    const jobs = await db().all<ReferralJob>("SELECT * FROM referral_auto_upgrades WHERE status = 'queued' ORDER BY COALESCE(last_attempt_at,created_at),kind,level,cycle_id LIMIT 20");
     for (const job of jobs) {
       await db().execute("UPDATE referral_auto_upgrades SET last_attempt_at = $1 WHERE cycle_id = $2", new Date().toISOString(),job.cycle_id);
       try {
         const purchase = await withWalletLock(job.user_id, () => transaction(async () => {
           await db().execute("SELECT pg_advisory_xact_lock(782438, 2)");
+          const currentJob = await db().one<{status: string}>("SELECT status FROM referral_auto_upgrades WHERE cycle_id=$1 FOR UPDATE",job.cycle_id);
+          if (currentJob?.status !== 'queued') return null;
           if (await db().one("SELECT user_id FROM user_access WHERE user_id = $1 AND status <> 'active'",job.user_id)) throw new Error("Waiting for an active member account.");
           const program = await referralProgram(job.user_id);
-          if (program.currentLevel >= job.level) {
+          if (job.kind === 'upgrade' && program.currentLevel >= job.level) {
             await db().execute("UPDATE referral_auto_upgrades SET status = 'superseded',last_error = NULL WHERE cycle_id = $1", job.cycle_id);
             return null;
           }
-          if (program.nextLevel !== job.level || await pendingChainPurchase(job.user_id)) return null;
+          if (job.kind === 'upgrade' && (program.nextLevel !== job.level || await db().one("SELECT cycle_id FROM referral_auto_upgrades WHERE cycle_id=$1 AND status<>'completed'",`rebirth:${job.cycle_id}`))) return null;
+          if (await pendingChainPurchase(job.user_id)) return null;
           await assertNoPendingWalletOperation(job.user_id);
           const wallet = await evmWalletFor(job.user_id);
           if (!wallet) throw new Error("Waiting for a linked token wallet.");
           const state = await reader.inspect(wallet.address, job.level, false);
           if (state.paused) throw new Error("Automatic upgrades are paused with contract purchases.");
           if (state.currentLevel !== 0 && state.currentLevel !== program.currentLevel) throw new Error("Waiting for level reconciliation.");
-          const recipients = await referralRecipients(job.user_id, job.level, externalWalletMode() ? "external" : "embedded");
+          const mode = externalWalletMode() ? "external" : "embedded";
+          const recipients = job.kind === 'rebirth' ? await rebirthRecipients(job,mode) : await referralRecipients(job.user_id,job.level,mode);
           const uplines = recipients.map(item => item.address), block = await reader.provider.getBlock("latest");
           if (!block) throw new Error("Chain head unavailable.");
           const id = randomUUID(), timestamp = new Date().toISOString();
@@ -272,13 +279,14 @@ async function processReferralAutoUpgrades() {
             uplinesHash: uplineHash(uplines), feeRecipient: state.feeRecipient, configNonce: state.configNonce,
             deadline: block.timestamp + 3600, matrixCycle: hashId(job.cycle_id) };
           const payload: PurchasePayload = { createdBlock: block.number, quote, uplines,
+            rebirth: job.kind === 'rebirth',
             recipients: recipients.map(({ userId, reason }) => ({ userId, reason })), signature: await reader.sign(quote) };
           const prepared = await reader.prepareAutoUpgrade(payload, state.decimals);
           await db().execute(`INSERT INTO referral_chain_purchases
-            (id,user_id,request_key,level,amount,chain_id,contract_address,token_address,buyer_address,fee_recipient_address,payload,status,signing_mode,transaction_hash,created_at,updated_at)
-            VALUES($1,$2,$3,$4,$5,${appNetwork().chainId},$6,$7,$8,$9,$10,'pending','automatic',$11,$12,$12)`,
+            (id,user_id,request_key,level,amount,chain_id,contract_address,token_address,buyer_address,fee_recipient_address,payload,status,signing_mode,transaction_hash,created_at,updated_at,rebirth_id)
+            VALUES($1,$2,$3,$4,$5,${appNetwork().chainId},$6,$7,$8,$9,$10,'pending','automatic',$11,$12,$12,$13)`,
             id,job.user_id,`referral-auto:${id}`,job.level,levelPrice(job.level) * ledgerScale,getAddress(reader.config.contractAddress),
-            getAddress(reader.config.tokenAddress),wallet.address,state.feeRecipient,JSON.stringify(payload),prepared[0]!.hash,timestamp);
+            getAddress(reader.config.tokenAddress),wallet.address,state.feeRecipient,JSON.stringify(payload),prepared[0]!.hash,timestamp,job.kind === 'rebirth' ? job.cycle_id : null);
           await saveTransactions(job.user_id, id, prepared);
           await db().execute("UPDATE referral_auto_upgrades SET status = 'pending',purchase_id = $1,last_error = NULL WHERE cycle_id = $2", id,job.cycle_id);
           return (await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE id = $1", id))!;
