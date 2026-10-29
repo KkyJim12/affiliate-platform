@@ -7,7 +7,8 @@ const { user } = useAccount();
 const input = ref(typeof route.query.id === 'string' ? route.query.id : '');
 const submitted = computed(() => typeof route.query.id === 'string' ? route.query.id.trim() : '');
 const invalid = ref(false);
-watch(() => route.query.id, () => { input.value = submitted.value; invalid.value = !!submitted.value && !isMemberId(submitted.value); }, { immediate: true });
+const layout = ref<'matrix' | 'unilevel'>('matrix');
+watch(() => route.query.id, () => { input.value = submitted.value; invalid.value = !!submitted.value && !isMemberId(submitted.value); layout.value = 'matrix'; }, { immediate: true });
 useHead({ title: computed(() => `${t('publicTree.title')} - UNXO`) });
 async function search() {
   const id = input.value.trim();
@@ -33,7 +34,15 @@ async function search() {
         <NuxtLink v-if="user?.memberId" :to="{ path: '/search', query: { id: user.memberId } }" class="text-link">{{ t('publicTree.myTree', { id: user.memberId }) }}</NuxtLink>
         <p v-if="invalid" id="member-id-error" class="auth-error" role="alert">{{ t('publicTree.invalidId') }}</p>
       </form>
-      <div v-if="submitted && !invalid" class="panel public-tree-result"><BinaryReferralTree :key="submitted" :member-id="submitted" /></div>
+      <div v-if="submitted && !invalid" class="panel public-tree-result">
+        <div class="public-member-heading"><h2>{{ t('publicTree.memberTitle',{id:submitted}) }}</h2><p>{{ t('matrixSlots.hint') }}</p></div>
+        <div class="public-tree-views" role="group" :aria-label="t('ui.referral_view')">
+          <button class="button button-outline button-small" :aria-pressed="layout === 'matrix'" @click="layout = 'matrix'">{{ t('matrixSlots.nav') }}</button>
+          <button class="button button-outline button-small" :aria-pressed="layout === 'unilevel'" @click="layout = 'unilevel'">{{ t('matrix.unilevel') }}</button>
+        </div>
+        <MatrixSlots v-if="layout === 'matrix'" :key="submitted" :member-id="submitted" public-view />
+        <BinaryReferralTree v-else :key="`unilevel-${submitted}`" :member-id="submitted" initial-mode="unilevel" fixed-program live />
+      </div>
       <div v-else class="public-tree-welcome panel"><span class="public-tree-symbol"><AppIcon name="GitFork" :size="36" /></span><h2>{{ t('publicTree.welcomeTitle') }}</h2><p>{{ t('publicTree.welcomeHint') }}</p><div><span>15 <small>{{ t('publicTree.steps') }}</small></span></div></div>
     </main>
   </div>
@@ -63,6 +72,7 @@ async function search() {
 .public-tree-search > .button { min-height: 56px; border-radius: 12px; }
 .public-tree-search > .text-link { padding: 17px 0; font-size: 12px; }
 .public-tree-search > .auth-error { width: 100%; }
+.public-member-heading h2 { font-size: 21px; font-weight: 650; overflow-wrap: anywhere; }.public-member-heading p { margin-top: 9px; color: var(--text-secondary); font-size: 12px; line-height: 1.8; }.public-tree-views { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0; }.public-tree-views [aria-pressed='true'] { color: var(--gold-text); border-color: var(--gold-border); background: var(--gold-soft); }
 .public-tree-result { padding: 26px; }.public-tree-welcome { padding: 52px 24px; text-align: center; }.public-tree-symbol { display: inline-flex; padding: 18px; background: var(--gold-soft); color: var(--gold-text); border: 1px solid var(--gold-border); border-radius: 18px; margin-bottom: 22px; }.public-tree-welcome h2 { font-size: 21px; font-weight: 650; }.public-tree-welcome p { color: var(--text-secondary); max-width: 520px; margin: 12px auto 30px; line-height: 1.8; font-size: 13px; }.public-tree-welcome > div { display: flex; justify-content: center; gap: 45px; }.public-tree-welcome > div > span { font-size: 23px; font-weight: 650; color: var(--gold-text); }.public-tree-welcome small { display: block; font-size: 11px; font-weight: 400; color: var(--text-secondary); margin-top: 6px; }
 @media (max-width: 600px) { .public-tree-nav { min-height: 76px; }.public-tree-nav > div { gap: 7px; }.public-tree-nav .text-link { font-size: 11px; }.public-tree-main { padding-top: 30px; }.public-tree-search, .public-tree-result { padding: 17px; }.public-tree-search .button { flex: 1; }.public-tree-welcome > div { gap: 20px; }.public-tree-welcome > div > span { font-size: 20px; } }
 @media (max-width: 600px) { .public-tree-input input { font-size: 16px; } }

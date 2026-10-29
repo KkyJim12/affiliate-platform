@@ -138,8 +138,9 @@ test("member and admin screens identify accounts by ID and Thai pages use Level 
   await page.goto("/dashboard?view=settings");
   await expect(page.getByTestId("account-member-id")).toHaveText(admin.memberId);
   await page.goto(`/search?id=${admin.memberId}`);
-  await expect(page.getByTestId("binary-referral-tree")).toContainText(`ID ${admin.memberId}`);
-  await expect(page.getByTestId("binary-referral-tree")).not.toContainText(admin.legacyName);
+  await expect(page.locator(".public-tree-result")).toContainText(`ID ${admin.memberId}`);
+  await expect(page.getByTestId("matrix-slot-card").first()).toBeVisible();
+  await expect(page.locator(".public-tree-result")).not.toContainText(admin.legacyName);
   await page.getByRole("combobox", { name: "Language", exact: true }).click();
   await page.getByRole("option", { name: "ไทย", exact: true }).click();
   await page.goto("/faq/ranks");

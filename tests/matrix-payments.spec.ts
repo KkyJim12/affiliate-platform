@@ -60,10 +60,11 @@ test("paid binary matrices recycle and automatically debit the wallet for the ne
     expect(unilevel.maxDepth).toBe(15); expect(unilevel.members).toHaveLength(16);
     expect(unilevel.members.find((member: { id: string })=>member.id===extraCode).path.split('/')).toHaveLength(4);
     await page.goto(`/search?id=${rootCode}`);
+    await page.locator('[data-testid="matrix-slot-card"][data-level="1"][data-cycle="0"]').click();
     const tree = page.getByTestId("binary-referral-tree");
-    await expect(tree.getByRole("button",{ name: "Binary matrix",exact: true })).toHaveAttribute("aria-pressed","true");
+    await expect(page.getByRole("button",{ name: "Matrix slots",exact: true })).toHaveAttribute("aria-pressed","true");
     await expect(tree.locator('[data-tree-node]')).toHaveCount(15);
-    await tree.getByRole("button",{ name: "Unilevel",exact: true }).click();
+    await page.getByRole("button",{ name: "Unilevel",exact: true }).click();
     await expect(tree.getByRole("button",{ name: "Level 15: 0 members",exact: true })).toBeVisible();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     // Fill the rebirth using the same placement and commission rules. Completing
@@ -88,15 +89,14 @@ test("paid binary matrices recycle and automatically debit the wallet for the ne
     await expect.poll(async()=> (await database.one("SELECT status FROM referral_auto_upgrades WHERE user_id=$1 AND level=3",rootId))?.status,{timeout:45000}).toBe('completed');
     expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",rootId))!.available).toBe(5_100_000);
     expect((await database.one("SELECT COUNT(*) AS count FROM referral_purchases WHERE user_id=$1 AND level=3",rootId))!.count).toBe(1);
-    await tree.getByRole("button",{name:"Binary matrix",exact:true}).click();
+    await page.getByRole("button",{name:"Matrix slots",exact:true}).click();
+    await page.locator('[data-testid="matrix-slot-card"][data-level="1"][data-cycle="0"]').click();
     await expect(tree.getByTestId('matrix-slot-summary')).toContainText('14/14 paid positions');
-    const slots=tree.getByRole('combobox',{name:'Program slot',exact:true});
-    await expect(slots).toContainText('Initial slot');
-    await slots.click();
-    await page.getByRole('option',{name:'Rebirth 1',exact:true}).click();
+    await page.getByRole('button',{name:'Back to all slots',exact:true}).click();
+    await page.locator('[data-testid="matrix-slot-card"][data-level="1"][data-cycle="1"]').click();
     await expect(tree.getByTestId('matrix-slot-summary')).toContainText('Slot 2: 14/14');
-    await slots.click();
-    await page.getByRole('option',{name:'Rebirth 2',exact:true}).click();
+    await page.getByRole('button',{name:'Back to all slots',exact:true}).click();
+    await page.locator('[data-testid="matrix-slot-card"][data-level="1"][data-cycle="2"]').click();
     await expect(tree.getByTestId('matrix-slot-summary')).toContainText('Slot 3: 0/14');
   } finally { await api.dispose(); await database.close(); }
 });

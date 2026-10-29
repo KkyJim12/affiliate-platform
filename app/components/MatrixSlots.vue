@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import type { MatrixSlotCard, MatrixSlotCatalog } from "#shared/matrix-slots";
 
-const props = defineProps<{ memberId: string }>();
+const props = defineProps<{ memberId: string; publicView?: boolean }>();
 const { t, localeTag } = useLoopI18n();
 const level = ref(0), page = ref(1), detailVersion = ref(0);
 const selected = ref<MatrixSlotCard | null>(null);
 const catalogRoot = ref<HTMLElement | null>(null), backButton = ref<HTMLButtonElement | null>(null);
 watch(level, () => { page.value = 1; }, { flush: "sync" });
-const { data, status, error, refresh } = await useFetch<MatrixSlotCatalog>("/api/referrals/slots", {
-  key: `matrix-slots-${props.memberId}`,query:{level,page},
+const { data, status, error, refresh } = await useFetch<MatrixSlotCatalog>(props.publicView ? "/api/referrals/public-slots" : "/api/referrals/slots", {
+  key: `matrix-slots-${props.publicView ? 'public' : 'private'}-${props.memberId}`,query:{level,page,...(props.publicView ? { id:props.memberId } : {})},
 });
 const catalog = computed(() => data.value?.memberId === props.memberId ? data.value : null);
 const current = computed(() => selected.value && (catalog.value?.items.find(slot => slot.level === selected.value!.level && slot.cycle === selected.value!.cycle) ?? selected.value));
@@ -19,6 +19,7 @@ const pageCount = computed(() => Math.max(1,Math.ceil((catalog.value?.total ?? 0
 const slotName = (slot: MatrixSlotCard) => slot.cycle ? t('matrix.rebirthNumber',{number:slot.cycle}) : t('matrix.initialSlot');
 const slotStatus = (slot: MatrixSlotCard) => t(`matrixSlots.${slot.status}`);
 const number = (value: number) => value.toLocaleString(localeTag.value);
+const loadError = computed(() => props.publicView ? t(error.value?.statusCode === 404 ? 'publicTree.notFound' : 'publicTree.loadError') : t('matrixSlots.loadError'));
 async function reload() { await refresh(); detailVersion.value++; }
 function openSlot(slot: MatrixSlotCard) {
   selected.value = slot;
@@ -35,7 +36,7 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer); });
 </script>
 
 <template>
-  <section ref="catalogRoot" class="matrix-slots" :aria-label="t('matrixSlots.title')" data-testid="matrix-slots">
+  <section ref="catalogRoot" class="matrix-slots" :aria-label="publicView ? t('publicTree.memberSlots',{id:memberId}) : t('matrixSlots.title')" data-testid="matrix-slots">
     <template v-if="current">
       <div class="slot-detail-toolbar">
         <button ref="backButton" class="button button-outline button-small" @click="backToSlots"><AppIcon name="ArrowLeft" :size="15" />{{ t('matrixSlots.back') }}</button>
@@ -45,9 +46,9 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer); });
         <div><span class="eyebrow">{{ t('matrix.slot') }}</span><h3>{{ t('matrixSlots.level',{level:current.level}) }} · {{ slotName(current) }}</h3></div>
         <span class="slot-status" :class="current.status">{{ slotStatus(current) }}</span>
       </div>
-      <p v-if="current.status === 'locked'" class="slot-lock-note"><AppIcon name="LockKeyhole" :size="16" />{{ t('matrixSlots.lockedHint',{level:current.level}) }}</p>
+      <p v-if="current.status === 'locked'" class="slot-lock-note"><AppIcon name="LockKeyhole" :size="16" />{{ t(publicView ? 'publicTree.lockedSlotHint' : 'matrixSlots.lockedHint',{id:memberId,level:current.level}) }}</p>
       <p v-else class="slot-detail-note">{{ t('matrixSlots.paidProgress',{paid:number(current.paid),capacity:current.capacity}) }}</p>
-      <p class="slot-detail-note">{{ t(current.status === 'completed' ? 'matrixSlots.completedHint' : 'matrixSlots.visibilityHint') }}</p>
+      <p class="slot-detail-note">{{ t(current.status === 'completed' ? 'matrixSlots.completedHint' : publicView ? 'publicTree.slotVisibilityHint' : 'matrixSlots.visibilityHint') }}</p>
       <BinaryReferralTree :key="`${memberId}-${current.level}-${current.cycle}-${detailVersion}`" :member-id="memberId" :initial-level="current.level" :initial-cycle="current.cycle" fixed-selection live />
     </template>
     <template v-else>
@@ -60,8 +61,8 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer); });
         <AppDropdown v-model="level" :label="t('matrixSlots.filterLevel')" compact :options="[{value:0,label:t('matrixSlots.allLevels')},...Array.from({length:15},(_,index)=>({value:index+1,label:t('matrixSlots.level',{level:index+1})}))]" />
         <button class="button button-outline button-small" :disabled="status === 'pending'" @click="reload"><AppIcon name="RefreshCw" :size="14" />{{ t('matrixSlots.refresh') }}</button>
       </div>
-      <p v-if="error" class="slot-message" role="alert">{{ t('matrixSlots.loadError') }}</p>
-      <p v-else-if="!catalog" class="slot-message" role="status">{{ t('matrixSlots.loading') }}</p>
+      <p v-if="error" class="slot-message" role="alert">{{ loadError }}</p>
+      <p v-else-if="!catalog" class="slot-message" role="status">{{ t(publicView ? 'publicTree.loadingSlots' : 'matrixSlots.loading') }}</p>
       <template v-if="catalog">
         <div class="slot-grid" :aria-busy="status === 'pending'">
           <button v-for="slot in catalog.items" :key="`${slot.level}-${slot.cycle}`" class="matrix-slot-card" :class="slot.status"

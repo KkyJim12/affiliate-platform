@@ -71,6 +71,14 @@ unilevel tree also provides purchase-level and rebirth-cycle selectors.
 
 `GET /api/referrals/slots?level=1&page=1` returns the signed-in member's own
 progress, with at most 24 cards per page. It accepts no other member's identity.
+The public ID search at `/search?id=<numeric ID>` starts with the same slot
+cards for the requested member, including level filtering, pagination and
+rebirths. Opening a card shows that exact level and cycle; the Unilevel tab
+opens the requested member's unilevel tree. Public cards are read-only and
+load from `GET /api/referrals/public-slots?id=<numeric ID>&level=1&page=1`.
+This returns numeric member IDs and slot progress without account UUIDs,
+wallets, balances or payment records. The authenticated endpoint still uses
+the session member regardless of query parameters.
 The public tree component provides program, purchase-level and cycle selectors.
 `GET /api/referrals/tree?id=<numeric ID>&mode=matrix&level=1&cycle=0` displays a
 matrix; `mode=unilevel&level=2&cycle=1&levels=15` displays that exact unilevel slot. Paths contain
