@@ -35,8 +35,9 @@ inherited rows (2 + 4 members) and eight empty positions in their third row.
 User 2 or their placed downline can fill those positions. Extra invitations
 from User 1 enter User 1's rebirth instead. Completing User 2's slot opens User
 2's own rebirth and queues their next unowned level. After the wallet-funded
-upgrade confirms, User 2 appears in their reserved position in User 1's
-next-level matrix; members who have not bought that level remain blank.
+upgrade confirms, User 2's reserved position in User 1's next-level matrix
+is marked as purchased. Members who have not bought that level remain visible
+with a "Not purchased yet" tag.
 
 The member referral page starts with a grid of matrix slots, including initial
 slots and rebirths at every purchase level. Cards show locked, filling or
@@ -44,14 +45,15 @@ completed status, paid positions and reserved positions separately. Select a
 card to open that exact level and cycle, then return to the grid to choose
 another. The level filter and pagination support accounts with many rebirths.
 Locked cards preview reserved placement; opening one does not purchase a level.
-Every matrix level, including level 1, shows members only after they purchase
-the selected level; other reserved positions stay blank. Tree counts show paid
+Every matrix level, including level 1, shows referred members when they join.
+Members who have not purchased the selected level carry a "Not purchased yet"
+tag. Tree counts show paid
 positions. Registration alone does not open a rebirth or trigger an upgrade.
 Reserved future cycles stay out of the slot list and public cycle selector
 until the preceding cycle completes with all fourteen positions and its owner paid.
 
-The owner's root remains visible for context. Traversal continues through
-blank parents at every level, so paid descendants retain their original
+The owner's root remains visible for context. Unpaid parents and their
+connections remain visible at every level, so descendants retain their original
 paths. The open slot refreshes every fifteen seconds while the tab is visible.
 Opening a completed card shows all fourteen members in that exact level and
 cycle, even after later rebirths; the new slot has its own separate tree.
@@ -63,7 +65,9 @@ The public tree component provides program, purchase-level and cycle selectors.
 `GET /api/referrals/tree?id=<numeric ID>&mode=matrix&level=1&cycle=0` displays a
 matrix; `mode=unilevel&levels=15` displays continuous placement. Paths contain
 only `0` and `1` separated by `/`. The public endpoint returns numeric member
-IDs and placement, without internal identifiers, wallets or payment eligibility.
+IDs, placement and a `purchased` boolean on each member and root, without internal
+identifiers or wallets. In matrix mode `purchased` refers to the selected level;
+in unilevel mode it indicates ownership of level 1.
 
 ## Purchase distribution
 

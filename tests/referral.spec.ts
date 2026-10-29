@@ -67,6 +67,10 @@ test("referral activation charges exactly once and sponsor links enforce ownersh
         expect(linked.program.sponsor).toEqual({ code });
         expect(linked.wallet.available).toBe(10);
         expect((await (await owner.get("/api/referrals")).json()).network[0].id).toBe(data.member.id);
+        for (const mode of ['matrix', 'unilevel']) {
+            const tree = await (await owner.get(`/api/referrals/tree?id=${code}&mode=${mode}`)).json();
+            expect(tree.members).toContainEqual({ id: data.member.memberId, path: '0', parentId: code, purchased: false });
+        }
         expect((await post(member, "/api/referrals/sponsor", { code })).status()).toBe(200);
         const registration = await post(guest, "/api/auth/register", { username: `rfr_${randomUUID().slice(0, 8)}`, password, sponsorCode: legacyCode });
         expect(registration.status()).toBe(201);

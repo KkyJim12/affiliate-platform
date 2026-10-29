@@ -26,13 +26,13 @@ async function fixture(activated = false) {
   } finally { await db.close(); }
 }
 
-test('public ID lookup has empty positions through level 15 and exposes only IDs and structure', async ({ request }, info) => {
+test('public ID lookup has empty positions through level 15 and exposes IDs, structure and purchase state', async ({ request }, info) => {
   test.skip(info.project.name !== 'desktop');
   const root = await fixture();
   const response = await request.get(`/api/referrals/tree?id=${root.memberId}`);
   expect(response.status()).toBe(200);
   const result = await response.json();
-  expect(result.root).toEqual({ id: root.memberId, path: '', parentId: null });
+  expect(result.root).toEqual({ id: root.memberId, path: '', parentId: null, purchased: false });
   expect(result.members).toEqual([result.root]);
   expect(result.visibleDepth).toBe(3);
   expect(result.levels).toHaveLength(15);
@@ -70,7 +70,7 @@ test('public ID lookup has empty positions through level 15 and exposes only IDs
   } finally { await db.close(); }
 });
 
-test('registration via numeric and old invite codes retains every direct referral under their actual sponsor', async ({ playwright }, info) => {
+test('registration via numeric and old invite codes shows unpaid referrals and clears their tags after purchase', async ({ playwright, page }, info) => {
   test.skip(info.project.name !== 'desktop');
   const root = await fixture(true);
   const db = openTestDatabase();
@@ -93,13 +93,31 @@ test('registration via numeric and old invite codes retains every direct referra
     expect(tree.members.map((member: { path: string }) => member.path)).toEqual(['', '0', '1', '0/0', '0/1']);
     expect(tree.members.slice(1).map((member: { id: string }) => member.id)).toEqual(users.map(user => user.memberId));
     expect(tree.members.slice(1).map((member: { parentId: string }) => member.parentId)).toEqual([root.memberId,root.memberId,users[0].memberId,users[0].memberId]);
+    expect(tree.root.purchased).toBe(true);
+    expect(tree.members.slice(1).every((member: { purchased: boolean }) => !member.purchased)).toBe(true);
+    const matrix = await (await clients[0]!.get(`/api/referrals/tree?id=${root.memberId}&mode=matrix`)).json();
+    expect(matrix.members).toEqual(tree.members);
+    expect(matrix.levels.map((row: { filled: number }) => row.filled)).toEqual([0, 0, 0]);
     expect(tree.levels[0].filled).toBe(2);
     expect(tree.levels[1].filled).toBe(2);
     expect((await db.one('SELECT sponsor_id FROM users WHERE id = $1', users[2].id))!.sponsor_id).toBe(root.id);
+    await page.goto(`/search?id=${root.memberId}`);
+    const visibleTree = page.getByTestId('binary-referral-tree');
+    await expect(visibleTree.getByTestId('not-purchased-tag')).toHaveCount(4);
+    await expect(visibleTree.locator(`[data-member-id="${users[0].memberId}"]`)).toContainText('Not purchased yet');
+    await visibleTree.getByRole('button', { name: 'Unilevel', exact: true }).click();
+    await expect(visibleTree.getByTestId('not-purchased-tag')).toHaveCount(4);
     await db.execute('UPDATE wallets SET available = 10000000 WHERE user_id = $1', users[0].id);
     const activated = await post(clients[0]!, '/api/referrals/activate', { password, requestKey: randomUUID() });
     expect(activated.status()).toBe(200);
     expect((await activated.json()).program.code).toBe(users[0].memberId);
+    for (const mode of ['matrix', 'unilevel']) {
+      const purchased = await (await clients[0]!.get(`/api/referrals/tree?id=${root.memberId}&mode=${mode}`)).json();
+      expect(purchased.members).toEqual(tree.members.map((member: { id: string; purchased: boolean }) => ({ ...member, purchased: member.purchased || member.id === users[0].memberId })));
+    }
+    await page.reload();
+    await expect(visibleTree.getByTestId('not-purchased-tag')).toHaveCount(3);
+    await expect(visibleTree.locator(`[data-member-id="${users[0].memberId}"]`).getByTestId('not-purchased-tag')).toHaveCount(0);
   } finally { await db.execute('DELETE FROM rate_limits'); await db.close(); await Promise.all(clients.map(api => api.dispose())); }
 });
 

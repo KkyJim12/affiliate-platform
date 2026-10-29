@@ -97,7 +97,7 @@ const number = (value: number) => value.toLocaleString(localeTag.value);
         <span class="outline-pill">{{ t('publicTree.level', { level: tree.maxDepth }) }}</span>
       </div>
       <div class="binary-tree-levels" :aria-label="t('publicTree.allLevels')">
-        <button v-for="level in tree.levels" :key="level.depth" :class="{ active: level.depth > branchDepth && level.depth <= branchDepth + tree.visibleDepth }" :aria-label="t('publicTree.levelCount', { level: level.depth, filled: number(level.filled) })" @click="showLevel(level.depth)"><span>{{ t('publicTree.level', { level: level.depth }) }}</span><strong>{{ number(level.filled) }}<small>{{ t('ui.members') }}</small></strong></button>
+        <button v-for="level in tree.levels" :key="level.depth" :class="{ active: level.depth > branchDepth && level.depth <= branchDepth + tree.visibleDepth }" :aria-label="t(mode === 'matrix' ? 'publicTree.levelPaidCount' : 'publicTree.levelCount', { level: level.depth, filled: number(level.filled) })" @click="showLevel(level.depth)"><span>{{ t('publicTree.level', { level: level.depth }) }}</span><strong>{{ number(level.filled) }}<small>{{ t(mode === 'matrix' ? 'publicTree.paidMembers' : 'ui.members') }}</small></strong></button>
       </div>
       <div class="binary-tree-toolbar">
         <div class="binary-tree-branch-controls"><button class="button button-outline button-small" :disabled="!branch" @click="branch = ''"><AppIcon name="House" :size="14" />{{ t('publicTree.root') }}</button><button class="button button-outline button-small" :disabled="!branch" @click="branch = treeParentPath(branch)"><AppIcon name="ArrowUp" :size="14" />{{ t('publicTree.up') }}</button><span aria-live="polite">{{ t('publicTree.showing', { from: branchDepth, to: branchDepth + tree.visibleDepth, max: tree.maxDepth }) }}</span></div>
@@ -114,6 +114,9 @@ const number = (value: number) => value.toLocaleString(localeTag.value);
             <text x="12" y="19" font-size="9" fill="var(--text-secondary)">{{ t('publicTree.level', { level: node.depth }) }}</text>
             <foreignObject x="12" y="27" :width="cardWidth - 24" height="18">
               <div class="binary-tree-node-id" :title="node.member ? t('publicTree.id') + ' ' + node.member.id : undefined">{{ t('publicTree.id') }} {{ node.member?.id || '—' }}</div>
+            </foreignObject>
+            <foreignObject v-if="node.member && !node.member.purchased" x="8" y="49" :width="cardWidth - 16" height="24">
+              <span class="binary-tree-purchase-tag" data-testid="not-purchased-tag">{{ t('publicTree.notPurchased') }}</span>
             </foreignObject>
             <text v-if="node.depth < maxDepth && node.path !== branch" x="117" y="20" text-anchor="middle" font-size="13" fill="var(--gold-text)">↓</text>
           </g>
@@ -142,6 +145,7 @@ const number = (value: number) => value.toLocaleString(localeTag.value);
 .binary-tree-viewport svg { display: block; max-width: none; font-family: inherit; }.binary-tree-clickable { cursor: pointer; }.binary-tree-clickable:hover rect, .binary-tree-clickable:focus rect { stroke: var(--gold); stroke-width: 2; }
 .binary-tree-node-id, .binary-tree-node-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 18px; }
 .binary-tree-node-id { font-size: 12px; font-weight: 700; color: var(--text-primary); }
+.binary-tree-purchase-tag { display: block; width: fit-content; max-width: 100%; padding: 2px 5px; border: 1px solid var(--gold-border); border-radius: 4px; background: var(--surface); color: var(--gold-text); font-size: 9px; line-height: 16px; white-space: nowrap; }
 .binary-tree-node-name { font-size: 10px; color: var(--text-secondary); }
 .binary-tree-path { overflow-wrap: anywhere; margin-bottom: 10px; }.binary-tree-note { display: flex; align-items: center; gap: 8px; margin-top: 13px; flex-wrap: wrap; }.binary-tree-note .green-dot { flex-shrink: 0; }.binary-tree-message { display: grid; justify-items: center; padding: 48px 15px; gap: 14px; text-align: center; color: var(--text-secondary); }
 @media (max-width: 600px) { .binary-tree-header { gap: 8px; }.binary-tree-options { width: 100%; justify-content: space-between; }.binary-tree-levels button { flex-basis: 68px; min-width: 68px; }.binary-tree-viewport { max-height: 520px; } }

@@ -54,7 +54,8 @@ test("paid binary matrices recycle and automatically debit the wallet for the ne
     expect((await api.get(`/api/referrals/tree?id=${rootCode}&mode=matrix&levels=4`)).status()).toBe(400);
     expect((await api.get(`/api/referrals/tree?id=${rootCode}&path=2`)).status()).toBe(400);
     const recycled = await (await api.get(`/api/referrals/tree?id=${rootCode}&mode=matrix&cycle=1`)).json();
-    expect(recycled.members.map((member: { id: string })=>member.id)).toEqual([rootCode]);
+    expect(recycled.members.map((member: { id: string })=>member.id)).toEqual([rootCode,extraCode]);
+    expect(recycled.members[1].purchased).toBe(false);
     const unilevel = await (await api.get(`/api/referrals/tree?id=${rootCode}&mode=unilevel&levels=15`)).json();
     expect(unilevel.maxDepth).toBe(15); expect(unilevel.members).toHaveLength(16);
     expect(unilevel.members.find((member: { id: string })=>member.id===extraCode).path.split('/')).toHaveLength(4);
@@ -138,7 +139,8 @@ test("a referred member inherits two rows, their branch fills the last row and u
     await expect.poll(async()=> (await database.one("SELECT status FROM referral_auto_upgrades WHERE user_id=$1 AND level=2",member.id))?.status,{timeout:45000}).toBe('completed');
     expect((await matrix(member.code)).levels.map((row:{filled:number})=>row.filled)).toEqual([2,4,8]);
     const level2=await matrix(owner.code,2);
-    expect(level2.members).toEqual([level2.root,{id:member.code,path:'0',parentId:owner.code}]);
+    expect(level2.members).toHaveLength(15);
+    expect(level2.members.filter((row:{purchased:boolean})=>row.purchased)).toEqual([level2.root,{id:member.code,path:'0',parentId:owner.code,purchased:true}]);
     expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",member.id))!.available).toBe(121_400_000);
     expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",owner.id))!.available).toBe(124_400_000);
     const memberExtra=await create(member.id,0);

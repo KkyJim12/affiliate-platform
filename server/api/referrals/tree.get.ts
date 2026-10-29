@@ -2,9 +2,8 @@ import { isMemberId } from "../../../shared/referral-code";
 import { treePathSlots, type ReferralTreeData } from "../../../shared/referral-tree";
 import { db } from "../../utils/database";
 
-// Public output contains visible member IDs and placement only. Every matrix
-// purchase level requires unlocking. Traverse reserved positions
-// first so unpaid parents leave holes without moving or hiding paid children.
+// Show registered members at their reserved positions, including unpaid parents.
+// Matrix progress still counts only positions that have purchased this level.
 export default defineEventHandler(async (event): Promise<ReferralTreeData> => {
   const query = getQuery(event);
   const id = typeof query.id === "string" ? query.id.trim() : "";
@@ -25,25 +24,30 @@ export default defineEventHandler(async (event): Promise<ReferralTreeData> => {
   const cycles = mode === "matrix" ? await db().all<{ cycle: number }>("SELECT cycle FROM matrix_slots WHERE user_id = $1 AND level = $2 AND opened ORDER BY cycle", root.id, level) : [];
   if (mode === "matrix" && !cycles.some(item => item.cycle === cycle))
     throw createError({ statusCode: 404, statusMessage: "This matrix slot does not exist." });
-  const source = mode === "matrix" ? `SELECT s.id,u.referral_code,NULL::TEXT AS parent_code,ARRAY[]::INTEGER[] AS path,TRUE AS visible
+  const source = mode === "matrix" ? `SELECT s.id,u.referral_code,NULL::TEXT AS parent_code,ARRAY[]::INTEGER[] AS path,s.unlocked AS purchased
       FROM matrix_slots s JOIN users u ON u.id = s.user_id WHERE s.user_id = $1 AND s.level = $5 AND s.cycle = $6
-      UNION ALL SELECT s.id,u.referral_code,CASE WHEN n.visible THEN n.referral_code END,n.path || s.branch::INTEGER,s.unlocked
+      UNION ALL SELECT s.id,u.referral_code,n.referral_code,n.path || s.branch::INTEGER,s.unlocked
       FROM network n JOIN matrix_slots s ON s.parent_id = n.id JOIN users u ON u.id = s.user_id` :
-    `SELECT u.id,u.referral_code,NULL::TEXT AS parent_code,ARRAY[]::INTEGER[] AS path,TRUE AS visible FROM users u WHERE u.id = $1
-      UNION ALL SELECT u.id,u.referral_code,n.referral_code,n.path || p.slot::INTEGER,TRUE
+    `SELECT u.id,u.referral_code,NULL::TEXT AS parent_code,ARRAY[]::INTEGER[] AS path,
+      EXISTS(SELECT 1 FROM matrix_slots s WHERE s.user_id = u.id AND s.level = 1 AND s.cycle = 0 AND s.unlocked) AS purchased
+      FROM users u WHERE u.id = $1
+      UNION ALL SELECT u.id,u.referral_code,n.referral_code,n.path || p.slot::INTEGER,
+      EXISTS(SELECT 1 FROM matrix_slots s WHERE s.user_id = u.id AND s.level = 1 AND s.cycle = 0 AND s.unlocked)
       FROM network n JOIN referral_placements p ON p.parent_id = n.id JOIN users u ON u.id = p.user_id`;
   const result = await db().one(`WITH RECURSIVE network AS (
     ${source} WHERE cardinality(n.path) < $2
   ) SELECT
-    COALESCE((SELECT json_agg(json_build_object('id',referral_code,'path',array_to_string(path,'/'),'parentId',parent_code)
+    (SELECT json_build_object('id',referral_code,'path','','parentId',NULL,'purchased',purchased)
+      FROM network WHERE cardinality(path) = 0) AS root,
+    COALESCE((SELECT json_agg(json_build_object('id',referral_code,'path',array_to_string(path,'/'),'parentId',parent_code,'purchased',purchased)
       ORDER BY cardinality(path),path) FROM network
-      WHERE visible AND path[1:cardinality($3::INTEGER[])] = $3::INTEGER[] AND cardinality(path) <= $4),'[]'::JSON) AS members,
+      WHERE path[1:cardinality($3::INTEGER[])] = $3::INTEGER[] AND cardinality(path) <= $4),'[]'::JSON) AS members,
     COALESCE((SELECT json_agg(counts) FROM (
-      SELECT cardinality(path) AS depth,COUNT(*)::INTEGER AS filled FROM network WHERE visible AND cardinality(path) > 0
+      SELECT cardinality(path) AS depth,COUNT(*)::INTEGER AS filled FROM network WHERE ${mode === "matrix" ? "purchased AND" : ""} cardinality(path) > 0
       GROUP BY cardinality(path) ORDER BY depth
     ) counts),'[]'::JSON) AS counts`, root.id,maxDepth,slots,slots.length + visibleDepth,...(mode === "matrix" ? [level,cycle] : []));
   const counts = result!.counts as { depth: number; filled: number }[];
-  return { root: { id: root.referral_code, path: "", parentId: null }, path, maxDepth, visibleDepth,
+  return { root: result!.root, path, maxDepth, visibleDepth,
     mode: mode as "matrix" | "unilevel", programLevel: level, cycle, cycles: cycles.map(item => item.cycle), members: result!.members,
     levels: Array.from({ length: maxDepth }, (_,index) => ({ depth: index + 1, filled: counts.find(item => item.depth === index + 1)?.filled ?? 0 })) };
 });
