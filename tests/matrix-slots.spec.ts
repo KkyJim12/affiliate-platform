@@ -123,7 +123,7 @@ test("level-1 trees tag unpaid referrals and hide reserved rebirths until every 
   await expect(tree.locator('[data-member-id]')).toHaveCount(15);
   await expect(tree.locator('[data-empty="true"]')).toHaveCount(0);
   await expect(tree.getByTestId('not-purchased-tag')).toHaveCount(12);
-  await expect(tree.locator(`[data-member-id="${member.children[1]}"]`)).toContainText('Not purchased yet');
+  await expect(tree.locator(`[data-member-id="${member.children[1]}"]`)).toContainText('Unpaid');
   await expect(tree.locator(`[data-member-id="${member.children[5]}"]`).getByTestId('not-purchased-tag')).toHaveCount(0);
   await expect(tree.getByTestId('matrix-slot-summary')).toContainText('Slot 1: 2/14 paid positions');
   await expect(tree.getByTestId('matrix-slot-summary')).toContainText('all 14 positions must purchase this level');
@@ -197,7 +197,7 @@ test("members browse slots, open each level and rebirth tree, and retain Thai/mo
   const tree=page.getByTestId('binary-referral-tree');
   await expect(page.locator('.slot-detail-heading')).toContainText('Level 1 · Rebirth 1');
   await expect(tree.getByTestId('matrix-slot-summary')).toContainText('Slot 2: 0/14');
-  await expect(tree.locator(`[data-member-id="${member.children[14]}"]`)).toContainText('Not purchased yet');
+  await expect(tree.locator(`[data-member-id="${member.children[14]}"]`)).toContainText('Unpaid');
   await expect(tree.locator(`[data-member-id="${member.children[0]}"]`)).toHaveCount(0);
   await expect(tree.getByRole('combobox',{name:'Explore the 15 purchase levels'})).toHaveCount(0);
   await catalog.getByRole('button',{name:'Back to all slots'}).click();
@@ -212,7 +212,7 @@ test("members browse slots, open each level and rebirth tree, and retain Thai/mo
   await expect(tree.getByTestId('not-purchased-tag')).toHaveCount(14);
   await confirmedUpgrade(member.childIds[2]!,2);
   await expect(tree.locator('[data-path="0/0"]').getByTestId('not-purchased-tag')).toHaveCount(0,{timeout:25000});
-  await expect(tree.locator('[data-path="0"]')).toContainText('Not purchased yet');
+  await expect(tree.locator('[data-path="0"]')).toContainText('Unpaid');
   await expect(tree.getByTestId('matrix-slot-summary')).toContainText('Slot 1: 1/14');
   await confirmedUpgrade(member.childIds[0]!,2);
   await expect(tree.locator('[data-path="0"]').getByTestId('not-purchased-tag')).toHaveCount(0,{timeout:25000});

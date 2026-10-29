@@ -115,8 +115,8 @@ const number = (value: number) => value.toLocaleString(localeTag.value);
             <foreignObject x="12" y="27" :width="cardWidth - 24" height="18">
               <div class="binary-tree-node-id" :title="node.member ? t('publicTree.id') + ' ' + node.member.id : undefined">{{ t('publicTree.id') }} {{ node.member?.id || '—' }}</div>
             </foreignObject>
-            <foreignObject v-if="node.member && !node.member.purchased" x="8" y="49" :width="cardWidth - 16" height="24">
-              <span class="binary-tree-purchase-tag" data-testid="not-purchased-tag">{{ t('publicTree.notPurchased') }}</span>
+            <foreignObject v-if="node.member" x="8" y="49" :width="cardWidth - 16" height="24">
+              <span class="binary-tree-purchase-tag" :class="{ 'is-paid': node.member.purchased }" :data-testid="node.member.purchased ? 'paid-tag' : 'not-purchased-tag'">{{ t(node.member.purchased ? 'publicTree.paid' : 'publicTree.notPurchased') }}</span>
             </foreignObject>
             <text v-if="node.depth < maxDepth && node.path !== branch" x="117" y="20" text-anchor="middle" font-size="13" fill="var(--gold-text)">↓</text>
           </g>
@@ -146,6 +146,7 @@ const number = (value: number) => value.toLocaleString(localeTag.value);
 .binary-tree-node-id, .binary-tree-node-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 18px; }
 .binary-tree-node-id { font-size: 12px; font-weight: 700; color: var(--text-primary); }
 .binary-tree-purchase-tag { display: block; width: fit-content; max-width: 100%; padding: 2px 5px; border: 1px solid var(--gold-border); border-radius: 4px; background: var(--surface); color: var(--gold-text); font-size: 9px; line-height: 16px; white-space: nowrap; }
+.binary-tree-purchase-tag.is-paid { border-color: var(--success); background: var(--success-soft); color: var(--success); }
 .binary-tree-node-name { font-size: 10px; color: var(--text-secondary); }
 .binary-tree-path { overflow-wrap: anywhere; margin-bottom: 10px; }.binary-tree-note { display: flex; align-items: center; gap: 8px; margin-top: 13px; flex-wrap: wrap; }.binary-tree-note .green-dot { flex-shrink: 0; }.binary-tree-message { display: grid; justify-items: center; padding: 48px 15px; gap: 14px; text-align: center; color: var(--text-secondary); }
 @media (max-width: 600px) { .binary-tree-header { gap: 8px; }.binary-tree-options { width: 100%; justify-content: space-between; }.binary-tree-levels button { flex-basis: 68px; min-width: 68px; }.binary-tree-viewport { max-height: 520px; } }

@@ -70,7 +70,7 @@ test('public ID lookup has empty positions through level 15 and exposes IDs, str
   } finally { await db.close(); }
 });
 
-test('registration via numeric and old invite codes shows unpaid referrals and clears their tags after purchase', async ({ playwright, page }, info) => {
+test('registration via numeric and old invite codes shows payment tags and updates them after purchase', async ({ playwright, page }, info) => {
   test.skip(info.project.name !== 'desktop');
   const root = await fixture(true);
   const db = openTestDatabase();
@@ -104,9 +104,13 @@ test('registration via numeric and old invite codes shows unpaid referrals and c
     await page.goto(`/search?id=${root.memberId}`);
     const visibleTree = page.getByTestId('binary-referral-tree');
     await expect(visibleTree.getByTestId('not-purchased-tag')).toHaveCount(4);
-    await expect(visibleTree.locator(`[data-member-id="${users[0].memberId}"]`)).toContainText('Not purchased yet');
+    await expect(visibleTree.locator(`[data-member-id="${users[0].memberId}"]`)).toContainText('Unpaid');
+    await expect(visibleTree.getByTestId('paid-tag')).toHaveCount(1);
+    await expect(visibleTree.locator(`[data-member-id="${root.memberId}"]`).getByTestId('paid-tag')).toHaveText('Paid');
+    await expect(visibleTree.locator('[data-empty="true"] .binary-tree-purchase-tag')).toHaveCount(0);
     await visibleTree.getByRole('button', { name: 'Unilevel', exact: true }).click();
     await expect(visibleTree.getByTestId('not-purchased-tag')).toHaveCount(4);
+    await expect(visibleTree.getByTestId('paid-tag')).toHaveCount(1);
     await db.execute('UPDATE wallets SET available = 10000000 WHERE user_id = $1', users[0].id);
     const activated = await post(clients[0]!, '/api/referrals/activate', { password, requestKey: randomUUID() });
     expect(activated.status()).toBe(200);
@@ -117,6 +121,8 @@ test('registration via numeric and old invite codes shows unpaid referrals and c
     }
     await page.reload();
     await expect(visibleTree.getByTestId('not-purchased-tag')).toHaveCount(3);
+    await expect(visibleTree.getByTestId('paid-tag')).toHaveCount(2);
+    await expect(visibleTree.locator(`[data-member-id="${users[0].memberId}"]`).getByTestId('paid-tag')).toHaveText('Paid');
     await expect(visibleTree.locator(`[data-member-id="${users[0].memberId}"]`).getByTestId('not-purchased-tag')).toHaveCount(0);
   } finally { await db.execute('DELETE FROM rate_limits'); await db.close(); await Promise.all(clients.map(api => api.dispose())); }
 });
