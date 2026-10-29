@@ -609,6 +609,57 @@ test('a delayed guest session read does not replace a completed wallet sign-in',
   } finally { releaseSession(); provider.destroy(); }
 });
 
+test('two paid personal referrals release held contract commissions and spillover or upgrades never qualify twice',async({playwright})=>{
+  test.setTimeout(120000);
+  const provider=rpc(),db=openTestDatabase(),ownerApi=await playwright.request.newContext({baseURL:origin}),buyerApi=await playwright.request.newContext({baseURL:origin});
+  const owner=Wallet.createRandom().connect(provider),first=Wallet.createRandom().connect(provider),spill=Wallet.createRandom().connect(provider),second=Wallet.createRandom().connect(provider);
+  const token=new Contract(process.env.NUXT_EVM_TOKEN_ADDRESS!,['function balanceOf(address) view returns(uint256)'],provider);
+  const distributor=new Contract(process.env.NUXT_REFERRAL_CONTRACT_ADDRESS!,['function heldCommissions(address) view returns(uint256)','function paidDirectReferrals(address) view returns(uint256)'],provider);
+  try {
+    const member=await login(ownerApi,owner);await fund(owner,provider);await buy(ownerApi,owner);
+    const ownerCode=(await (await ownerApi.get('/api/referrals/program')).json()).code;
+    await login(buyerApi,first,ownerCode);await fund(first,provider);await buy(buyerApi,first);
+    await buy(buyerApi,first,2);
+    const firstCode=(await (await buyerApi.get('/api/referrals/program')).json()).code;
+    await login(buyerApi,spill,firstCode);await fund(spill,provider);await buy(buyerApi,spill);
+    await login(buyerApi,second,ownerCode);await fund(second,provider);
+    expect(await token.getFunction('balanceOf')(owner.address)).toBe(90_000_000n);
+    expect(await distributor.getFunction('heldCommissions')(owner.address)).toBe(3_200_000n);
+    expect(await distributor.getFunction('paidDirectReferrals')(owner.address)).toBe(1n);
+    expect((await (await ownerApi.get('/api/referrals/program')).json()).commissionQualification).toEqual({paidReferrals:1,required:2,qualified:false,heldBalance:3.2});
+    expect((await (await ownerApi.get('/api/dashboard')).json()).commissions).toBe(0);
+    await buy(buyerApi,second);
+    expect(await token.getFunction('balanceOf')(owner.address)).toBe(94_300_000n);
+    expect(await distributor.getFunction('heldCommissions')(owner.address)).toBe(0n);
+    expect((await (await ownerApi.get('/api/referrals/program')).json()).commissionQualification).toEqual({paidReferrals:2,required:2,qualified:true,heldBalance:0});
+    expect((await (await ownerApi.get('/api/dashboard')).json()).commissions).toBe(4.3);
+    expect((await db.one("SELECT COUNT(*) AS count FROM referral_commission_releases WHERE recipient_address=$1",owner.address))!.count).toBe(1);
+    await ownerApi.get('/api/referrals/chain/status');
+    expect(await token.getFunction('balanceOf')(owner.address)).toBe(94_300_000n);
+    expect((await db.one("SELECT COUNT(*) AS count FROM referral_chain_allocations WHERE recipient_user_id=$1 AND status='held'",member.id))!.count).toBe(0);
+  } finally {await ownerApi.dispose();await buyerApi.dispose();provider.destroy();await db.close();}
+});
+
+test('an already-paid member linking their sponsor releases held commissions through the persisted relayer',async({playwright})=>{
+  test.setTimeout(90000);
+  const provider=rpc(),db=openTestDatabase(),ownerApi=await playwright.request.newContext({baseURL:origin}),buyerApi=await playwright.request.newContext({baseURL:origin});
+  const owner=Wallet.createRandom().connect(provider),first=Wallet.createRandom().connect(provider),second=Wallet.createRandom().connect(provider);
+  try {
+    await login(ownerApi,owner);await fund(owner,provider);await buy(ownerApi,owner);
+    const code=(await (await ownerApi.get('/api/referrals/program')).json()).code;
+    await login(buyerApi,first,code);await fund(first,provider);await buy(buyerApi,first);
+    await login(buyerApi,second);await fund(second,provider);await buy(buyerApi,second);
+    const linked=await post(buyerApi,'/api/referrals/sponsor',{code});expect(linked.status(),await linked.text()).toBe(200);
+    await expect.poll(async()=>{
+      await ownerApi.get('/api/referrals/chain/status');
+      return (await (await ownerApi.get('/api/referrals/program')).json()).commissionQualification.heldBalance;
+    },{timeout:45000,intervals:[1000,3000]}).toBe(0);
+    const token=new Contract(process.env.NUXT_EVM_TOKEN_ADDRESS!,['function balanceOf(address) view returns(uint256)'],provider);
+    expect(await token.getFunction('balanceOf')(owner.address)).toBe(91_100_000n);
+    expect((await db.one("SELECT COUNT(*) AS count FROM referral_qualification_transactions WHERE payload->>'member'=$1 AND status='confirmed'",owner.address))!.count).toBe(1);
+  } finally {await ownerApi.dispose();await buyerApi.dispose();provider.destroy();await db.close();}
+});
+
 test('a full paid matrix charges rebirth and upgrade separately and unlocks the next level', async ({ playwright }) => {
   test.setTimeout(180000);
   const provider=rpc(),database=openTestDatabase(),root=await playwright.request.newContext({baseURL:origin});

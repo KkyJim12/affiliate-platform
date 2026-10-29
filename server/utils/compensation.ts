@@ -6,6 +6,7 @@ import { randomUUID } from "./auth";
 import { walletRow } from "./wallet";
 import { referralPaymentMode } from "./referral-chain";
 import { requireEmbeddedWalletMode } from "./wallet-mode";
+import { paidReferralCount } from "./commission-qualification";
 
 
 export async function buyReferralLevel(userId: string, level: number, requestKey: string, rebirth?: ReferralJob) {
@@ -40,7 +41,8 @@ export async function buyReferralLevel(userId: string, level: number, requestKey
     if (!settings.fee_recipient_address)
       throw createError({ statusCode: 409, statusMessage: "Referral purchases are unavailable until an administrator sets the platform fee address." });
     const recipients = rebirth ? await rebirthRecipients(rebirth,"ledger") : await referralRecipients(userId, level, "ledger");
-    await db().all("SELECT id FROM wallets WHERE user_id = ANY($1::TEXT[]) ORDER BY id FOR UPDATE", [userId, ...recipients.flatMap(item => item.userId ? [item.userId] : [])]);
+    const sponsor = !rebirth && level===1 ? await db().one<{sponsor_id: string | null}>("SELECT sponsor_id FROM users WHERE id=$1",userId) : null;
+    await db().all("SELECT id FROM wallets WHERE user_id = ANY($1::TEXT[]) ORDER BY id FOR UPDATE", [userId, ...recipients.flatMap(item => item.userId ? [item.userId] : []),...(sponsor?.sponsor_id ? [sponsor.sponsor_id] : [])]);
     const wallet = await walletRow(userId);
     const price = levelPrice(level) * ledgerScale;
     if (wallet.available < price)
@@ -56,12 +58,20 @@ export async function buyReferralLevel(userId: string, level: number, requestKey
     if (!rebirth && level === 1) {
       await db().execute("INSERT INTO referral_activations (user_id, transaction_id, created_at) VALUES ($1, $2, $3)", userId, transactionId, timestamp);
     }
+    const qualified = new Set<string>();
+    for(const member of new Set([...recipients.flatMap(row=>row.userId ? [row.userId] : []),...(sponsor?.sponsor_id ? [sponsor.sponsor_id] : [])])) {
+      if (await paidReferralCount(member)>=2) {
+        qualified.add(member);
+        await releaseHeldLedgerCommissions(member,timestamp);
+      }
+    }
     for (const share of purchaseShares(level)) {
       const position = shareRecipientIndex(share);
       const upline = position >= 0 ? recipients[position]! : null;
       const recipient = upline?.userId ? upline : null;
-      const creditId = recipient ? randomUUID() : null;
-      if (recipient) {
+      const held = recipient !== null && !qualified.has(recipient.userId!);
+      const creditId = recipient && !held ? randomUUID() : null;
+      if (recipient && !held) {
         await db().execute("UPDATE wallets SET available = available + $1 WHERE id = $2", share.units, recipient.address);
         await db().execute("INSERT INTO wallet_transactions VALUES ($1, $2, 'commission', $3, 'completed', $4, $5, $6)",
           creditId, recipient.address, share.units, `Referral ${share.kind} commission · level ${level} · upline ${share.depth}`,
@@ -71,12 +81,26 @@ export async function buyReferralLevel(userId: string, level: number, requestKey
         (id, purchase_id, kind, depth, amount, recipient_user_id, recipient_address, transaction_id, status, reason)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         randomUUID(), id, share.kind, share.depth, share.units, recipient?.userId ?? null,
-        recipient ? null : settings.fee_recipient_address, creditId, recipient ? "credited" : "payable",
+        recipient ? null : settings.fee_recipient_address, creditId, held ? "held" : recipient ? "credited" : "payable",
         share.kind === "platform" ? "platform_fee" : recipient ? "upline" : upline?.reason ?? "missing_upline");
     }
     if (rebirth) await completeRebirth(rebirth);
     else await unlockMatrixLevel(userId, level);
   });
+}
+
+// Called with the genealogy lock and the recipient wallet already locked.
+export async function releaseHeldLedgerCommissions(userId: string, timestamp: string) {
+  const held = await db().all<{id:string;amount:number}>("SELECT id,amount FROM referral_allocations WHERE recipient_user_id=$1 AND status='held' ORDER BY id FOR UPDATE",userId);
+  if (!held.length) return;
+  const wallet = await walletRow(userId,true);
+  for(const allocation of held) {
+    const creditId=randomUUID();
+    await db().execute("UPDATE wallets SET available=available+$1 WHERE id=$2",allocation.amount,wallet.id);
+    await db().execute("INSERT INTO wallet_transactions VALUES($1,$2,'commission',$3,'completed',$4,$5,$6)",creditId,wallet.id,allocation.amount,
+      "Held commission released after two paid direct referrals",`referral-release:${allocation.id}`,timestamp);
+    await db().execute("UPDATE referral_allocations SET status='credited',transaction_id=$1 WHERE id=$2 AND status='held'",creditId,allocation.id);
+  }
 }
 
 let upgrading = false;

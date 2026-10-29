@@ -3,6 +3,7 @@ import { referralPrice } from "../../shared/referral";
 import { ledgerScale, levelPrice, maxReferralLevel } from "../../shared/compensation";
 import { isReferralCode, normalizeReferralCode } from "../../shared/referral-code";
 import { db } from "./database";
+import { commissionQualification } from "./commission-qualification";
 export async function activeSponsor(code: string) {
     if (!isReferralCode(code)) return;
     code = normalizeReferralCode(code);
@@ -29,19 +30,20 @@ export async function referralProgram(userId: string): Promise<ReferralProgram> 
     };
     const purchase = await db().one(`SELECT p.level, p.amount,
       COALESCE(SUM(CASE WHEN a.status = 'credited' THEN a.amount ELSE 0 END), 0) AS commissions,
+      COALESCE(SUM(CASE WHEN a.status = 'held' THEN a.amount ELSE 0 END), 0) AS held,
       COALESCE(SUM(CASE WHEN a.status = 'payable' THEN a.amount ELSE 0 END), 0) AS payable
       FROM referral_purchases p LEFT JOIN referral_allocations a ON a.purchase_id = p.id
       WHERE p.user_id = $1 AND p.rebirth_id IS NULL GROUP BY p.id ORDER BY p.level DESC LIMIT 1`, userId) as {
-        level: number; amount: number; commissions: number; payable: number;
+        level: number; amount: number; commissions: number; held:number; payable: number;
     } | undefined;
     const chain = await db().one("SELECT COALESCE(MAX(level), 0) AS level FROM referral_chain_purchases WHERE user_id = $1 AND status = 'confirmed'", userId);
     const level = Math.max(chain!.level, purchase?.level ?? (row.code ? 1 : 0));
     const settings = await db().one("SELECT fee_recipient_address FROM platform_settings WHERE id = 1") as { fee_recipient_address: string };
     const autoUpgrade = await db().one<{ level: number; kind: 'upgrade' | 'rebirth'; status: string; lastError: string | null }>("SELECT level,kind,status,last_error AS \"lastError\" FROM referral_auto_upgrades WHERE user_id = $1 AND status IN ('queued','pending') ORDER BY kind,level,created_at LIMIT 1", userId);
-    return { autoUpgrade: autoUpgrade ?? null, price: referralPrice, code: row.code, activatedAt: row.activatedAt, transactionId: row.transactionId,
+    return { commissionQualification:await commissionQualification(userId),autoUpgrade: autoUpgrade ?? null, price: referralPrice, code: row.code, activatedAt: row.activatedAt, transactionId: row.transactionId,
         currentLevel: level, maxLevel: maxReferralLevel, nextLevel: level < maxReferralLevel ? level + 1 : null,
         nextPrice: level < maxReferralLevel ? levelPrice(level + 1) : null, feeConfigured: !!settings.fee_recipient_address,
         latestPurchase: purchase ? { level: purchase.level, amount: purchase.amount / ledgerScale,
-          commissions: purchase.commissions / ledgerScale, platformPayable: purchase.payable / ledgerScale } : null,
+          commissions: purchase.commissions / ledgerScale, heldCommissions:purchase.held / ledgerScale, platformPayable: purchase.payable / ledgerScale } : null,
         sponsor: row.sponsorCode ? { code: row.sponsorCode } : null };
 }

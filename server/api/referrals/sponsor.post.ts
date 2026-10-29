@@ -2,6 +2,9 @@ import { accountFor, assertSameOrigin, rateLimit, requireUser } from "../../util
 import { db, transaction } from "../../utils/database";
 import { activeSponsor, referralProgram } from "../../utils/referral";
 import { walletFor } from "../../utils/wallet";
+import { paidReferralCount } from "../../utils/commission-qualification";
+import { releaseHeldLedgerCommissions } from "../../utils/compensation";
+import { referralPaymentMode } from "../../utils/referral-chain";
 export default defineEventHandler(async (event) => {
     assertSameOrigin(event);
     const user = await requireUser(event);
@@ -36,6 +39,8 @@ export default defineEventHandler(async (event) => {
         if (cycle || placementCycle)
             throw createError({ statusCode: 400, statusMessage: "This referral would create a circular network. Choose another sponsor." });
         await db().execute("UPDATE users SET sponsor_id = $1 WHERE id = $2 AND sponsor_id IS NULL", sponsor.id, user.id);
+        if(referralPaymentMode()==='ledger' && await paidReferralCount(sponsor.id)>=2)
+            await releaseHeldLedgerCommissions(sponsor.id,new Date().toISOString());
     });
     return { user: await accountFor(user), wallet: await walletFor(user.id), program: await referralProgram(user.id) };
 });

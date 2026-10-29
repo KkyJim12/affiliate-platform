@@ -9,6 +9,7 @@ const emit = defineEmits<{ updated: [] }>();
 const { t, tr, formatDate } = useLoopI18n();
 const { user, restoreSession } = useAccount();
 const { wallet, refreshWallet } = useWallet();
+const { refreshBalances } = useEvmWallet();
 const { authOpen, copy, notify } = useAppUI();
 const config = useRuntimeConfig();
 const route = useRoute();
@@ -37,10 +38,27 @@ const canAfford = computed(() => !!wallet.value && available.value >= price.valu
 if (!props.preview && paymentMode.value === "ledger") await refreshWallet();
 const inviteLink = computed(() => program.value?.code ? `${String(config.public.appUrl || origin).replace(/\/$/, "")}/referrals?ref=${program.value.code}` : "");
 
+let qualificationTimer:ReturnType<typeof setInterval> | undefined;
+let refreshingQualification=false;
+async function refreshQualification() {
+  const previous=program.value?.commissionQualification;
+  if (props.preview || !program.value?.code || refreshingQualification || busy.value || (previous?.qualified && !previous.heldBalance)) return;
+  refreshingQualification=true;
+  try {
+    await refresh();
+    const current=program.value?.commissionQualification;
+    if (current?.paidReferrals!==previous?.paidReferrals || current?.heldBalance!==previous?.heldBalance) {
+      if(paymentMode.value==='ledger') await refreshWallet(); else await refreshBalances(true);
+      emit('updated');
+    }
+  } finally {refreshingQualification=false;}
+}
 onMounted(() => {
   if (isReferralCode(code.value)) sessionStorage.setItem("loop-incoming-referral", normalizeReferralCode(code.value));
   else if (!code.value) code.value = normalizeReferralCode(sessionStorage.getItem("loop-incoming-referral") || "");
+  qualificationTimer=setInterval(()=>{void refreshQualification().catch(()=>{});},15000);
 });
+onBeforeUnmount(()=>clearInterval(qualificationTimer));
 function openPurchase() {
   if (props.preview) { authOpen.value = true; return; }
   password.value = "";
@@ -101,6 +119,10 @@ async function connectSponsor() {
           <span class="eyebrow">{{ t('referral.yourCode') }}</span>
           <h2 class="referral-personal-code" data-testid="referral-code">{{ program.code }}</h2>
           <p>{{ t('referral.shareHint') }}</p>
+          <div v-if="program.commissionQualification" data-testid="commission-qualification" role="status">
+            <p>{{ t('referral.commissionRequirement', { count:program.commissionQualification.paidReferrals,required:program.commissionQualification.required }) }}</p>
+            <p>{{ t(program.commissionQualification.qualified ? 'referral.commissionQualified' : 'referral.commissionHeld', { amount:formatUsdt(program.commissionQualification.heldBalance) }) }}</p>
+          </div>
           <div class="referral-code-actions"><button class="button button-orange" @click="copy(program.code, t('referral.codeCopied'))"><AppIcon name="Copy" :size="15" />{{ t('referral.copyCode') }}</button><button class="button button-outline" @click="copy(inviteLink, t('referral.linkCopied'))"><AppIcon name="Link" :size="15" />{{ t('ui.copy_link') }}</button></div>
           <div class="referral-link-preview"><AppIcon name="Link" :size="14" /><span>{{ inviteLink }}</span></div>
           <span v-if="program.activatedAt" class="referral-card-note">{{ t('referral.activatedOn', { date: formatDate(program.activatedAt) }) }}</span>
@@ -161,7 +183,7 @@ async function connectSponsor() {
       <p>{{ t('referral.distributionHint') }}</p>
       <div class="referral-distribution-grid"><div><strong>80%</strong><span>{{ t('referral.directShare') }}</span><small>50% · 20% · 10%</small></div><div><strong>15%</strong><span>{{ t('referral.bonusShare') }}</span><small>{{ t('referral.halvingHint') }}</small></div><div><strong>5%</strong><span>{{ t('referral.platformShare') }}</span><small>{{ t('referral.missingShareHint') }}</small></div></div>
       <p>{{ t(paymentMode === 'contract' ? 'onchain.distributionHint' : 'referral.roundingHint') }}</p>
-      <p v-if="paymentMode === 'ledger' && program?.latestPurchase" data-testid="referral-distribution">{{ t('referral.latestDistribution', { amount: formatUsdt(program.latestPurchase.amount), commissions: formatUsdt(program.latestPurchase.commissions), platform: formatUsdt(program.latestPurchase.platformPayable) }) }}</p>
+      <p v-if="paymentMode === 'ledger' && program?.latestPurchase" data-testid="referral-distribution">{{ t('referral.latestDistribution', { amount: formatUsdt(program.latestPurchase.amount), commissions: formatUsdt(program.latestPurchase.commissions), held:formatUsdt(program.latestPurchase.heldCommissions || 0), platform: formatUsdt(program.latestPurchase.platformPayable) }) }}</p>
     </section>
 
     <ModalTransition><AppModal v-if="purchaseOpen" :title="purchaseTitle" @close="closePurchase">

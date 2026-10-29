@@ -14,7 +14,7 @@ export default defineEventHandler(async event => {
   const update = externalUpdate ? { status: externalUpdate.status,transaction_hash: externalUpdate.transactionHash }
     : await db().one("SELECT status, transaction_hash FROM referral_chain_fee_updates ORDER BY created_at DESC LIMIT 1");
   const totals = await db().one(`SELECT COALESCE(SUM(amount),0) AS volume, COUNT(*) AS purchases FROM referral_chain_purchases WHERE status = 'confirmed'`);
-  const paid = await db().one(`SELECT COALESCE(SUM(CASE WHEN recipient_user_id IS NOT NULL THEN amount ELSE 0 END),0) AS commissions,
+  const paid = await db().one(`SELECT COALESCE(SUM(CASE WHEN recipient_user_id IS NOT NULL AND status='credited' THEN amount ELSE 0 END),0) AS commissions,
     COALESCE(SUM(CASE WHEN recipient_user_id IS NULL THEN amount ELSE 0 END),0) AS platform FROM referral_chain_allocations`);
   return { chain, canManageFee: !!chain.owner && chain.owner.toLowerCase() === wallet?.address.toLowerCase(),
     feeUpdate: update ? { status: update.status, transactionHash: update.transaction_hash } : null,

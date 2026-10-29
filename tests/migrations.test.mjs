@@ -1,4 +1,5 @@
 import { completeRebirth, rebirthRecipients, unlockMatrixLevel, referralRecipients } from "../server/utils/matrix.ts";
+import { commissionAuthorization, paidReferralCount, reconcileHeldChainAllocations } from "../server/utils/commission-qualification.ts";
 import { bindDatabaseNetwork } from "../server/lib/database-network.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -12,6 +13,50 @@ import { migrate, migrationStatus, prepareMigrations, readMigrations, resetDatab
 import { importSqlite } from "../scripts/lib/import-sqlite.mjs";
 
 const sources = readMigrations();
+
+test('commission qualification counts distinct paid sponsors rather than placements or repeated purchases',()=>isolated(async db=>{
+  await migrate(db.pool,sources);
+  for(const [member,sponsor] of [['qual-root',null],['qual-first','qual-root'],['qual-second','qual-root'],['qual-spill','qual-first']]) {
+    await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,$2,'2026-10-30')",member,sponsor);
+    await db.execute("INSERT INTO wallets(id,user_id) VALUES($1,$2)",`w-${member}`,member);
+  }
+  const address=`0x${'12'.repeat(20)}`;
+  await db.execute("INSERT INTO connected_wallets(user_id,address,chain_id,created_at) VALUES('qual-root',$1,80002,'2026-10-30')",address);
+  const activate=async member=>{
+    await db.execute("INSERT INTO wallet_transactions VALUES($1,$2,'referral_purchase',10000000,'completed','Activation',$1,'2026-10-30')",`t-${member}`,`w-${member}`);
+    await db.execute("INSERT INTO referral_activations(user_id,transaction_id,created_at) VALUES($1,$2,'2026-10-30')",member,`t-${member}`);
+  };
+  assert.equal(await paidReferralCount('qual-root',db),0);
+  await activate('qual-first');await activate('qual-spill');
+  await db.execute("INSERT INTO referral_purchases(id,user_id,level,amount,transaction_id,fee_recipient_address,created_at) VALUES('held-test','qual-first',1,10000000,'t-qual-first',$1,'2026-10-30')",address);
+  await db.execute("INSERT INTO referral_allocations(id,purchase_id,kind,depth,amount,recipient_user_id,status,reason) VALUES('held-allocation','held-test','direct',1,1000000,'qual-root','held','upline')");
+  await assert.rejects(db.execute("UPDATE referral_allocations SET depth=4 WHERE id='held-allocation'"),{code:'23514'});
+  assert.equal((await db.one("SELECT status FROM referral_allocations WHERE id='held-allocation'")).status,'held');
+  assert.equal(await paidReferralCount('qual-root',db),1);
+  assert.equal((await commissionAuthorization('qual-second',[{userId:'qual-root'}],'external',false,db)).qualifiedMask,0);
+  const pending=await commissionAuthorization('qual-second',[{userId:'qual-root'}],'external',true,db);
+  assert.equal(pending.sponsor,address);assert.equal(pending.qualifiedMask,1<<18);
+  await activate('qual-second');
+  assert.equal(await paidReferralCount('qual-root',db),2);
+  assert.equal((await commissionAuthorization('qual-spill',[{userId:'qual-root'},{userId:'qual-first'}],'external',false,db)).qualifiedMask,1);
+}));
+
+test('held commission settlement tolerates out-of-order receipts and never releases a later hold or another contract',()=>isolated(async db=>{
+  await migrate(db.pool,sources);
+  await db.execute("INSERT INTO users VALUES('held-member','held-member','hash','held-member',NULL,'2026-10-30')");
+  const contract=`0x${'12'.repeat(20)}`,other=`0x${'34'.repeat(20)}`,recipient=`0x${'56'.repeat(20)}`;
+  await db.execute("INSERT INTO referral_commission_releases VALUES($1,$2,10,100,$3,'3000000000000000000')",contract,`0x${'01'.repeat(32)}`,recipient);
+  let level=0;
+  for(const [id,block,index,target] of [['old',99,20,contract],['same',100,9,contract],['later',100,11,contract],['different',99,1,other]]) {
+    await db.execute(`INSERT INTO referral_chain_purchases(id,user_id,request_key,level,amount,chain_id,contract_address,token_address,buyer_address,fee_recipient_address,payload,status,created_at,updated_at,block_number)
+      VALUES($1,'held-member',$1,$2,$3,80002,$4,$4,$4,$4,'{}','confirmed','2026-10-30','2026-10-30',$5)`,id,++level,10000000*2**(level-1),target,block);
+    await db.execute("INSERT INTO referral_chain_allocations(purchase_id,kind,depth,amount,recipient_address,recipient_user_id,reason,log_index,status) VALUES($1,'direct',1,$4,$2,'held-member','upline',$3,'held')",id,recipient,index,1000000*2**(level-1));
+  }
+  await reconcileHeldChainAllocations(db);await reconcileHeldChainAllocations(db);
+  assert.deepEqual(await db.all('SELECT purchase_id,status FROM referral_chain_allocations ORDER BY purchase_id'),[
+    {purchase_id:'different',status:'held'},{purchase_id:'later',status:'held'},{purchase_id:'old',status:'credited'},{purchase_id:'same',status:'credited'},
+  ]);
+}));
 async function isolated(operation) {
   const url = process.env.TEST_DATABASE_URL;
   assert.ok(url && new URL(url).pathname.endsWith("_test"), "Use the isolated PostgreSQL test runner.");

@@ -38,7 +38,7 @@ async function fixture(depth: number, balance = 400000) {
   } finally { await db.close(); }
 }
 
-test('purchases pay qualified uplines, locked higher levels pay the platform, and retries do not duplicate payouts', async ({ playwright }, info) => {
+test('purchases hold commissions without two paid referrals, locked levels pay the platform and retries do not duplicate payouts', async ({ playwright }, info) => {
   test.skip(info.project.name !== 'desktop');
   test.setTimeout(120000);
   const data = await fixture(16), db = openTestDatabase();
@@ -53,14 +53,13 @@ test('purchases pay qualified uplines, locked higher levels pay the platform, an
     const activated = await purchase.json();
     expect(activated.program.currentLevel).toBe(1);
     expect(activated.program.nextPrice).toBe(20);
-    expect(activated.program.latestPurchase).toEqual({ level: 1, amount: 10, commissions: 9.5, platformPayable: 0.5 });
+    expect(activated.program.latestPurchase).toEqual({ level: 1, amount: 10, commissions: 0, heldCommissions:9.5, platformPayable: 0.5 });
     const allocation = await db.all('SELECT a.* FROM referral_allocations a JOIN referral_purchases p ON p.id = a.purchase_id WHERE p.user_id = $1', data.buyer.id);
     expect(allocation).toHaveLength(19);
     expect(allocation.reduce((sum, row) => sum + row.amount, 0)).toBe(10000000);
-    expect(allocation.filter(row => row.status === 'credited')).toHaveLength(18);
+    expect(allocation.filter(row => row.status === 'held')).toHaveLength(18);
     for (let index = 0; index < 16; index++) {
-      const expected = purchaseShares(1).filter(share => share.depth === index + 1).reduce((sum, share) => sum + share.units, 0);
-      expect((await db.one('SELECT available FROM wallets WHERE user_id = $1', data.uplines[index]!.id))!.available).toBe(expected);
+      expect((await db.one('SELECT available FROM wallets WHERE user_id = $1', data.uplines[index]!.id))!.available).toBe(0);
     }
     const upgradeBody = { password, requestKey: randomUUID(), level: 2 };
     expect((await api.post('/api/referrals/upgrade', { headers: { Origin: 'https://unrelated.example' }, data: upgradeBody })).status()).toBe(403);
@@ -110,7 +109,8 @@ test('missing and ineligible shares accrue to the configured address and address
     const eligibleShare = purchaseShares(1).filter(share => shareRecipientDepth(share,[false,true]) === 2).reduce((sum, share) => sum + share.units, 0);
     expect((await first.json()).program.latestPurchase.platformPayable).toBe((10000000 - eligibleShare) / ledgerScale);
     expect((await db.one('SELECT available FROM wallets WHERE user_id = $1', data.uplines[0]!.id))!.available).toBe(0);
-    expect((await db.one('SELECT available FROM wallets WHERE user_id = $1', data.uplines[1]!.id))!.available).toBe(eligibleShare);
+    expect((await db.one('SELECT available FROM wallets WHERE user_id = $1', data.uplines[1]!.id))!.available).toBe(0);
+    expect((await first.json()).program.latestPurchase.heldCommissions).toBe(eligibleShare/ledgerScale);
     expect((await save(secondAddress)).status()).toBe(200);
     expect((await post(buyer, '/api/referrals/upgrade', { password, requestKey: randomUUID(), level: 2 })).status()).toBe(200);
     const rows = await db.all('SELECT level, fee_recipient_address FROM referral_purchases WHERE user_id = $1 ORDER BY level', data.buyer.id);
@@ -141,7 +141,7 @@ test('insufficient credit and conflicting request keys roll back all allocations
     expect((await (await api.get('/api/referrals/program')).json()).currentLevel).toBe(0);
     expect((await post(api, '/api/referrals/activate', { password, requestKey: randomUUID() })).status()).toBe(200);
     const program = await (await api.get('/api/referrals/program')).json();
-    expect(program.latestPurchase).toEqual({ level: 1, amount: 10, commissions: 0, platformPayable: 10 });
+    expect(program.latestPurchase).toEqual({ level: 1, amount: 10, commissions: 0, heldCommissions:0, platformPayable: 10 });
     expect((await post(api, '/api/referrals/upgrade', { password, requestKey: randomUUID(), level: 2 })).status()).toBe(400);
     expect((await db.one('SELECT COUNT(*) AS count FROM referral_purchases WHERE user_id = $1', data.buyer.id))!.count).toBe(1);
     expect((await db.one('SELECT available FROM wallets WHERE user_id = $1', data.buyer.id))!.available).toBe(0);

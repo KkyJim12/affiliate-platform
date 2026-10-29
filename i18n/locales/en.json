@@ -1017,6 +1017,9 @@
     "member_id_or_password_incorrect": "Member ID or password is incorrect."
   },
   "referral": {
+    "commissionRequirement": "Paid direct referrals: {count}/{required}. Two distinct personally referred members must activate before commissions can be paid.",
+    "commissionHeld": "Held commissions: {amount} USDT. They are released automatically when your second direct referral pays. Upgrades, rebirths and spillover do not add another direct referral.",
+    "commissionQualified": "Qualified to receive commissions. Held commissions awaiting confirmed settlement: {amount} USDT.",
     "active": "Referral access active",
     "oneTime": "One-time payment",
     "yourCode": "Your personal referral code",
@@ -1080,7 +1083,7 @@
     "halvingHint": "Unilevel pays 1% at each of 15 placement depths. Missing or locked shares go to the platform.",
     "missingShareHint": "Missing or inactive upline shares also accrue to the platform fee address.",
     "roundingHint": "The first three uplines receive both shares. Amounts are rounded to six decimals so the total stays exact. Commissions credit the internal ledger; platform amounts await external settlement.",
-    "latestDistribution": "Latest purchase: {amount} USDT · {commissions} USDT credited to uplines · {platform} USDT payable to the platform address.",
+    "latestDistribution": "Latest purchase: {amount} USDT. Paid commissions: {commissions} USDT. Held commissions: {held} USDT. Platform payable: {platform} USDT.",
     "insufficientCredits": "Your available USDT credit balance is too low for this referral purchase.",
     "invalidLevel": "Choose a referral level between 1 and 15.",
     "levelOrder": "Purchase the next referral level in order. The maximum is level 15.",

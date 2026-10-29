@@ -52,7 +52,7 @@ test('mainnet deployment reuses canonical USDT, persists one signed deployment a
     for(const secret of [deployer.privateKey,authority.privateKey])assert.ok(!result.output.includes(secret));
     const record=JSON.parse(await fs.readFile(path.join(directory,'.data/contracts/polygon-mainnet/deployment-result.json'),'utf8'));
     const main=new Contract(record.contractAddress,fixtures.ReferralDistributor.abi,provider);
-    assert.equal(await main.paymentToken(),POLYGON_USDT);assert.equal(await main.distributionVersion(),3n);
+    assert.equal(await main.paymentToken(),POLYGON_USDT);assert.equal(await main.distributionVersion(),4n);
     assert.equal(await main.owner(),owner.address);assert.equal(await main.feeRecipient(),fee.address);assert.equal(await main.quoteSigner(),authority.address);
     assert.equal(await fs.readFile(path.join(directory,'.env'),'utf8'),'AMOY_ENV=untouched\n');
     assert.equal(await fs.readFile(path.join(directory,'.data/contracts/AmoyTestUSDT.json'),'utf8'),'Amoy record remains intact');

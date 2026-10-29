@@ -13,9 +13,10 @@ export interface ReferralProgram {
   nextLevel: number | null;
   nextPrice: number | null;
   feeConfigured: boolean;
-  latestPurchase: { level: number; amount: number; commissions: number; platformPayable: number } | null;
+  latestPurchase: { level: number; amount: number; commissions: number; heldCommissions?:number; platformPayable: number } | null;
   sponsor: { code: string } | null;
   autoUpgrade?: { level: number; kind?: 'upgrade' | 'rebirth'; status: string; lastError: string | null } | null;
+  commissionQualification?: { paidReferrals:number;required:number;qualified:boolean;heldBalance:number };
 }
 
 export interface ReferralUpdate {

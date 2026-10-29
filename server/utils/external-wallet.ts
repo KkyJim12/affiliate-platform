@@ -1,4 +1,5 @@
 import { appNetwork } from "./network";
+import { commissionAuthorization } from "./commission-qualification";
 import { referralRecipients } from "./matrix";
 import { getAddress, id as hashId, ZeroHash, ZeroAddress } from "ethers";
 import { randomUUID } from "node:crypto";
@@ -43,7 +44,7 @@ export async function prepareExternalPurchase(userId: string, level: number, req
         const block = await reader.provider.getBlock("latest");
         if (!block) throw new Error("Chain head unavailable.");
         const id = randomUUID(), now = new Date().toISOString(), uplines = recipients.map(item => item.address);
-        const quote = { id: hashId(id), buyer: address, level, previousLevel: program.currentLevel, uplinesHash: uplineHash(uplines),
+        const quote = { ...await commissionAuthorization(userId,recipients,"external",level===1), id: hashId(id), buyer: address, level, previousLevel: program.currentLevel, uplinesHash: uplineHash(uplines),
           feeRecipient: state.feeRecipient, configNonce: state.configNonce, deadline: block.timestamp + 600, matrixCycle: ZeroHash };
         const payload: PurchasePayload = { createdBlock: block.number, quote, uplines, automaticApproval,
           recipients: recipients.map(({ userId, reason }) => ({ userId, reason })), signature: await reader.sign(quote) };

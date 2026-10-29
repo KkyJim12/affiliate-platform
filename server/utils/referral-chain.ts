@@ -1,7 +1,8 @@
 import { completeRebirth, rebirthRecipients, referralRecipients, unlockMatrixLevel, type ReferralJob } from "./matrix";
 import { createError } from "h3";
+import { commissionAuthorization, reconcileHeldChainAllocations } from "./commission-qualification";
 import { ZeroHash, getAddress, id as hashId, parseUnits } from "ethers";
-import { ReferralChainClient, uplineHash, type PreparedChainTransaction, type PurchasePayload } from "../lib/referral-chain";
+import { ReferralChainClient, uplineHash, type PreparedChainTransaction, type PurchasePayload, type QualificationPayload } from "../lib/referral-chain";
 import { assertNoPendingWalletOperation, walletSigner, withWalletLock } from "./evm-operations";
 import type { ChainPurchaseStatus, ReferralChainStatus } from "../../shared/referral-contract";
 import { ledgerScale, levelPrice } from "../../shared/compensation";
@@ -96,7 +97,7 @@ export async function submitChainPurchase(userId: string, password: string, leve
       const uplines = recipients.map(row => row.address);
       const block = await reader.provider.getBlock("latest");
       if (!block) throw new Error("Blockchain head unavailable.");
-      const quote = { id: hashId(id), buyer: signer.address, level, previousLevel: program.currentLevel,
+      const quote = { ...await commissionAuthorization(userId,recipients,"embedded",level===1), id: hashId(id), buyer: signer.address, level, previousLevel: program.currentLevel,
         uplinesHash: uplineHash(uplines), feeRecipient: state.feeRecipient, configNonce: state.configNonce, deadline: block.timestamp + 3600, matrixCycle: ZeroHash };
       const payload: PurchasePayload = { createdBlock: block.number, quote, uplines, automaticApproval, recipients: recipients.map(({ userId, reason }) => ({ userId, reason })), signature: await reader.sign(quote) };
       const prepared = await reader.preparePurchase(signer, payload, state.decimals);
@@ -153,17 +154,23 @@ export async function reconcileChainPurchase(purchase: ChainPurchaseRow): Promis
         const position = version3 ? (allocation.kind === "bonus" ? 3 : 0) + allocation.depth - 1 : allocation.depth - 1;
         const recipient = allocation.recipientDepth ? purchase.payload.recipients[version3 ? position : allocation.recipientDepth - 1]! : null;
         await db().execute(`INSERT INTO referral_chain_allocations
-          (purchase_id,kind,depth,amount,recipient_address,recipient_user_id,reason,log_index) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          (purchase_id,kind,depth,amount,recipient_address,recipient_user_id,reason,log_index,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
           purchase.id, allocation.kind, allocation.depth, allocation.units, allocation.recipient,
           recipient?.userId ?? null,
-          allocation.kind === "platform" ? "platform_fee" : allocation.recipientDepth ? allocation.redirected ? "highest_upline" : "upline" : purchase.payload.recipients[position]!.reason, allocation.logIndex);
+          allocation.kind === "platform" ? "platform_fee" : allocation.recipientDepth ? allocation.redirected ? "highest_upline" : "upline" : purchase.payload.recipients[position]!.reason, allocation.logIndex,allocation.held ? 'held' : 'credited');
       }
+      for(const release of evidence.releases) await db().execute(`INSERT INTO referral_commission_releases
+        (contract_address,transaction_hash,log_index,block_number,recipient_address,amount) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
+        purchase.contract_address,evidence.receipt.hash,release.logIndex,evidence.receipt.blockNumber,release.recipient,release.amount);
       if (!await db().one("SELECT user_id FROM referral_activations WHERE user_id = $1", purchase.user_id)) {
         await db().execute("INSERT INTO referral_activations (user_id, chain_purchase_id, created_at) VALUES ($1,$2,$3)", purchase.user_id, purchase.id, new Date().toISOString());
       }
     }
     await db().execute("UPDATE referral_chain_purchases SET status = $1, block_number = $2, block_hash = $3, updated_at = $4, transaction_hash = $6 WHERE id = $5",
       evidence.status, evidence.receipt.blockNumber, evidence.receipt.blockHash, new Date().toISOString(), purchase.id, evidence.receipt.hash);
+    // Handles receipts finalized out of order, including a release in the same
+    // block as a held allocation whose receipt is reconciled later.
+    if (evidence.status === 'confirmed') await reconcileHeldChainAllocations();
     if (evidence.status === "confirmed") {
       const rebirth = await db().one<ReferralJob>("SELECT * FROM referral_auto_upgrades WHERE purchase_id=$1 AND kind='rebirth'",purchase.id);
       if (rebirth) await completeRebirth(rebirth);
@@ -237,8 +244,47 @@ export async function reconcilePendingChainOperations() {
     for (const row of purchases) { try { await reconcileChainPurchase(row); } catch { /* Retry on the next reconciliation pass. */ } }
     const updates = await db().all<FeeUpdateRow>("SELECT * FROM referral_chain_fee_updates WHERE status = 'pending' ORDER BY created_at LIMIT 5");
     for (const row of updates) { try { await reconcileFeeUpdate(row); } catch { /* Preserve indeterminate transactions. */ } }
+    await processCommissionQualifications();
     await processReferralAutoUpgrades();
   } finally { sweeping = false; }
+}
+
+async function processCommissionQualifications() {
+  const reader=referralChainClient();
+  if(!reader) return;
+  await withWalletLock('referral-auto-upgrade-relayer',async()=>{
+    const pending=await db().one<{id:string;contract_address:string;token_address:string;transaction_hash:string;raw_transaction:string;payload:QualificationPayload}>(
+      "SELECT * FROM referral_qualification_transactions WHERE status='pending' LIMIT 1");
+    if(pending) {
+      const client=getAddress(pending.contract_address)===getAddress(reader.config.contractAddress) && getAddress(pending.token_address)===getAddress(reader.config.tokenAddress)
+        ? reader : new ReferralChainClient({...reader.config,contractAddress:pending.contract_address,tokenAddress:pending.token_address});
+      await client.broadcast(pending.raw_transaction);
+      const evidence=await client.verifyQualification(pending.transaction_hash,pending.payload);
+      if(!evidence) return;
+      await transaction(async()=>{
+        await db().execute("SELECT pg_advisory_xact_lock(782438,2)");
+        for(const release of evidence.releases) await db().execute(`INSERT INTO referral_commission_releases
+          (contract_address,transaction_hash,log_index,block_number,recipient_address,amount) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
+          pending.contract_address,evidence.receipt.hash,release.logIndex,evidence.receipt.blockNumber,release.recipient,release.amount);
+        await db().execute('UPDATE referral_qualification_transactions SET status=$1 WHERE id=$2',evidence.status,pending.id);
+        await reconcileHeldChainAllocations();
+      });
+    }
+    if(await db().one("SELECT id FROM referral_chain_purchases WHERE signing_mode='automatic' AND status='pending' LIMIT 1")) return;
+    const candidates=await db().all<{user_id:string;address:string}>(`SELECT a.recipient_user_id AS user_id,a.recipient_address AS address
+      FROM referral_chain_allocations a JOIN referral_chain_purchases p ON p.id=a.purchase_id
+      WHERE a.status='held' AND p.status='confirmed' AND lower(p.contract_address)=lower($1) AND (
+        SELECT COUNT(*) FROM users u JOIN referral_activations paid ON paid.user_id=u.id WHERE u.sponsor_id=a.recipient_user_id)>=2
+      GROUP BY a.recipient_user_id,a.recipient_address ORDER BY MIN(p.created_at) LIMIT 20`,reader.config.contractAddress);
+    for(const candidate of candidates) {
+      if(await reader.contract.getFunction('heldCommissions')(candidate.address)===0n) continue;
+      const {payload,prepared}=await reader.prepareQualification(candidate.address),tx=prepared[0]!,id=randomUUID();
+      await db().execute(`INSERT INTO referral_qualification_transactions(id,user_id,contract_address,token_address,payload,raw_transaction,transaction_hash,status,created_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7,'pending',$8)`,id,candidate.user_id,getAddress(reader.config.contractAddress),getAddress(reader.config.tokenAddress),JSON.stringify(payload),tx.raw,tx.hash,new Date().toISOString());
+      await reader.broadcast(tx.raw);
+      break;
+    }
+  }).catch(()=>{});
 }
 
 async function processReferralAutoUpgrades() {
@@ -247,6 +293,7 @@ async function processReferralAutoUpgrades() {
   // One persisted relayer transaction at a time, across app instances. This
   // avoids reusing an authority nonce when broadcasting times out.
   await withWalletLock("referral-auto-upgrade-relayer", async () => {
+    if(await db().one("SELECT id FROM referral_qualification_transactions WHERE status='pending' LIMIT 1")) return;
     if (await db().one("SELECT id FROM referral_chain_purchases WHERE signing_mode = 'automatic' AND status = 'pending' LIMIT 1")) return;
     const jobs = await db().all<ReferralJob>("SELECT * FROM referral_auto_upgrades WHERE status = 'queued' ORDER BY COALESCE(last_attempt_at,created_at),kind,level,cycle_id LIMIT 20");
     for (const job of jobs) {
@@ -275,7 +322,7 @@ async function processReferralAutoUpgrades() {
           const uplines = recipients.map(item => item.address), block = await reader.provider.getBlock("latest");
           if (!block) throw new Error("Chain head unavailable.");
           const id = randomUUID(), timestamp = new Date().toISOString();
-          const quote = { id: hashId(id), buyer: wallet.address, level: job.level, previousLevel: program.currentLevel,
+          const quote = { ...await commissionAuthorization(job.user_id,recipients,mode,false), id: hashId(id), buyer: wallet.address, level: job.level, previousLevel: program.currentLevel,
             uplinesHash: uplineHash(uplines), feeRecipient: state.feeRecipient, configNonce: state.configNonce,
             deadline: block.timestamp + 3600, matrixCycle: hashId(job.cycle_id) };
           const payload: PurchasePayload = { createdBlock: block.number, quote, uplines,

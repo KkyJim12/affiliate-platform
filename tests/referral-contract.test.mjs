@@ -26,13 +26,13 @@ async function fixture(decimals = 6) {
   async function quote(level = 1, changes = {}, ancestors = uplines, signingWallet = authority) {
     const value = { id: id(`purchase-${Math.random()}`), buyer: await buyer.getAddress(), level, previousLevel: level - 1,
       uplinesHash: keccak256(AbiCoder.defaultAbiCoder().encode(['address[18]'], [ancestors])), feeRecipient: await fee.getAddress(),
-      configNonce: String(await contract.configNonce()), deadline: (await provider.getBlock('latest')).timestamp + 3600, matrixCycle: ZeroHash, ...changes };
+      configNonce: String(await contract.configNonce()), deadline: (await provider.getBlock('latest')).timestamp + 3600, matrixCycle: ZeroHash, sponsor: ZeroAddress, qualifiedMask: (1<<19)-1, ...changes };
     return { value, uplines: ancestors, signature: await signingWallet.signTypedData(
       { name: 'UNXO Referral Distributor', version: '1', chainId: 80002, verifyingContract: await contract.getAddress() }, purchaseTypes, value) };
   }
   async function buy(signed) {
     await (await token.connect(buyer).approve(await contract.getAddress(), await contract.priceForLevel(signed.value.level))).wait();
-    return (await contract.connect(buyer).purchase(signed.value, signed.uplines, signed.signature, { gasLimit: 800_000n })).wait();
+    return (await contract.connect(buyer).purchase(signed.value, signed.uplines, signed.signature, { gasLimit: 1_400_000n })).wait();
   }
   return { provider, connection, owner, buyer, fee, authority, token, contract, uplines, multiplier, quote, buy,
     close: async () => { provider.destroy(); await connection.close(); } };
@@ -44,6 +44,68 @@ test('contract ABI matches server selectors and event signatures', () => {
     const reference = fragment.type === 'event' ? compiled.getEvent(fragment.name) : compiled.getFunction(fragment.name);
     assert.equal(fragment.format('sighash'), reference.format('sighash'));
   }
+});
+
+for(const decimals of [6,18]) test(`commissions stay in the contract until two distinct paid direct referrals, then release once (${decimals} decimals)`,async()=>{
+  const f=await fixture(decimals);
+  try {
+    const sponsor=f.uplines[0],ancestors=Array(18).fill(ZeroAddress);ancestors[0]=sponsor;ancestors[3]=sponsor;
+    const first=await f.quote(1,{sponsor,qualifiedMask:0},ancestors);
+    await assert.rejects(f.buy({...first,value:{...first.value,qualifiedMask:1}}));
+    await assert.rejects(f.buy({...first,value:{...first.value,sponsor:f.uplines[1]}}));
+    await f.buy(first);
+    assert.equal(await f.contract.paidDirectReferrals(sponsor),1n);
+    assert.equal(await f.contract.heldCommissions(sponsor),1_100_000n*f.multiplier);
+    assert.equal(await f.token.balanceOf(sponsor),0n);
+    await f.buy(await f.quote(2,{sponsor,qualifiedMask:0},ancestors));
+    const rebirth=await f.quote(1,{sponsor,qualifiedMask:0,previousLevel:2,matrixCycle:id('qualification-rebirth')},ancestors);
+    await (await f.token.connect(f.buyer).approve(await f.contract.getAddress(),10_000_000n*f.multiplier)).wait();
+    await (await f.contract.connect(f.owner).rebirth(rebirth.value,ancestors,rebirth.signature)).wait();
+    assert.equal(await f.contract.paidDirectReferrals(sponsor),1n);
+    const held=4_400_000n*f.multiplier;
+    assert.equal(await f.contract.heldCommissions(sponsor),held);
+    assert.equal(await f.token.balanceOf(await f.contract.getAddress()),held);
+    const second=await f.provider.getSigner(18),secondAddress=await second.getAddress();
+    await (await f.token.mint(secondAddress,10_000_000n*f.multiplier)).wait();
+    await (await f.token.connect(second).approve(await f.contract.getAddress(),10_000_000n*f.multiplier)).wait();
+    const signed=await f.quote(1,{buyer:secondAddress,sponsor,qualifiedMask:0},ancestors);
+    const pay=()=>f.contract.connect(second).purchase(signed.value,ancestors,signed.signature);
+    await (await f.token.setBlocked(sponsor)).wait();
+    await assert.rejects(pay());
+    assert.equal(await f.contract.paidDirectReferrals(sponsor),1n);
+    assert.equal(await f.contract.heldCommissions(sponsor),held);
+    assert.equal(await f.contract.levelOf(secondAddress),0n);
+    await (await f.token.setBlocked(ZeroAddress)).wait();
+    const receipt=await (await pay()).wait();
+    const released=receipt.logs.flatMap(log=>{try {const event=f.contract.interface.parseLog(log);return event?.name==='HeldCommissionReleased'?[event]:[];}catch{return [];}});
+    assert.equal(released.length,1);assert.equal(released[0].args.amount,held);
+    assert.equal(await f.contract.paidDirectReferrals(sponsor),2n);
+    assert.equal(await f.contract.commissionQualified(sponsor),true);
+    assert.equal(await f.token.balanceOf(sponsor),5_500_000n*f.multiplier);
+    assert.equal(await f.contract.heldCommissions(sponsor),0n);
+    assert.equal(await f.contract.totalHeldCommissions(),0n);
+    assert.equal(await f.token.balanceOf(await f.contract.getAddress()),0n);
+    await assert.rejects(pay());
+    await f.buy(await f.quote(3,{sponsor,qualifiedMask:0},ancestors));
+    assert.equal(await f.contract.paidDirectReferrals(sponsor),2n);
+    assert.equal(await f.token.balanceOf(sponsor),9_900_000n*f.multiplier);
+  } finally {await f.close();}
+});
+
+test('all fifteen levels retain every unqualified commission while paying only the platform fee',async()=>{
+  const f=await fixture();
+  try {
+    let held=0n,fees=0n;
+    for(let level=1;level<=15;level++) {
+      const price=10_000_000n<<BigInt(level-1);
+      await f.buy(await f.quote(level,{qualifiedMask:0}));
+      held+=price*95n/100n;fees+=price/20n;
+      assert.equal(await f.contract.totalHeldCommissions(),held);
+      assert.equal(await f.token.balanceOf(await f.contract.getAddress()),held);
+      assert.equal(await f.token.balanceOf(await f.fee.getAddress()),fees);
+    }
+    assert.equal(await f.token.balanceOf(f.uplines[0]),0n);
+  } finally {await f.close();}
 });
 
 test('real token transfers conserve 100% across every level, including 15 equal 1% bonus shares', async () => {
@@ -89,7 +151,7 @@ test('separate binary trees pay 10/20/50 and fifteen 1% shares without folding m
       const ancestors = [...f.uplines.slice(0,3),...f.uplines.slice(3).map((address,i) => i < count ? address : ZeroAddress)];
       const receipt = await f.buy(await f.quote(1,{},ancestors));
       const shares = receipt.logs.flatMap(log => { try { const e=f.contract.interface.parseLog(log); return e?.name==='SharePaid'?[e]:[]; } catch { return []; } });
-      assert.equal(await f.contract.distributionVersion(),3n);
+      assert.equal(await f.contract.distributionVersion(),4n);
       assert.deepEqual(shares.slice(0,3).map(e => e.args.amount),[1_000_000n,2_000_000n,5_000_000n]);
       for(let i=0;i<15;i++) {
         assert.equal(shares[i+3].args.amount,100_000n);

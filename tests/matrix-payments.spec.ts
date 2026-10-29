@@ -51,7 +51,8 @@ test('rebirths debit 10, 20 and 40 separately, pay the new upper steps and leave
     await expect.poll(async()=> (await database.all("SELECT status FROM referral_auto_upgrades WHERE cycle_id=ANY($1::TEXT[])",cases.map(row=>row.job))).every(row=>row.status==='completed'),{timeout:45000}).toBe(true);
     for(const row of cases) {
       expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",row.owner))!.available).toBe(0);
-      expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",row.sponsor))!.available).toBe(row.before+row.price*11/100);
+      expect((await database.one("SELECT available FROM wallets WHERE user_id=$1",row.sponsor))!.available).toBe(row.before);
+      expect((await database.one("SELECT SUM(a.amount) AS amount FROM referral_allocations a JOIN referral_purchases p ON p.id=a.purchase_id WHERE p.rebirth_id=$1 AND a.status='held'",row.job))!.amount).toBe(row.price*11/100);
       expect((await database.one("SELECT unlocked FROM matrix_slots WHERE user_id=$1 AND level=$2 AND cycle=1",row.owner,row.level))!.unlocked).toBe(true);
       const totals=await database.one("SELECT COUNT(*) AS count,SUM(a.amount) AS amount FROM referral_allocations a JOIN referral_purchases p ON p.id=a.purchase_id WHERE p.rebirth_id=$1",row.job);
       expect(totals).toEqual({count:19,amount:row.price});

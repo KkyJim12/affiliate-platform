@@ -1,6 +1,6 @@
 import { AbiCoder, Contract, FetchRequest, Interface, JsonRpcProvider, Transaction, Wallet, ZeroAddress, ZeroHash, formatUnits, getAddress, keccak256, parseUnits } from "ethers";
 import type { Provider, TransactionReceipt } from "ethers";
-import { purchaseTypes, referralContractAbi, type ChainPurchaseQuote } from "../../shared/referral-contract.ts";
+import { purchaseTypes, qualificationTypes, referralContractAbi, type ChainPurchaseQuote } from "../../shared/referral-contract.ts";
 import { purchaseShares, shareRecipientIndex, remainingLevelPrice, ledgerScale } from "../../shared/compensation.ts";
 import { legacyPurchaseShares, version2PurchaseShares, version2RecipientDepth } from "./legacy-distribution.ts";
 import { polygonNetwork, type PolygonChainId } from "../../shared/evm-wallet.ts";
@@ -15,7 +15,7 @@ export interface ReferralChainConfig {
 }
 // Covers all 19 payouts, including fifteen recipients with empty token balances.
 // The fee cap has a separate 15% buffer above the RPC's current price.
-const purchaseGasLimit = 800_000n;
+const purchaseGasLimit = 1_400_000n;
 const approvalGasLimit = 60_000n;
 const bufferedGasPrice = (price: bigint) => (price * 115n + 99n) / 100n;
 export interface PurchasePayload {
@@ -28,10 +28,13 @@ export interface PurchasePayload {
   rebirth?: boolean;
 }
 export interface PreparedChainTransaction { stage: string; hash: string; raw: string; nonce: number; to: string }
+export interface QualificationPayload { member:string;configNonce:string;signature:string }
 export const distributorInterface = new Interface(referralContractAbi);
 const legacyDistributorInterface = new Interface([
   "function purchase((bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline) quote,address[15] uplines,bytes signature)",
 ]);
+const version3DistributorInterface = new Interface(["purchase", "autoUpgrade", "rebirth"].map(method =>
+  `function ${method}((bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline,bytes32 matrixCycle) quote,address[18] uplines,bytes signature)`));
 
 export function uplineHash(uplines: string[]) {
   return keccak256(AbiCoder.defaultAbiCoder().encode([uplines.length === 18 ? "address[18]" : "address[15]"], [uplines]));
@@ -66,8 +69,8 @@ export class ReferralChainClient {
   async inspect(buyer?: string, nextLevel?: number | null, includeGas = true) {
     if ((await this.provider.getNetwork()).chainId !== BigInt(this.chainId)) throw new Error("Referral RPC must match the configured Polygon network.");
     if (await this.provider.getCode(this.config.contractAddress) === "0x") throw new Error("Referral contract is not deployed.");
-    if (await this.contract.getFunction("distributionVersion")().catch(() => 0n) !== 3n)
-      throw new Error("Deploy the updated referral contract for binary matrix slots and level-qualified payouts before accepting purchases.");
+    if (await this.contract.getFunction("distributionVersion")().catch(() => 0n) !== 4n)
+      throw new Error("Deploy the updated referral contract with two-paid-referral commission holds before accepting purchases.");
     const [token, decimals, actualDecimals, feeRecipient, owner, quoteSigner, nonce, paused, symbol, gasFees] = await Promise.all([
       this.contract.getFunction("paymentToken")(), this.contract.getFunction("tokenDecimals")(), this.token.getFunction("decimals")(), this.contract.getFunction("feeRecipient")(),
       this.contract.getFunction("owner")(), this.contract.getFunction("quoteSigner")(), this.contract.getFunction("configNonce")(), this.contract.getFunction("paused")(),
@@ -137,6 +140,33 @@ export class ReferralChainClient {
       data: distributorInterface.encodeFunctionData("setFeeRecipient", [getAddress(recipient)]), gasLimit: 100_000n }], maxGasFee);
   }
 
+  async prepareQualification(member: string) {
+    const state=await this.inspect(undefined,undefined,false);
+    if(state.paused) throw new Error('Commission releases are paused.');
+    const value={member:getAddress(member),configNonce:state.configNonce};
+    const signature=await this.authority.signTypedData({name:'UNXO Referral Distributor',version:'1',chainId:this.chainId,
+      verifyingContract:this.config.contractAddress},qualificationTypes,value);
+    const payload:QualificationPayload={...value,signature};
+    const prepared=await this.prepareBatch(this.authority,[{stage:'qualification',to:this.config.contractAddress,
+      data:distributorInterface.encodeFunctionData('qualifyCommission',[payload.member,payload.configNonce,payload.signature]),gasLimit:200_000n}]);
+    return {payload,prepared};
+  }
+
+  async verifyQualification(hash:string,payload:QualificationPayload) {
+    const receipt=await this.finalizedReceipt(hash);
+    if(!receipt) return null;
+    if(receipt.status!==1) return {status:'failed' as const,receipt,releases:[]};
+    const tx=await this.provider.getTransaction(receipt.hash);
+    if(!tx || tx.chainId!==BigInt(this.chainId) || tx.value!==0n || !tx.to || getAddress(tx.to)!==getAddress(this.config.contractAddress)
+      || tx.data!==distributorInterface.encodeFunctionData('qualifyCommission',[payload.member,payload.configNonce,payload.signature]))
+      throw new Error('Qualification transaction does not match its authorization.');
+    const releases=this.events(receipt).filter(event=>event.name==='HeldCommissionReleased').map(event=>({
+      recipient:getAddress(event.args.member),amount:event.args.amount.toString() as string,logIndex:event.logIndex,
+    }));
+    if(releases.length>1 || releases.some(row=>row.recipient!==getAddress(payload.member))) throw new Error('Invalid commission release.');
+    return {status:'confirmed' as const,receipt,releases};
+  }
+
   private async prepareBatch(wallet: Wallet, calls: { stage: string; to: string; data: string; gasLimit: bigint }[], maxGasFee?: bigint) {
     if ((await this.provider.getNetwork()).chainId !== BigInt(this.chainId)) throw new Error("Referral RPC must match the configured Polygon network.");
     const [nonce, fees] = await Promise.all([
@@ -197,8 +227,8 @@ export class ReferralChainClient {
     if (receipt.status !== 1) return { status: "failed" as const, receipt };
     const version = await this.contract.getFunction("distributionVersion")().catch(() => 1n);
     const tx = await this.provider.getTransaction(receipt.hash);
-    const automatic = version === 3n && payload.quote.matrixCycle !== ZeroHash;
-    const purchaseInterface = version === 3n ? distributorInterface : legacyDistributorInterface;
+    const automatic = version >= 3n && payload.quote.matrixCycle !== ZeroHash;
+    const purchaseInterface = version >= 4n ? distributorInterface : version === 3n ? version3DistributorInterface : legacyDistributorInterface;
     const expectedData = purchaseInterface.encodeFunctionData(payload.rebirth ? "rebirth" : automatic ? "autoUpgrade" : "purchase", [payload.quote, payload.uplines, payload.signature]);
     if (!tx || tx.chainId !== BigInt(this.chainId) || tx.value !== 0n || (!automatic && getAddress(tx.from) !== getAddress(payload.quote.buyer))
       || !tx.to || getAddress(tx.to) !== getAddress(this.config.contractAddress) || tx.data !== expectedData) throw new Error("Purchase transaction does not match its authorization.");
@@ -211,26 +241,30 @@ export class ReferralChainClient {
       || completion[0]!.args.configNonce.toString() !== payload.quote.configNonce) throw new Error("Invalid purchase completion event.");
     const decimals = Number(await this.contract.getFunction("tokenDecimals")());
     const multiplier = 10n ** BigInt(decimals - 6);
-    const expected = version === 3n ? purchaseShares(payload.quote.level) : version === 2n ? version2PurchaseShares(payload.quote.level) : legacyPurchaseShares(payload.quote.level);
+    const expected = version >= 3n ? purchaseShares(payload.quote.level) : version === 2n ? version2PurchaseShares(payload.quote.level) : legacyPurchaseShares(payload.quote.level);
     if (completion[0]!.args.amount !== expected.reduce((sum, share) => sum + BigInt(share.units), 0n) * multiplier)
       throw new Error("Invalid purchase amount.");
-    const shares = events.filter(event => event.name === "SharePaid");
+    const shares = events.filter(event => event.name === "SharePaid" || version >= 4n && event.name === "ShareHeld");
     if (shares.length !== 19) throw new Error("Incomplete purchase distribution.");
     const allocations = expected.map((share, index) => {
       const actual = shares[index]!;
-      const position = version === 3n ? shareRecipientIndex(share) : share.depth - 1;
-      const recipientDepth = version === 3n ? (position >= 0 && payload.uplines[position] !== ZeroAddress ? share.depth : 0)
+      const held = actual.name === "ShareHeld";
+      const position = version >= 3n ? shareRecipientIndex(share) : share.depth - 1;
+      const recipientDepth = version >= 3n ? (position >= 0 && payload.uplines[position] !== ZeroAddress ? share.depth : 0)
         : version === 2n ? version2RecipientDepth(share, payload.uplines)
         : share.depth && payload.uplines[share.depth - 1] !== ZeroAddress ? share.depth : 0;
-      const recipient = recipientDepth ? payload.uplines[version === 3n ? position : recipientDepth - 1]! : payload.quote.feeRecipient;
+      const recipient = recipientDepth ? payload.uplines[version >= 3n ? position : recipientDepth - 1]! : payload.quote.feeRecipient;
       const redirected = share.kind !== "platform" && recipientDepth !== share.depth;
       if (actual.args.id !== payload.quote.id || Number(actual.args.kind) !== (share.kind === "direct" ? 0 : share.kind === "bonus" ? 1 : 2)
         || Number(actual.args.depth) !== share.depth || actual.args.amount !== BigInt(share.units) * multiplier
-        || getAddress(actual.args.recipient) !== getAddress(recipient) || actual.args.redirected !== redirected)
+        || getAddress(actual.args.recipient) !== getAddress(recipient) || (held ? redirected || share.kind === "platform" : actual.args.redirected !== redirected))
         throw new Error("Purchase allocation does not match its authorization.");
-      return { ...share, recipientDepth, recipient: getAddress(recipient), redirected, logIndex: actual.logIndex };
+      return { ...share, recipientDepth, recipient: getAddress(recipient), redirected, held, logIndex: actual.logIndex };
     });
-    return { status: "confirmed" as const, receipt, allocations };
+    const releases = events.filter(event=>event.name === "HeldCommissionReleased").map(event=>({
+      recipient:getAddress(event.args.member),amount:event.args.amount.toString() as string,logIndex:event.logIndex,
+    }));
+    return { status: "confirmed" as const, receipt, allocations, releases };
   }
 
   async verifyFeeUpdate(hash: string, owner: string, recipient: string) {

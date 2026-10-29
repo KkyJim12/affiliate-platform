@@ -113,6 +113,49 @@ For a 10-token purchase with only the parent eligible in both trees, the parent
 receives 1.10 tokens (1.00 matrix + 0.10 unilevel) and the platform receives 8.90.
 With all recipients eligible, members receive 9.50 total and the platform 0.50.
 
+## Two paid direct referrals and held commissions
+
+From distributor version 4, a member needs **two distinct personally referred
+members with confirmed paid activations** before receiving member commissions.
+This qualification applies across all fifteen levels, both programs, upgrades
+and rebirths. It does not reset each cycle. Registrations, spillover placements,
+failed or pending payments, and extra purchases by one referral do not count.
+Direct referrals come from `users.sponsor_id`, independently of tree placement.
+
+An otherwise eligible member with fewer than two paid direct referrals keeps
+their full commission entitlement in `heldCommissions(member)` inside the
+distributor. These shares emit `ShareHeld` and are not sent to the platform,
+credited to the wallet, or available to fund upgrades or rebirths. Platform fees
+and missing, locked or otherwise ineligible upline shares keep their existing
+rules. Held balances do not expire or get forfeited by this qualification rule.
+
+The second direct member's first purchase qualifies the sponsor and releases
+all previously held commissions automatically in that transaction. Current and
+future shares then pay normally. The signed quote binds the original sponsor;
+upgrades and rebirths cannot count the same buyer again. Signed qualification
+bits also attest existing paid direct referrals from the application database,
+including legacy accounts. The quote authority is trusted for these database
+facts, as it already is for placement and paid-level eligibility.
+
+For an already-paid account that links a sponsor later, the worker submits a
+signed `qualifyCommission` attestation after verifying the two paid referrals.
+Its signed transaction is persisted before broadcast and shares the automatic
+purchase relayer's nonce lock. Restarts and retries reuse the same transaction.
+Failed transfers revert the qualification and all releases. Every release is
+recorded once; receipt reconciliation supports out-of-order confirmations.
+
+The member referral page shows the paid referral count and held balance.
+Dashboard credited earnings exclude held shares. In ledger mode, equivalent
+shares stay in held allocation records and are credited atomically when the
+member qualifies. Historical already-paid commissions are not reclaimed.
+
+Apply `0019_commission_qualification.sql`, build and restart the app, and deploy
+the updated **version-4 distributor** to enable this rule for token payments.
+Existing version-3 deployments cannot implement these holds and will reject new
+purchase preparation in this app. Finish their pending purchases before changing
+addresses. Historical receipts retain their original verification rules. Token
+approval must be granted to the replacement distributor address.
+
 ## Completion and automatic upgrade
 
 When the owner and all fourteen descendant slots are unlocked at a level, the
