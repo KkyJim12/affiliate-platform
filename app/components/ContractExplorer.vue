@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const network = usePolygonNetwork();
 import type { PlatformActivity, PlatformTransaction } from "#shared/platform-activity";
 import { formatUsdt } from "#shared/plan";
 const { t, formatDate } = useLoopI18n();
@@ -28,7 +29,7 @@ function clear() { search.value = ""; change({ q: undefined, status: undefined, 
       <article><span>{{ t('connected.pending') }}</span><strong>{{ data?.summary.pending ?? '—' }}</strong><p>{{ t('workspace.pendingEvidence') }}</p></article>
     </div>
     <section class="explorer-panel">
-      <div class="explorer-panel-heading"><div><span class="explorer-eyebrow">Polygon Amoy · 80002</span><h2>{{ t('workspace.contractTransactions') }}</h2><p v-if="data?.contractAddress" class="contract-address">{{ data.contractAddress }}</p></div><button class="admin-text-button" :disabled="status === 'pending'" @click="refresh()"><AppIcon name="RefreshCw" :size="15" />{{ t('admin.refresh') }}</button></div>
+      <div class="explorer-panel-heading"><div><span class="explorer-eyebrow">{{ network.name }} · {{ network.chainId }}</span><h2>{{ t('workspace.contractTransactions') }}</h2><p v-if="data?.contractAddress" class="contract-address">{{ data.contractAddress }}</p></div><button class="admin-text-button" :disabled="status === 'pending'" @click="refresh()"><AppIcon name="RefreshCw" :size="15" />{{ t('admin.refresh') }}</button></div>
       <div class="explorer-transaction-controls">
         <form class="explorer-record-search" @submit.prevent="change({ q: search.trim() || undefined, page: undefined })"><label class="search-field"><AppIcon name="Search" :size="16" /><input v-model="search" :aria-label="t('workspace.searchContract')" :placeholder="t('workspace.searchContract')" maxlength="100" /></label><button class="button button-outline button-small">{{ t('admin.search') }}</button></form>
         <div class="explorer-transaction-filters">

@@ -1198,5 +1198,40 @@
     "approvalHint": "หักเฉพาะรายการซื้อนี้ก่อน เมื่อช่องแมทริกซ์หรือยูนิเลเวล 15 ขั้นชำระครบ จะเข้าคิวซื้อเลเวลถัดไปที่ยังไม่มี สูงสุดเลเวล 15 โดยหักราคาเต็มจากกระเป๋าตามวงเงินอนุมัติโทเคน คุณยกเลิกวงเงินในกระเป๋าได้ หากยอดเงินหรือวงเงินไม่พอ รายการจะรอในคิว",
     "upgradeQueued": "อัปเกรดอัตโนมัติไปเลเวล {level} อยู่ในคิว",
     "upgradeWaiting": "รอยอดเงิน วงเงินอนุมัติโทเคน หรือบริการอัปเกรด"
+  },
+  "mainnet": {
+    "workspace": {
+      "testnetUnits": "USDT (USDT0) บน Polygon mainnet ยอดบนบล็อกเชนเป็นสินทรัพย์จริง"
+    },
+    "platformFaq": {
+      "testnetQuestion": "ส่งและรับ USDT จริงได้หรือไม่?",
+      "testnetAnswer": "ระบบนี้ใช้ USDT (USDT0) จริงบน Polygon mainnet รับเงินที่ที่อยู่กระเป๋าที่เชื่อมต่อและส่งผ่านกระเป๋า ใช้ POL จ่ายค่าแก๊ส"
+    },
+    "connected": {
+      "testnetFaqAnswer": "ระบบนี้ใช้ USDT (USDT0) จริงบน Polygon กระเป๋าของคุณลงนามการซื้อและการโอนบน mainnet โดยใช้ POL จ่ายค่าเครือข่าย",
+      "purchaseHint": "ซื้อด้วย USDT (USDT0) จริงจากกระเป๋า Polygon ที่เชื่อมต่อ"
+    },
+    "evmHistory": {
+      "subtitle": "รายการ POL และการโอนโทเคนล่าสุดบน Polygon",
+      "emptyHint": "รายการ Polygon จะแสดงหลังส่งหรือรับสินทรัพย์และ explorer บันทึกแล้ว"
+    },
+    "evmWallet": {
+      "testnet": "เครือข่ายหลัก",
+      "createFirst": "สร้างกระเป๋า Polygon ก่อน"
+    },
+    "ranksPage": {
+      "paymentHint": "ราคาเป็น USDT (USDT0) บน Polygon ต้องมี POL สำหรับค่าแก๊ส"
+    },
+    "onchain": {
+      "networkHint": "Polygon mainnet · ชำระบนบล็อกเชน",
+      "unlockHint": "ซื้อเลเวล 1 ราคา 10 USDT จากกระเป๋า Polygon",
+      "fundingHint": "กระเป๋า Polygon ต้องมี USDT (USDT0) และ POL สำหรับค่าแก๊ส",
+      "gasRequired": "ต้องมี {required} POL สำหรับงบค่าแก๊สสูงสุด ยอดของคุณคือ {available} POL",
+      "notConfigured": "ยังซื้อผ่านสัญญาไม่ได้ ให้ผู้ดูแลตรวจสอบสัญญา โทเคน และ RPC ของ Polygon",
+      "confirmHint": "ชำระจากกระเป๋า Polygon ที่เข้ารหัส รหัสผ่านอนุญาตการซื้อและอนุมัติโทเคน",
+      "adminHint": "ยอดแบ่งจ่ายที่ยืนยันบน Polygon เปลี่ยนค่าธรรมเนียมด้วยกระเป๋าเจ้าของสัญญา",
+      "insufficientGas": "เติม POL ในกระเป๋า Polygon เพื่อชำระค่าแก๊ส",
+      "useContract": "ซื้อผ่านสมาร์ตคอนแทรกต์จากกระเป๋า Polygon"
+    }
   }
 }

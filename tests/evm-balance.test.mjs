@@ -60,7 +60,7 @@ test("wrong networks and missing token precision fail rather than inventing zero
 });
 
 test("balance configuration rejects other chains, invalid addresses and RPC protocols", () => {
-  for (const changes of [{ chainId: "137" }, { chainId: "invalid" }, { tokenAddress: "LW-id" }, { rpcUrl: "file:///secret" }])
+  for (const changes of [{ chainId: "1" }, { chainId: "invalid" }, { tokenAddress: "LW-id" }, { rpcUrl: "file:///secret" }])
     assert.throws(() => createWalletBalanceReader({ ...config, ...changes }));
   assert.doesNotThrow(() => createWalletBalanceReader({ rpcUrl: "", chainId: "", tokenAddress: "" }));
 });

@@ -102,7 +102,7 @@ test("unrelated wallets, invalid token contracts, hashes, precision, amounts and
 });
 
 test("history configuration is independent of RPC/settlement settings and supports unfiltered ERC-20 history", async () => {
-  for (const changes of [{ explorerApiKey: "" }, { chainId: "137" }, { tokenAddress: zeroAddress }])
+  for (const changes of [{ explorerApiKey: "" }, { chainId: "1" }, { tokenAddress: zeroAddress }])
     assert.throws(() => createWalletHistoryReader({ ...config, ...changes }));
   const { read, calls } = fixture({ config: { chainId: "", tokenAddress: "" } });
   await read(owner);

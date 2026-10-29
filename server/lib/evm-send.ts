@@ -1,6 +1,7 @@
 import { Contract, FetchRequest, Interface, JsonRpcProvider, Transaction, Wallet, ZeroAddress, formatUnits, getAddress, keccak256, parseUnits, toUtf8Bytes } from "ethers";
 import type { Provider, TransactionRequest } from "ethers";
 import type { EvmSendAsset } from "../../shared/evm-send.ts";
+import { polygonNetwork, type PolygonChainId } from "../../shared/evm-wallet.ts";
 
 export class EvmSendError extends Error {}
 const tokenInterface = new Interface(["function decimals() view returns (uint8)", "function symbol() view returns (string)",
@@ -34,17 +35,20 @@ export function sendUnits(value: string, decimals: number) {
 }
 
 export class EvmSendClient {
+  readonly chainId: PolygonChainId;
   readonly provider: Provider;
   readonly config: EvmSendConfig;
   constructor(config: EvmSendConfig, provider?: Provider) {
     this.config = config;
-    if (config.chainId && Number(config.chainId) !== 80002 || !/^https?:$/.test(new URL(config.rpcUrl).protocol)
+    try { this.chainId = polygonNetwork(config.chainId).chainId; }
+    catch { throw new EvmSendError("configuration"); }
+    if (!/^https?:$/.test(new URL(config.rpcUrl).protocol)
       || !Number.isInteger(config.minConfirmations) || config.minConfirmations < 1 || config.minConfirmations > 100) throw new EvmSendError("configuration");
     if (config.tokenAddress) recipientAddress(config.tokenAddress);
     const request = new FetchRequest(config.rpcUrl); request.timeout = 10000;
     this.provider = provider ?? new JsonRpcProvider(request, undefined, { cacheTimeout: -1, batchMaxCount: 1 });
   }
-  async network() { if ((await this.provider.getNetwork()).chainId !== 80002n) throw new EvmSendError("network"); }
+  async network() { if ((await this.provider.getNetwork()).chainId !== BigInt(this.chainId)) throw new EvmSendError("network"); }
   async quote(sender: string, recipient: string, asset: EvmSendAsset, amount: string): Promise<SendPlan> {
     await this.network();
     sender = recipientAddress(sender); recipient = recipientAddress(recipient);
@@ -83,7 +87,7 @@ export class EvmSendClient {
     if (nativeBalance < gasBudget + (asset === "native" ? units : 0n)) throw new EvmSendError("gas");
     return { sender, recipient, asset, tokenAddress, decimals, symbol, amount: formatUnits(units, decimals), units: units.toString(),
       gasBudget: formatUnits(gasBudget, 18), deadline: Date.now() + 300000, createdBlock: head.number,
-      tx: { chainId: 80002, nonce, to: target, data, value: request.value.toString(), gasLimit: gasLimit.toString(),
+      tx: { chainId: this.chainId, nonce, to: target, data, value: request.value.toString(), gasLimit: gasLimit.toString(),
         ...(fees.maxFeePerGas ? { type: 2, maxFeePerGas: feeCap.toString(), maxPriorityFeePerGas: (fees.maxPriorityFeePerGas ?? 0n).toString() }
           : { type: 0, gasPrice: feeCap.toString() }) } };
   }
@@ -93,7 +97,7 @@ export class EvmSendClient {
     const recipient = recipientAddress(plan.recipient), sender = recipientAddress(plan.sender);
     const units = sendUnits(plan.amount, plan.decimals);
     const token = plan.asset === "token" && this.config.tokenAddress ? getAddress(this.config.tokenAddress) : null;
-    if (recipient === sender || recipient === token || plan.tx.chainId !== 80002 || units.toString() !== plan.units
+    if (recipient === sender || recipient === token || plan.tx.chainId !== this.chainId || units.toString() !== plan.units
       || plan.asset !== "native" && plan.asset !== "token" || plan.asset === "token" && (!token || token !== plan.tokenAddress)
       || plan.asset === "native" && (plan.tokenAddress !== null || plan.decimals !== 18)
       || getAddress(plan.tx.to) !== (token ?? recipient)
@@ -127,7 +131,7 @@ export class EvmSendClient {
   async broadcast(raw: string, plan: SendPlan) {
     await this.network(); this.validate(plan);
     const tx = Transaction.from(raw);
-    if (tx.from !== getAddress(plan.sender) || tx.chainId !== 80002n || tx.to !== getAddress(plan.tx.to)
+    if (tx.from !== getAddress(plan.sender) || tx.chainId !== BigInt(this.chainId) || tx.to !== getAddress(plan.tx.to)
       || tx.data !== plan.tx.data || tx.value !== BigInt(plan.tx.value) || tx.nonce !== plan.tx.nonce
       || tx.gasLimit !== BigInt(plan.tx.gasLimit) || tx.maxFeePerGas !== (plan.tx.maxFeePerGas ? BigInt(plan.tx.maxFeePerGas) : null)
       || tx.maxPriorityFeePerGas !== (plan.tx.maxPriorityFeePerGas ? BigInt(plan.tx.maxPriorityFeePerGas) : null)
@@ -140,7 +144,7 @@ export class EvmSendClient {
     if (!receipt || await receipt.confirmations() < this.config.minConfirmations) return null;
     if ((await this.provider.getBlock(receipt.blockNumber))?.hash !== receipt.blockHash) return null;
     const tx = await this.provider.getTransaction(hash);
-    if (!tx || tx.chainId !== 80002n || tx.from !== getAddress(plan.sender) || tx.to !== getAddress(plan.tx.to)
+    if (!tx || tx.chainId !== BigInt(this.chainId) || tx.from !== getAddress(plan.sender) || tx.to !== getAddress(plan.tx.to)
       || tx.value !== BigInt(plan.tx.value) || tx.data !== plan.tx.data || tx.nonce !== plan.tx.nonce) throw new EvmSendError("quote");
     if (receipt.status !== 1) return { status: "failed" as const, receipt };
     if (plan.tokenAddress) {

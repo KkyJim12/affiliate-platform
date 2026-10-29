@@ -1198,5 +1198,40 @@
     "approvalHint": "Only this purchase is charged now. A full paid matrix slot or 15-step unilevel tree queues your next unowned level, up to level 15. Its full price is deducted from your wallet using token approval. You can revoke approval in your wallet. Insufficient funds or approval keeps the upgrade queued.",
     "upgradeQueued": "Automatic upgrade to level {level} is queued.",
     "upgradeWaiting": "Waiting for funds, token approval or the upgrade service."
+  },
+  "mainnet": {
+    "workspace": {
+      "testnetUnits": "Polygon mainnet USDT (USDT0). On-chain amounts represent real assets."
+    },
+    "platformFaq": {
+      "testnetQuestion": "Can I send and receive real USDT?",
+      "testnetAnswer": "This deployment uses real USDT (USDT0) on Polygon mainnet. Receive funds at your connected wallet address and send them through your wallet. POL pays network gas."
+    },
+    "connected": {
+      "testnetFaqAnswer": "This deployment uses real Polygon USDT (USDT0). Your wallet signs purchases and transfers on Polygon mainnet, with POL for network fees.",
+      "purchaseHint": "Purchases use real USDT (USDT0) from your connected Polygon wallet."
+    },
+    "evmHistory": {
+      "subtitle": "Recent POL activity and token transfers on Polygon.",
+      "emptyHint": "Your indexed Polygon transactions appear here after you send or receive assets."
+    },
+    "evmWallet": {
+      "testnet": "Mainnet",
+      "createFirst": "Create your Polygon wallet first."
+    },
+    "ranksPage": {
+      "paymentHint": "Prices are in Polygon USDT (USDT0). Your wallet needs POL for transaction gas."
+    },
+    "onchain": {
+      "networkHint": "Polygon mainnet: payments are on-chain.",
+      "unlockHint": "Buy level 1 for 10 USDT from your Polygon wallet.",
+      "fundingHint": "Your Polygon wallet needs USDT (USDT0) and POL for gas.",
+      "gasRequired": "You need {required} POL for the maximum gas budget. Your balance is {available} POL.",
+      "notConfigured": "Smart-contract purchases are unavailable. Ask the administrator to check the Polygon contract, token and RPC configuration.",
+      "confirmHint": "Pay from your encrypted Polygon wallet. Your password authorizes the purchase and token approval.",
+      "adminHint": "Confirmed token distributions on Polygon. Fee changes require the contract owner's wallet.",
+      "insufficientGas": "Add POL to your Polygon wallet to cover transaction gas.",
+      "useContract": "Use the smart contract purchase flow to pay from your Polygon wallet."
+    }
   }
 }

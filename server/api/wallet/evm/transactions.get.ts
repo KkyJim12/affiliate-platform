@@ -1,6 +1,7 @@
 import { requireUser, rateLimit } from "../../../utils/auth";
 import { evmWalletFor } from "../../../utils/evm-wallet";
 import { createWalletHistoryReader } from "../../../lib/evm-transactions";
+import { walletEvmConfig } from "../../../utils/network";
 
 export default defineEventHandler(async event => {
   const user = await requireUser(event);
@@ -8,7 +9,7 @@ export default defineEventHandler(async event => {
   const wallet = await evmWalletFor(user.id);
   if (!wallet) throw createError({ statusCode: 404, statusMessage: "Create your EVM wallet first." });
   try {
-    return await createWalletHistoryReader(useRuntimeConfig().evm)(wallet.address);
+    return await createWalletHistoryReader(walletEvmConfig())(wallet.address);
   } catch {
     // Provider URLs and errors may contain the API key. Keep them server-side.
     throw createError({ statusCode: 503, statusMessage: "Wallet transaction history is temporarily unavailable." });

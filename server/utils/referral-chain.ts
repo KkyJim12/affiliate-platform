@@ -5,7 +5,7 @@ import { ReferralChainClient, uplineHash, type PreparedChainTransaction, type Pu
 import { assertNoPendingWalletOperation, walletSigner, withWalletLock } from "./evm-operations";
 import type { ChainPurchaseStatus, ReferralChainStatus } from "../../shared/referral-contract";
 import { ledgerScale, levelPrice } from "../../shared/compensation";
-import { polygonTestnet } from "../../shared/evm-wallet";
+import { appNetwork } from "./network";
 import { db, transaction } from "./database";
 import { randomUUID } from "./auth";
 import { referralProgram } from "./referral";
@@ -28,8 +28,8 @@ export const referralPaymentMode = () => !externalWalletMode() && useRuntimeConf
 export function referralChainClient() {
   const config = useRuntimeConfig();
   if (referralPaymentMode() === "ledger" || !config.referral.contractAddress || !config.referral.authorityPrivateKey || !config.evm.tokenAddress) return null;
-  if (config.evm.chainId && Number(config.evm.chainId) !== polygonTestnet.chainId) throw new Error("Referral purchases require Polygon Amoy.");
-  return client ??= new ReferralChainClient({ rpcUrl: config.evm.rpcUrl || polygonTestnet.rpcUrl,
+  appNetwork();
+  return client ??= new ReferralChainClient({ chainId: appNetwork().chainId, rpcUrl: config.evm.rpcUrl || appNetwork().rpcUrl,
     contractAddress: config.referral.contractAddress, tokenAddress: config.evm.tokenAddress,
     authorityPrivateKey: config.referral.authorityPrivateKey, minConfirmations: Number(config.referral.minConfirmations), minGasBalance: config.referral.minGasBalance });
 }
@@ -40,14 +40,14 @@ export function requireChainClient() {
 }
 export function chainPurchaseStatus(row: { id: string; level: number; status: ChainPurchaseStatus["status"]; transaction_hash: string | null }): ChainPurchaseStatus {
   return { id: row.id, level: row.level, status: row.status, transactionHash: row.transaction_hash,
-    explorerUrl: row.transaction_hash ? `${polygonTestnet.explorerUrl}/tx/${row.transaction_hash}` : null };
+    explorerUrl: row.transaction_hash ? `${appNetwork().explorerUrl}/tx/${row.transaction_hash}` : null };
 }
 export async function pendingChainPurchase(userId: string) {
   return await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE user_id = $1 AND status IN ('pending','awaiting_signature')", userId);
 }
 export async function referralChainStatus(userId: string, includeGas = false): Promise<ReferralChainStatus> {
   const pending = await pendingChainPurchase(userId);
-  const base: ReferralChainStatus = { mode: referralPaymentMode(), configured: false, ready: false, chainId: 80002,
+  const base: ReferralChainStatus = { mode: referralPaymentMode(), configured: false, ready: false, chainId: appNetwork().chainId,
     contractAddress: null, tokenAddress: null, tokenSymbol: null, feeRecipient: null, owner: null, balance: null, gasBalance: null, gasBudget: null, currentLevel: null,
     pending: pending ? chainPurchaseStatus(pending) : null };
   try {
@@ -102,7 +102,7 @@ export async function submitChainPurchase(userId: string, password: string, leve
       const hash = prepared.find(item => item.stage === "purchase")!.hash;
       await db().execute(`INSERT INTO referral_chain_purchases
         (id,user_id,request_key,level,amount,chain_id,contract_address,token_address,buyer_address,fee_recipient_address,payload,status,transaction_hash,created_at,updated_at)
-        VALUES ($1,$2,$3,$4,$5,80002,$6,$7,$8,$9,$10,'pending',$11,$12,$12)`, id, userId, requestKey, level,
+        VALUES ($1,$2,$3,$4,$5,${appNetwork().chainId},$6,$7,$8,$9,$10,'pending',$11,$12,$12)`, id, userId, requestKey, level,
         levelPrice(level) * ledgerScale, getAddress(reader.config.contractAddress), getAddress(reader.config.tokenAddress), signer.address,
         state.feeRecipient, JSON.stringify(payload), hash, timestamp);
       await saveTransactions(userId, id, prepared);
@@ -276,7 +276,7 @@ async function processReferralAutoUpgrades() {
           const prepared = await reader.prepareAutoUpgrade(payload, state.decimals);
           await db().execute(`INSERT INTO referral_chain_purchases
             (id,user_id,request_key,level,amount,chain_id,contract_address,token_address,buyer_address,fee_recipient_address,payload,status,signing_mode,transaction_hash,created_at,updated_at)
-            VALUES($1,$2,$3,$4,$5,80002,$6,$7,$8,$9,$10,'pending','automatic',$11,$12,$12)`,
+            VALUES($1,$2,$3,$4,$5,${appNetwork().chainId},$6,$7,$8,$9,$10,'pending','automatic',$11,$12,$12)`,
             id,job.user_id,`referral-auto:${id}`,job.level,levelPrice(job.level) * ledgerScale,getAddress(reader.config.contractAddress),
             getAddress(reader.config.tokenAddress),wallet.address,state.feeRecipient,JSON.stringify(payload),prepared[0]!.hash,timestamp);
           await saveTransactions(job.user_id, id, prepared);

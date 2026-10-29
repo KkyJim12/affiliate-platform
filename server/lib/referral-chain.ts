@@ -3,11 +3,13 @@ import type { Provider, TransactionReceipt } from "ethers";
 import { purchaseTypes, referralContractAbi, type ChainPurchaseQuote } from "../../shared/referral-contract.ts";
 import { purchaseShares, shareRecipientIndex, remainingLevelPrice, ledgerScale } from "../../shared/compensation.ts";
 import { legacyPurchaseShares, version2PurchaseShares, version2RecipientDepth } from "./legacy-distribution.ts";
+import { polygonNetwork, type PolygonChainId } from "../../shared/evm-wallet.ts";
 
 export const tokenAbi = ["function decimals() view returns (uint8)", "function symbol() view returns (string)",
   "function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)",
   "function approve(address,uint256) returns (bool)"];
 export interface ReferralChainConfig {
+  chainId?: string | number;
   rpcUrl: string; contractAddress: string; tokenAddress: string; authorityPrivateKey: string; minConfirmations: number;
   minGasBalance?: string;
 }
@@ -35,6 +37,7 @@ export function uplineHash(uplines: string[]) {
 }
 
 export class ReferralChainClient {
+  readonly chainId: PolygonChainId;
   readonly provider: Provider;
   readonly contract: Contract;
   readonly token: Contract;
@@ -42,6 +45,7 @@ export class ReferralChainClient {
   readonly config: ReferralChainConfig;
   readonly minimumGasBalance: bigint;
   constructor(config: ReferralChainConfig, provider?: Provider) {
+    this.chainId = polygonNetwork(config.chainId).chainId;
     this.config = config;
     const minimum = String(config.minGasBalance ?? "0.003");
     if (!/^\d{1,9}(\.\d{1,18})?$/.test(minimum)) throw new Error("Invalid minimum POL balance configuration.");
@@ -59,7 +63,7 @@ export class ReferralChainClient {
   }
 
   async inspect(buyer?: string, nextLevel?: number | null, includeGas = true) {
-    if ((await this.provider.getNetwork()).chainId !== 80002n) throw new Error("Referral purchases require Polygon Amoy.");
+    if ((await this.provider.getNetwork()).chainId !== BigInt(this.chainId)) throw new Error("Referral RPC must match the configured Polygon network.");
     if (await this.provider.getCode(this.config.contractAddress) === "0x") throw new Error("Referral contract is not deployed.");
     if (await this.contract.getFunction("distributionVersion")().catch(() => 0n) !== 3n)
       throw new Error("Deploy the updated referral contract for binary matrix slots and level-qualified payouts before accepting purchases.");
@@ -91,7 +95,7 @@ export class ReferralChainClient {
   }
 
   async sign(quote: ChainPurchaseQuote) {
-    return this.authority.signTypedData({ name: "UNXO Referral Distributor", version: "1", chainId: 80002,
+    return this.authority.signTypedData({ name: "UNXO Referral Distributor", version: "1", chainId: this.chainId,
       verifyingContract: this.config.contractAddress }, purchaseTypes, quote);
   }
 
@@ -131,7 +135,7 @@ export class ReferralChainClient {
   }
 
   private async prepareBatch(wallet: Wallet, calls: { stage: string; to: string; data: string; gasLimit: bigint }[], maxGasFee?: bigint) {
-    if ((await this.provider.getNetwork()).chainId !== 80002n) throw new Error("Referral purchases require Polygon Amoy.");
+    if ((await this.provider.getNetwork()).chainId !== BigInt(this.chainId)) throw new Error("Referral RPC must match the configured Polygon network.");
     const [nonce, fees] = await Promise.all([
       this.provider.getTransactionCount(wallet.address, "pending"), this.provider.getFeeData(),
     ]);
@@ -147,7 +151,7 @@ export class ReferralChainClient {
     }
     const result: PreparedChainTransaction[] = [];
     for (const [index, call] of calls.entries()) {
-      const transaction = { to: call.to, data: call.data, gasLimit: call.gasLimit, nonce: nonce + index, chainId: 80002, value: 0n,
+      const transaction = { to: call.to, data: call.data, gasLimit: call.gasLimit, nonce: nonce + index, chainId: this.chainId, value: 0n,
         ...(fees.maxFeePerGas ? { type: 2, maxFeePerGas: feeLimit, maxPriorityFeePerGas: fees.maxPriorityFeePerGas ?? 0n }
           : { type: 0, gasPrice: feeLimit }) };
       const raw = await wallet.signTransaction(transaction);
@@ -158,7 +162,7 @@ export class ReferralChainClient {
 
   async broadcast(raw: string) {
     const decoded = Transaction.from(raw);
-    if (decoded.chainId !== 80002n || decoded.value !== 0n || ![this.config.contractAddress, this.config.tokenAddress].some(address => getAddress(address) === decoded.to))
+    if (decoded.chainId !== BigInt(this.chainId) || decoded.value !== 0n || ![this.config.contractAddress, this.config.tokenAddress].some(address => getAddress(address) === decoded.to))
       throw new Error("Invalid persisted referral transaction.");
     // Re-broadcasts reuse the exact signed transaction/hash, never a new nonce.
     if (await this.provider.getTransactionReceipt(decoded.hash!)) return;
@@ -166,7 +170,7 @@ export class ReferralChainClient {
   }
 
   async finalizedReceipt(hash: string) {
-    if ((await this.provider.getNetwork()).chainId !== 80002n) throw new Error("Unexpected referral network.");
+    if ((await this.provider.getNetwork()).chainId !== BigInt(this.chainId)) throw new Error("Unexpected referral network.");
     const receipt = await this.provider.getTransactionReceipt(hash);
     if (!receipt || await receipt.confirmations() < this.config.minConfirmations) return null;
     const canonical = await this.provider.getBlock(receipt.blockNumber);
@@ -193,7 +197,7 @@ export class ReferralChainClient {
     const automatic = version === 3n && payload.quote.matrixCycle !== ZeroHash;
     const purchaseInterface = version === 3n ? distributorInterface : legacyDistributorInterface;
     const expectedData = purchaseInterface.encodeFunctionData(automatic ? "autoUpgrade" : "purchase", [payload.quote, payload.uplines, payload.signature]);
-    if (!tx || tx.chainId !== 80002n || tx.value !== 0n || (!automatic && getAddress(tx.from) !== getAddress(payload.quote.buyer))
+    if (!tx || tx.chainId !== BigInt(this.chainId) || tx.value !== 0n || (!automatic && getAddress(tx.from) !== getAddress(payload.quote.buyer))
       || !tx.to || getAddress(tx.to) !== getAddress(this.config.contractAddress) || tx.data !== expectedData) throw new Error("Purchase transaction does not match its authorization.");
     const events = this.events(receipt);
     const completion = events.filter(event => event.name === "PurchaseCompleted");

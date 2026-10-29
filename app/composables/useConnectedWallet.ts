@@ -1,6 +1,5 @@
 import { BrowserProvider, getAddress, hexlify, toUtf8Bytes } from "ethers";
 import type { WalletCall } from "#shared/connected-wallet";
-import { polygonTestnet } from "#shared/evm-wallet";
 import type { Account } from "#shared/types";
 
 interface InjectedProvider {
@@ -25,6 +24,7 @@ let pendingAccountChange: { provider: InjectedProvider; id: string; account: str
 let sessionResetRequired = false;
 
 export function useConnectedWallet() {
+  const network = usePolygonNetwork();
   const external = computed(() => useRuntimeConfig().public.walletMode !== "embedded");
   const providers = useState<WalletOption[]>("connected-providers", () => []);
   const address = useState<string | null>("connected-address", () => null);
@@ -36,7 +36,7 @@ export function useConnectedWallet() {
   const { user, clearSession } = useAccount();
   const { authOpen } = useAppUI();
   const { wallet, refreshWallet, clearBalances, refreshBalances } = useEvmWallet();
-  const matches = computed(() => !!address.value && address.value.toLowerCase() === wallet.value?.address.toLowerCase() && chainId.value === polygonTestnet.chainId);
+  const matches = computed(() => !!address.value && address.value.toLowerCase() === wallet.value?.address.toLowerCase() && chainId.value === network.chainId);
 
   function discover() {
     if (import.meta.server) return;
@@ -119,12 +119,12 @@ export function useConnectedWallet() {
       busy.value = false;
     });
   }
-  function attach(provider: InjectedProvider, id: string, account: string, network: number = polygonTestnet.chainId) {
+  function attach(provider: InjectedProvider, id: string, account: string, selectedChain: number = network.chainId) {
     disconnect(); activeProvider = provider; activeProviderId = id;
-    address.value = getAddress(account); chainId.value = network;
+    address.value = getAddress(account); chainId.value = selectedChain;
     walletName.value = providers.value.find(option => option.id === id)?.name ?? "Wallet";
     accountListener = accounts => { accountChanged(provider, id, normalizedAccount(accounts?.[0])); };
-    chainListener = chain => { chainId.value = Number(chain); error.value = chainId.value === polygonTestnet.chainId ? "" : "Select Polygon Amoy in your wallet."; };
+    chainListener = chain => { chainId.value = Number(chain); error.value = chainId.value === network.chainId ? "" : `Select ${network.name} in your wallet.`; };
     disconnectListener = () => { chainId.value = null; accountChanged(provider, id, null); };
     provider.on?.("accountsChanged", accountListener); provider.on?.("chainChanged", chainListener); provider.on?.("disconnect", disconnectListener);
   }
@@ -153,17 +153,17 @@ export function useConnectedWallet() {
   }
   async function switchNetwork(provider: InjectedProvider) {
     const current = Number(await provider.request({ method: "eth_chainId" }));
-    if (current !== polygonTestnet.chainId) {
-      try { await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x13882" }] }); }
+    if (current !== network.chainId) {
+      try { await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: `0x${network.chainId.toString(16)}` }] }); }
       catch (failure) {
         const code = (failure as { code?: number; data?: { originalError?: { code?: number } } }).code;
         if (code !== 4902) throw failure;
-        await provider.request({ method: "wallet_addEthereumChain", params: [{ chainId: "0x13882", chainName: polygonTestnet.name,
-          nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 }, rpcUrls: [polygonTestnet.rpcUrl], blockExplorerUrls: [polygonTestnet.explorerUrl] }] });
-        await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x13882" }] });
+        await provider.request({ method: "wallet_addEthereumChain", params: [{ chainId: `0x${network.chainId.toString(16)}`, chainName: network.name,
+          nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 }, rpcUrls: [network.rpcUrl], blockExplorerUrls: [network.explorerUrl] }] });
+        await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: `0x${network.chainId.toString(16)}` }] });
       }
     }
-    if (Number(await provider.request({ method: "eth_chainId" })) !== polygonTestnet.chainId) throw new Error("Select Polygon Amoy in your wallet. In Phantom, enable testnet mode first.");
+    if (Number(await provider.request({ method: "eth_chainId" })) !== network.chainId) throw new Error(`Select ${network.name} in your wallet.${network.testnet ? " In Phantom, enable testnet mode first." : ""}`);
   }
   async function connect(id: string, expectedAccount?: string) {
     const provider = injected.get(id);
@@ -193,7 +193,7 @@ export function useConnectedWallet() {
       const connected = await connect(id, expectedAccount), provider = activeProvider!, version = connectionVersion;
       const assertCurrent = () => {
         if (connectionVersion !== version || address.value !== connected || activeProvider !== provider
-          || chainId.value !== polygonTestnet.chainId || purpose === "link" && user.value?.id !== ownerId)
+          || chainId.value !== network.chainId || purpose === "link" && user.value?.id !== ownerId)
           throw new Error("Wallet or account changed. Please sign in again.");
       };
       const challenge = await $fetch<{ id: string; message: string }>("/api/auth/wallet/challenge", { method: "POST", body: { address: connected, purpose, sponsorCode } });
@@ -215,21 +215,21 @@ export function useConnectedWallet() {
     const provider = activeProvider, id = activeProviderId!, version = connectionVersion;
     const accounts = await provider.request({ method: "eth_accounts" }) as string[];
     const actual = normalizedAccount(accounts[0]);
-    const network = Number(await provider.request({ method: "eth_chainId" }));
+    const observedChain = Number(await provider.request({ method: "eth_chainId" }));
     if (activeProvider !== provider || connectionVersion !== version) throw new Error("Wallet or account changed. Please sign in again.");
     if (actual !== address.value || user.value && wallet.value && actual?.toLowerCase() !== wallet.value.address.toLowerCase()) {
       accountChanged(provider, id, actual, true);
       throw new Error("Wallet or account changed. Please sign in again.");
     }
     address.value = actual;
-    chainId.value = network;
+    chainId.value = observedChain;
     if (!actual || actual.toLowerCase() !== (expected ?? wallet.value?.address)?.toLowerCase()) throw new Error("Select the wallet linked to this account before signing.");
-    if (chainId.value !== polygonTestnet.chainId) throw new Error("Select Polygon Amoy in your wallet before signing.");
+    if (chainId.value !== network.chainId) throw new Error(`Select ${network.name} in your wallet before signing.`);
     return actual;
   }
   async function send(call: WalletCall) {
     const ownerId = user.value?.id;
-    if (call.chainId !== polygonTestnet.chainId) throw new Error("Unsupported transaction network.");
+    if (call.chainId !== network.chainId) throw new Error("Unsupported transaction network.");
     await assertConnected(call.from);
     if (!ownerId || ownerId !== user.value?.id || wallet.value?.address.toLowerCase() !== call.from.toLowerCase()) throw new Error("Sign in with the wallet authorizing this transaction.");
     const provider = new BrowserProvider(activeProvider!, "any");

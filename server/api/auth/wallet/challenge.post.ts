@@ -1,3 +1,4 @@
+import { appNetwork } from "../../../utils/network";
 import { randomBytes, randomUUID } from "node:crypto";
 import { assertSameOrigin, rateLimit, requireUser } from "../../../utils/auth";
 import { db } from "../../../utils/database";
@@ -15,7 +16,7 @@ export default defineEventHandler(async event => {
   const purpose = body?.purpose === "link" ? "link" : "login";
   const user = purpose === "link" ? await requireUser(event) : null;
   const now = Date.now(), id = randomUUID();
-  const message = walletChallengeMessage(origin, address, randomBytes(24).toString("hex"), now, purpose);
+  const message = walletChallengeMessage(origin, address, randomBytes(24).toString("hex"), now, purpose, appNetwork().chainId);
   const sponsor = normalizeReferralCode(typeof body?.sponsorCode === "string" ? body.sponsorCode.slice(0, 24) : "");
   await db().execute("DELETE FROM wallet_challenges WHERE expires_at < $1", now - 3600000);
   await db().execute(`INSERT INTO wallet_challenges (id,address,purpose,user_id,message,sponsor_code,expires_at)

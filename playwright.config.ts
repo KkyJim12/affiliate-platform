@@ -38,7 +38,7 @@ export default defineConfig({
     },
     {
       name: "mobile",
-      testMatch: ["**/interface.spec.ts", "**/admin.spec.ts", "**/account-settings.spec.ts", "**/member-id.spec.ts", "**/platform-workspace.spec.ts", "**/explorer.spec.ts", "**/referral.spec.ts", "**/matrix-slots.spec.ts", "**/public-tree.spec.ts", "**/onchain-referral.spec.ts", "**/onchain-wallet.spec.ts"],
+      testMatch: ["**/interface.spec.ts", "**/admin.spec.ts", "**/account-settings.spec.ts", "**/member-id.spec.ts", "**/platform-workspace.spec.ts", "**/explorer.spec.ts", "**/referral.spec.ts", "**/matrix-slots.spec.ts", "**/public-tree.spec.ts", "**/onchain-referral.spec.ts", "**/onchain-wallet.spec.ts", "**/mainnet-app.spec.ts"],
       use: {
         ...devices["iPhone 13"],
         defaultBrowserType: "chromium",

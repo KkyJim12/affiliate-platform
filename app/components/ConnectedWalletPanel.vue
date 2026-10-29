@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const network = usePolygonNetwork();
 withDefaults(defineProps<{ preview?: boolean; compact?: boolean }>(), { preview: false, compact: false });
 const { t } = useLoopI18n();
 const { user } = useAccount();
@@ -33,7 +34,7 @@ watch(() => user.value?.id, () => { details.value = false; sendOpen.value = fals
   <ConnectedWalletSend v-if="user && !preview && wallet" :key="user.id" :open="sendOpen" :show-history="compact" @close="sendOpen = false" />
   <ModalTransition><AppModal v-if="details && wallet" :title="t('evmWallet.details')" @close="details = false">
     <div class="wallet-action-modal"><h2>{{ t('evmWallet.details') }}</h2><p>{{ t('connected.walletHint') }}</p>
-      <dl class="admin-details"><div><dt>{{ t('evmWallet.address') }}</dt><dd class="connected-address">{{ wallet.address }}</dd></div><div><dt>{{ t('onchain.network') }}</dt><dd>Polygon Amoy · 80002</dd></div></dl>
+      <dl class="admin-details"><div><dt>{{ t('evmWallet.address') }}</dt><dd class="connected-address">{{ wallet.address }}</dd></div><div><dt>{{ t('onchain.network') }}</dt><dd>{{ network.name }} · {{ network.chainId }}</dd></div></dl>
       <button class="button button-outline" @click="copy(wallet.address)">{{ t('connected.copyAddress') }}</button>
       <a class="inline-link" :href="wallet.explorerUrl" target="_blank" rel="noopener noreferrer">{{ t('connected.viewExplorer') }}<AppIcon name="ArrowUpRight" :size="14" /></a>
     </div>

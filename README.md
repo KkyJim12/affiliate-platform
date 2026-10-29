@@ -1,5 +1,9 @@
 # UNXO — matrix and referral workspace
 
+Polygon mainnet deployment and application support: [mainnet setup](docs/en/polygon-mainnet.md).
+Use `.env.mainnet` and `contracts:mainnet:*` commands to deploy the distributor
+against existing Polygon USDT (USDT0), with a separate mainnet database.
+
 Members are identified by numeric **Member ID** throughout the UI and public API. Credential login uses `{memberId,password}`; embedded registration assigns an ID automatically and accepts `{password,sponsorCode?}`. IDs cannot be edited. Find existing admin IDs with `npm run admin:list`. See [the identity migration notes](docs/member-id-update.md).
 
 เอกสารระบบฉบับภาษาไทยและภาษาอังกฤษ: [สารบัญ / Documentation index](docs/README.md). Covers the full system, all 52 API routes, installation/operations, fifteen-level prices, payment flows, commission eligibility and implemented conditions. Start with [ภาษาไทย](docs/th/system-guide.md) or [English](docs/en/system-guide.md); see [การจ่ายเงินและเงื่อนไข](docs/th/payments-and-conditions.md) / [Payments and conditions](docs/en/payments-and-conditions.md).

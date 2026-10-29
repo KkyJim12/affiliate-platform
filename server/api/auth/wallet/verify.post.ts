@@ -1,3 +1,4 @@
+import { appNetwork } from "../../../utils/network";
 import { randomBytes, randomUUID } from "node:crypto";
 import { accountFor, assertSameOrigin, createSession, currentUser, hashPassword, rateLimit, type UserRow } from "../../../utils/auth";
 import { db, transaction } from "../../../utils/database";
@@ -18,7 +19,7 @@ export default defineEventHandler(async event => {
   const user = await transaction(async () => {
     const challenge = await db().one("SELECT * FROM wallet_challenges WHERE id = $1 FOR UPDATE", body.id);
     if (!challenge || challenge.consumed_at || Number(challenge.expires_at) < Date.now()
-      || !challenge.message.includes(`\nURI: ${origin}\n`)
+      || !challenge.message.includes(`\nURI: ${origin}\n`) || !challenge.message.includes(`\nChain ID: ${appNetwork().chainId}\n`)
       || !verifyWalletChallenge(challenge.message, challenge.address, body.signature)) throw invalid();
     await db().execute("SELECT pg_advisory_xact_lock(782438, 3)");
     let owner = await db().one<UserRow>(`SELECT u.*, COALESCE(a.role,'member') AS role, COALESCE(a.status,'active') AS status
@@ -43,7 +44,7 @@ export default defineEventHandler(async event => {
     if (owner.role === "admin" && challenge.purpose !== "link")
       throw createError({ statusCode: 403, statusMessage: "Sign in to admin with your member ID and password." });
     if (owner.status === "suspended") throw createError({ statusCode: 403, statusMessage: "This account is suspended." });
-    await db().execute("INSERT INTO connected_wallets (user_id,address,created_at) VALUES ($1,$2,$3) ON CONFLICT (user_id) DO NOTHING", owner.id, challenge.address, new Date().toISOString());
+    await db().execute("INSERT INTO connected_wallets (user_id,address,created_at,chain_id) VALUES ($1,$2,$3,$4) ON CONFLICT (user_id) DO NOTHING", owner.id, challenge.address, new Date().toISOString(),appNetwork().chainId);
     await db().execute("UPDATE wallet_challenges SET consumed_at = $1 WHERE id = $2", Date.now(), body.id);
     return owner;
   });

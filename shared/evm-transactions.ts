@@ -18,7 +18,7 @@ export interface EvmTransaction {
 
 export interface EvmTransactionHistory {
   address: string;
-  chainId: 80002;
+  chainId: 137 | 80002;
   transactions: EvmTransaction[];
   limit: number;
 }

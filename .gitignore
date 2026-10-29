@@ -24,3 +24,4 @@ playwright-report
 .env
 .env.*
 !.env.example
+!.env.mainnet.example

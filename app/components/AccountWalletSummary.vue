@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const network = usePolygonNetwork();
 withDefaults(defineProps<{ menu?: boolean; showNative?: boolean; refreshable?: boolean }>(), { menu: false, showNative: false, refreshable: false });
 const { t } = useLoopI18n();
 const { copy } = useAppUI();
@@ -9,7 +10,7 @@ const { wallet, walletError, walletLoading, refreshWallet, balances, balanceErro
     <div class="account-wallet-balance" :title="balanceTitle"><span>{{ t('profileMenu.assetBalance', { symbol }) }}</span><strong data-testid="account-wallet-balance">{{ formattedBalance }} <small>{{ symbol }}</small></strong></div>
     <button v-if="refreshable" class="account-wallet-retry" :disabled="balanceLoading" @click="refreshBalances(true)"><AppIcon name="RefreshCw" :size="13" />{{ t('evmWallet.refresh') }}</button>
     <p v-if="balanceError && !menu" role="status">{{ t('evmWallet.balanceUnavailable') }}</p>
-    <p v-if="showNative && balances" class="account-wallet-native">{{ balances.native.balance }} POL · Polygon Amoy</p>
+    <p v-if="showNative && balances" class="account-wallet-native">{{ balances.native.balance }} POL · {{ network.name }}</p>
     <span class="account-wallet-label">{{ t('evmWallet.address') }}</span>
     <template v-if="wallet"><span class="account-wallet-network">{{ wallet.network }}</span><button class="account-wallet-address" :role="menu ? 'menuitem' : undefined" :aria-label="t('evmWallet.copyAddress')" @click="copy(wallet.address)"><code :data-testid="menu ? 'profile-wallet-address' : 'connected-wallet-address'">{{ wallet.address }}</code><AppIcon name="Copy" :size="16" /></button></template>
     <p v-else-if="walletLoading" role="status">{{ t('evmWallet.loading') }}</p>

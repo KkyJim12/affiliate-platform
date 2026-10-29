@@ -5,11 +5,13 @@ import { db, transaction } from "../server/utils/database.ts";
 import { hashPassword } from "../server/lib/password.ts";
 import { migrate, readMigrations } from "../server/lib/migrations.ts";
 import { generateEncryptedEvmWallet } from "../server/lib/evm-wallet.ts";
+import { bindDatabaseNetwork } from "../server/lib/database-network.ts";
 let database;
 try {
     let password = process.env.LOOP_ADMIN_PASSWORD || "";
     database = db();
     await migrate(database.pool, readMigrations());
+    await bindDatabaseNetwork(database,Number(process.env.NUXT_EVM_CHAIN_ID||80002));
     if (process.argv.includes("--list")) {
         const admins = await database.all("SELECT u.referral_code AS id, a.status FROM users u JOIN user_access a ON a.user_id = u.id WHERE a.role = 'admin' ORDER BY u.referral_code::BIGINT");
         for (const admin of admins) console.log(`Administrator ID ${admin.id} (${admin.status})`);
@@ -40,7 +42,7 @@ try {
         throw new Error("Provide a password (12-128 characters). Non-interactive setup uses LOOP_ADMIN_PASSWORD. Member IDs are assigned automatically.");
     const id = randomUUID();
     const passwordHash = await hashPassword(password);
-    const evmWallet = process.env.NUXT_PUBLIC_WALLET_MODE === 'embedded' ? await generateEncryptedEvmWallet(password) : null;
+    const evmWallet = process.env.NUXT_PUBLIC_WALLET_MODE === 'embedded' ? await generateEncryptedEvmWallet(password,Number(process.env.NUXT_EVM_CHAIN_ID||80002)) : null;
     const memberId = await transaction(async () => {
         const created = await database.one("INSERT INTO users (id, username, password_hash, referral_code, sponsor_id, created_at) VALUES ($1, $2, $3, $4, NULL, $5) RETURNING referral_code", id, `account_${randomUUID()}`, passwordHash, `UNASSIGNED-${id}`, new Date().toISOString());
         await database.execute("INSERT INTO wallets (id, user_id) VALUES ($1, $2)", `LW-${randomUUID()}`, id);

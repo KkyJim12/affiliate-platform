@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const network = usePolygonNetwork();
 import type { ReferralChainStatus } from "#shared/referral-contract";
 import { formatUsdt } from "#shared/plan";
 const emit = defineEmits<{ updated: [] }>();
@@ -41,7 +42,7 @@ onBeforeUnmount(() => { password.value = ""; if (timer) clearInterval(timer); })
       <p v-if="loadError" class="auth-error" role="alert">{{ t('admin.loadError') }}</p>
       <template v-else-if="data">
         <template v-if="data.chain.configured">
-          <dl class="admin-details"><div><dt>{{ t('onchain.network') }}</dt><dd>Polygon Amoy</dd></div><div><dt>{{ t('onchain.totalDistributed') }}</dt><dd>{{ formatUsdt(data.totals.volume) }} {{ data.chain.tokenSymbol }}</dd></div><div><dt>{{ t('onchain.uplinePaid') }}</dt><dd>{{ formatUsdt(data.totals.commissions) }} {{ data.chain.tokenSymbol }}</dd></div><div><dt>{{ t('onchain.platformPaid') }}</dt><dd>{{ formatUsdt(data.totals.platform) }} {{ data.chain.tokenSymbol }}</dd></div></dl>
+          <dl class="admin-details"><div><dt>{{ t('onchain.network') }}</dt><dd>{{ network.name }}</dd></div><div><dt>{{ t('onchain.totalDistributed') }}</dt><dd>{{ formatUsdt(data.totals.volume) }} {{ data.chain.tokenSymbol }}</dd></div><div><dt>{{ t('onchain.uplinePaid') }}</dt><dd>{{ formatUsdt(data.totals.commissions) }} {{ data.chain.tokenSymbol }}</dd></div><div><dt>{{ t('onchain.platformPaid') }}</dt><dd>{{ formatUsdt(data.totals.platform) }} {{ data.chain.tokenSymbol }}</dd></div></dl>
           <p>{{ t('onchain.owner') }}</p><p class="admin-fee-address">{{ data.chain.owner }}</p>
           <p>{{ t('onchain.currentFee') }}</p><p class="admin-fee-address" data-testid="chain-fee-address">{{ data.chain.feeRecipient }}</p>
           <form v-if="data.canManageFee" class="account-form" @submit.prevent="updateFee">
@@ -52,7 +53,7 @@ onBeforeUnmount(() => { password.value = ""; if (timer) clearInterval(timer); })
           </form>
           <p v-else>{{ t('onchain.ownerRequired') }}</p>
           <p v-if="data.feeUpdate?.status === 'pending'" role="status">{{ t('onchain.feePending') }}</p>
-          <a v-if="data.feeUpdate?.transactionHash" class="inline-link" :href="`https://amoy.polygonscan.com/tx/${data.feeUpdate.transactionHash}`" target="_blank" rel="noopener noreferrer">{{ t('onchain.viewTransaction') }}</a>
+          <a v-if="data.feeUpdate?.transactionHash" class="inline-link" :href="`${network.explorerUrl}/tx/${data.feeUpdate.transactionHash}`" target="_blank" rel="noopener noreferrer">{{ t('onchain.viewTransaction') }}</a>
         </template>
         <p v-else>{{ t('onchain.notConfigured') }}</p>
         <p v-if="error" class="auth-error" role="alert">{{ tr(error) }}</p>

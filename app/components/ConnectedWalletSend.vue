@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const network = usePolygonNetwork();
 import type { ExternalOperation } from "#shared/connected-wallet";
 withDefaults(defineProps<{ open: boolean; showHistory?: boolean }>(), { showHistory: true });
 const emit = defineEmits<{ close: [] }>();
@@ -31,7 +32,7 @@ onBeforeUnmount(() => clearInterval(timer));
 <template>
   <section v-if="showHistory && history.some(row => row.kind === 'send' && row.transactionHash)" class="panel send-history" data-testid="connected-send-history">
     <div class="send-history-header"><h3>{{ t('evmSend.recent') }}</h3><button class="text-action" @click="refresh">{{ t('evmWallet.refresh') }}</button></div>
-    <article v-for="item in history.filter(row => row.kind === 'send' && row.transactionHash).slice(0,5)" :key="item.id" class="send-history-row"><strong>{{ item.amount }} {{ item.symbol }}</strong><span>{{ t(`connected.${item.status}`) }}</span><code class="connected-address">{{ item.recipient }}</code><a :href="`https://amoy.polygonscan.com/tx/${item.transactionHash}`" target="_blank" rel="noopener noreferrer">{{ t('onchain.viewTransaction') }}</a></article>
+    <article v-for="item in history.filter(row => row.kind === 'send' && row.transactionHash).slice(0,5)" :key="item.id" class="send-history-row"><strong>{{ item.amount }} {{ item.symbol }}</strong><span>{{ t(`connected.${item.status}`) }}</span><code class="connected-address">{{ item.recipient }}</code><a :href="`${network.explorerUrl}/tx/${item.transactionHash}`" target="_blank" rel="noopener noreferrer">{{ t('onchain.viewTransaction') }}</a></article>
   </section>
   <ModalTransition><AppModal v-if="open" :title="t('evmSend.title')" @close="close"><div class="wallet-action-modal send-dialog"><h2>{{ t(quote ? 'evmSend.reviewTitle' : 'evmSend.title') }}</h2><p>{{ t('connected.confirmInWallet') }}</p>
     <form v-if="!quote" class="account-form" @submit.prevent="review"><label for="external-send-asset">{{ t('evmSend.asset') }}</label><AppDropdown id="external-send-asset" v-model="asset" :options="options" :label="t('evmSend.asset')" :disabled="busy" />

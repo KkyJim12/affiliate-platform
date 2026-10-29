@@ -1,4 +1,5 @@
 import { unlockMatrixLevel, referralRecipients } from "../server/utils/matrix.ts";
+import { bindDatabaseNetwork } from "../server/lib/database-network.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
@@ -28,6 +29,26 @@ async function isolated(operation) {
     await admin.close();
   }
 }
+
+test("mainnet databases bind to chain 137 and reject Amoy wallets and chain switches",()=>isolated(async db=>{
+  await migrate(db.pool,sources);
+  await bindDatabaseNetwork(db,137);await bindDatabaseNetwork(db,137);
+  await assert.rejects(bindDatabaseNetwork(db,80002),/separate database/);
+  await db.execute("INSERT INTO users VALUES('mainnet-user','mainnet-user','hash','mainnet-user',NULL,'2026-10-29')");
+  await db.execute("INSERT INTO connected_wallets(user_id,address,chain_id,created_at) VALUES('mainnet-user',$1,137,'2026-10-29')",`0x${'12'.repeat(20)}`);
+  await assert.rejects(db.execute("UPDATE connected_wallets SET chain_id=80002 WHERE user_id='mainnet-user'"),{code:'23514'});
+  assert.equal((await db.one('SELECT chain_id FROM platform_network')).chain_id,137);
+}));
+
+test("existing Amoy paid databases cannot be reopened as mainnet databases",()=>isolated(async db=>{
+  await migrate(db.pool,sources.filter(item=>item.name<'0017_'));
+  await db.execute("INSERT INTO users VALUES('amoy-user','amoy-user','hash','amoy-user',NULL,'2026-10-29')");
+  await db.execute("UPDATE matrix_slots SET unlocked=TRUE WHERE user_id='amoy-user' AND level=1");
+  await migrate(db.pool,sources);
+  await assert.rejects(bindDatabaseNetwork(db,137),/separate database/);
+  await bindDatabaseNetwork(db,80002);
+  assert.equal((await db.one("SELECT unlocked FROM matrix_slots WHERE user_id='amoy-user' AND level=1")).unlocked,true);
+}));
 
 test("PostgreSQL migrations are idempotent and enforce exact money, ownership and case-insensitive uniqueness", () => isolated(async db => {
   assert.deepEqual(await migrate(db.pool, sources), sources.map(item => item.name));
@@ -112,7 +133,7 @@ test("Amoy wallet schema enforces owner, address, key encryption and network con
   await assert.rejects(insert('missing', `0x${"3".repeat(40)}`, 80002), { code: "23503" });
   await assert.rejects(insert('u', `0x${"3".repeat(40)}`, 80002), { code: "23505" });
   await assert.rejects(insert('v', address.toUpperCase().replace('0X', '0x'), 80002), { code: "23505" });
-  await assert.rejects(insert('v', `0x${"3".repeat(40)}`, 137), { code: "23514" });
+  await assert.rejects(insert('v', `0x${"3".repeat(40)}`, 1), { code: "23514" });
   await assert.rejects(insert('v', 'LW-internal-wallet', 80002), { code: "23514" });
   await assert.rejects(insert('v', `0x${"3".repeat(40)}`, 80002, '{}'), { code: "23514" });
   await assert.rejects(db.transaction(async () => {

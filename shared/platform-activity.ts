@@ -15,7 +15,7 @@ export interface PlatformTransaction {
 export interface PlatformActivity {
   configured: boolean;
   contractAddress: string | null;
-  chainId: 80002;
+  chainId: 137 | 80002;
   items: PlatformTransaction[];
   total: number;
   page: number;
@@ -26,7 +26,7 @@ export interface PlatformActivity {
 export interface PlatformAnalytics {
   configured: boolean;
   contractAddress: string | null;
-  chainId: 80002;
+  chainId: 137 | 80002;
   updatedAt: string;
   accounts: number;
   activeMembers: number;

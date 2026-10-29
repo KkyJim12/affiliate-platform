@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const network = usePolygonNetwork();
 import { remainingLevelPrice } from "#shared/compensation";
 import type { ReferralProgram } from "#shared/referral";
 import type { ChainPurchaseStatus, ReferralChainStatus } from "#shared/referral-contract";
@@ -75,7 +76,7 @@ onBeforeUnmount(() => { mounted = false; password.value = ""; if (timer) clearIn
     <p class="referral-contract-note">{{ t('onchain.networkHint') }}</p>
     <template v-if="chain?.configured">
       <div class="referral-balance"><span>{{ t('onchain.tokenBalance') }}</span><strong data-testid="chain-token-balance">{{ formatUsdt(Number(chain.balance || 0)) }} {{ symbol }}</strong></div>
-      <a :href="`https://amoy.polygonscan.com/address/${chain.contractAddress}`" target="_blank" rel="noopener noreferrer" class="inline-link">{{ t('onchain.viewContract') }}<AppIcon name="ArrowUpRight" :size="14" /></a>
+      <a :href="`${network.explorerUrl}/address/${chain.contractAddress}`" target="_blank" rel="noopener noreferrer" class="inline-link">{{ t('onchain.viewContract') }}<AppIcon name="ArrowUpRight" :size="14" /></a>
       <template v-if="program?.nextLevel">
         <p class="referral-contract-note">{{ t('referral.nextLevel', { level: program.nextLevel, amount: formatUsdt(price) }) }}</p>
         <button class="button button-orange referral-unlock-button" :disabled="busy || !!pending || !chain.ready || !canAfford" @click="openConfirmation">{{ t('onchain.buy', { level: program.nextLevel, amount: formatUsdt(price), symbol }) }}</button>
@@ -97,7 +98,7 @@ onBeforeUnmount(() => { mounted = false; password.value = ""; if (timer) clearIn
     <button class="text-action" :disabled="refreshing || busy" @click="refreshState"><AppIcon name="RefreshCw" :size="14" />{{ t('onchain.refresh') }}</button>
     <ModalTransition><AppModal v-if="confirmOpen" :title="t('onchain.confirmTitle')" @close="closeConfirmation">
       <div class="admin-dialog referral-purchase-dialog"><h2>{{ t('onchain.confirmTitle') }}</h2><p>{{ t('onchain.confirmHint') }}</p>
-        <dl class="admin-details"><div><dt>{{ t('referral.levelPrice') }}</dt><dd>{{ formatUsdt(price) }} {{ symbol }}</dd></div><div><dt>{{ t('onchain.network') }}</dt><dd>Polygon Amoy · 80002</dd></div></dl>
+        <dl class="admin-details"><div><dt>{{ t('referral.levelPrice') }}</dt><dd>{{ formatUsdt(price) }} {{ symbol }}</dd></div><div><dt>{{ t('onchain.network') }}</dt><dd>{{ network.name }} · {{ network.chainId }}</dd></div></dl>
         <label class="admin-checkbox"><input v-model="automaticApproval" type="checkbox" :disabled="busy" /><span>{{ t('matrix.autoApproval', { amount: formatUsdt(remainingLevelPrice(program?.nextLevel || 1)), symbol: chain?.tokenSymbol || 'USDT' }) }}</span></label><p>{{ t('matrix.approvalHint') }}</p>
         <form class="account-form" @submit.prevent="purchase"><label for="chain-purchase-password">{{ t('ui.confirm_with_your_password') }}</label><input id="chain-purchase-password" v-model="password" class="auth-input" type="password" autocomplete="current-password" maxlength="128" required :disabled="busy" />
           <p v-if="error" class="auth-error" role="alert">{{ tr(error) }}</p>

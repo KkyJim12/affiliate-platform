@@ -2,7 +2,7 @@ import { createError } from "h3";
 import { getAddress } from "ethers";
 import { EvmSendClient, EvmSendError, sendPlanHash, type SendPlan } from "../lib/evm-send";
 import type { EvmSendAsset, EvmSendQuote, EvmSendStatus } from "../../shared/evm-send";
-import { polygonTestnet } from "../../shared/evm-wallet";
+import { appNetwork } from "./network";
 import { db, transaction } from "./database";
 import { randomUUID } from "./auth";
 import { assertNoPendingWalletOperation, walletSigner, withWalletLock } from "./evm-operations";
@@ -16,14 +16,14 @@ interface SendRow {
 let client: EvmSendClient | undefined;
 function sendClient() {
   const { evm } = useRuntimeConfig();
-  return client ??= new EvmSendClient({ rpcUrl: evm.rpcUrl || polygonTestnet.rpcUrl, chainId: evm.chainId,
+  return client ??= new EvmSendClient({ rpcUrl: evm.rpcUrl || appNetwork().rpcUrl, chainId: appNetwork().chainId,
     tokenAddress: evm.tokenAddress, minConfirmations: Number(evm.minConfirmations || 2) });
 }
 export function sendStatus(row: SendRow): EvmSendStatus {
   if (row.status === "quoted" || !row.transaction_hash) throw new Error("Unsigned send has no status.");
   return { id: row.id, status: row.status, recipient: row.payload.recipient, asset: row.payload.asset,
     amount: row.payload.amount, symbol: row.payload.symbol, transactionHash: row.transaction_hash,
-    explorerUrl: `${polygonTestnet.explorerUrl}/tx/${row.transaction_hash}`, createdAt: row.created_at };
+    explorerUrl: `${appNetwork().explorerUrl}/tx/${row.transaction_hash}`, createdAt: row.created_at };
 }
 export async function createSendQuote(userId: string, recipient: string, asset: EvmSendAsset, amount: string): Promise<EvmSendQuote> {
   requireEmbeddedWalletMode();
@@ -34,9 +34,9 @@ export async function createSendQuote(userId: string, recipient: string, asset: 
     const plan = await sendClient().quote(wallet.address, recipient, asset, amount);
     const id = randomUUID(), quoteHash = sendPlanHash(plan), timestamp = new Date().toISOString();
     await db().execute(`INSERT INTO evm_sends (id,user_id,chain_id,sender_address,token_address,payload,quote_hash,status,created_at,updated_at)
-      VALUES ($1,$2,80002,$3,$4,$5,$6,'quoted',$7,$7)`, id, userId, plan.sender, plan.tokenAddress, JSON.stringify(plan), quoteHash, timestamp);
+      VALUES ($1,$2,${appNetwork().chainId},$3,$4,$5,$6,'quoted',$7,$7)`, id, userId, plan.sender, plan.tokenAddress, JSON.stringify(plan), quoteHash, timestamp);
     return { id, quoteHash, sender: plan.sender, recipient: plan.recipient, asset: plan.asset, tokenAddress: plan.tokenAddress,
-      symbol: plan.symbol, decimals: plan.decimals, amount: plan.amount, gasBudget: plan.gasBudget, chainId: 80002, expiresAt: new Date(plan.deadline).toISOString() };
+      symbol: plan.symbol, decimals: plan.decimals, amount: plan.amount, gasBudget: plan.gasBudget, chainId: appNetwork().chainId, expiresAt: new Date(plan.deadline).toISOString() };
   });
 }
 export async function submitEvmSend(userId: string, password: string, id: string, quoteHash: string, requestKey: string) {

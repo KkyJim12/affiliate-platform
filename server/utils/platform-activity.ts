@@ -1,3 +1,4 @@
+import { appNetwork } from "./network";
 import type { H3Event } from "h3";
 import { getAddress, isAddress } from "ethers";
 import type { PlatformActivity, PlatformAnalytics, PlatformTransaction } from "../../shared/platform-activity";
@@ -37,7 +38,7 @@ export async function platformActivity(event: H3Event): Promise<PlatformActivity
     throw createError({ statusCode: 400, statusMessage: "Choose valid explorer filters." });
   const page = Math.max(1, Math.min(100000, Number.parseInt(String(query.page || 1), 10) || 1));
   const contractAddress = platformContract();
-  const base: PlatformActivity = { configured: !!contractAddress, contractAddress, chainId: 80002, items: [], total: 0, page, pageSize: 12,
+  const base: PlatformActivity = { configured: !!contractAddress, contractAddress, chainId: appNetwork().chainId, items: [], total: 0, page, pageSize: 12,
     summary: { confirmed: 0, pending: 0, failed: 0, volume: 0 } };
   if (!contractAddress) return base;
   const since = period === "all" ? "" : new Date(Date.now() - Number(period) * 86400000).toISOString();
@@ -55,7 +56,7 @@ export async function platformActivity(event: H3Event): Promise<PlatformActivity
       block_number AS "blockNumber", created_at AS "createdAt" FROM activity ${where}
     ORDER BY created_at DESC, hash DESC LIMIT 12 OFFSET $6`, ...args, (page - 1) * 12);
   return { ...base, total: totals!.total, summary: { confirmed: totals!.confirmed, pending: totals!.pending, failed: totals!.failed, volume: totals!.volume / moneyScale },
-    items: rows.map(row => ({ ...row, amount: row.amount / moneyScale, explorerUrl: `https://amoy.polygonscan.com/tx/${row.hash}` })) };
+    items: rows.map(row => ({ ...row, amount: row.amount / moneyScale, explorerUrl: `${appNetwork().explorerUrl}/tx/${row.hash}` })) };
 }
 
 export async function platformAnalytics(): Promise<PlatformAnalytics> {
@@ -93,5 +94,5 @@ export async function platformAnalytics(): Promise<PlatformAnalytics> {
       distributions: { direct: shares!.direct / moneyScale, bonus: shares!.bonus / moneyScale, platform: shares!.platform / moneyScale },
       daily: daily.map(row => ({ ...row, volume: row.volume / moneyScale })), levels: levels.map(row => ({ ...row, volume: row.volume / moneyScale })) };
   });
-  return { ...result, configured: !!contractAddress, contractAddress, chainId: 80002, updatedAt: new Date().toISOString() };
+  return { ...result, configured: !!contractAddress, contractAddress, chainId: appNetwork().chainId, updatedAt: new Date().toISOString() };
 }

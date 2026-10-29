@@ -1,5 +1,6 @@
 import { createDatabase } from "../server/lib/postgres.ts";
 import { migrate, migrationStatus, readMigrations } from "../server/lib/migrations.ts";
+import { bindDatabaseNetwork } from "../server/lib/database-network.ts";
 
 let database;
 try {
@@ -9,6 +10,7 @@ try {
   const migrations = readMigrations();
   if (command === "migrate") {
     const applied = await migrate(database.pool, migrations);
+    await bindDatabaseNetwork(database,Number(process.env.NUXT_EVM_CHAIN_ID || 80002));
     console.log(applied.length ? `Applied ${applied.length} PostgreSQL migration(s).` : "Database is up to date.");
   }
   for (const item of await migrationStatus(database.pool, migrations)) console.log(`${item.status.padEnd(7)}  ${item.name}`);

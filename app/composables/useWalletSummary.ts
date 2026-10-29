@@ -3,7 +3,7 @@ export function useWalletSummary() {
   const { localeTag, t } = useLoopI18n();
   const asset = computed(() => {
     const balances = state.balances.value;
-    if (!balances?.token || !/^(t)?usdt$/i.test(balances.token.symbol)) return null;
+    if (!balances?.token || !/^(?:tusdt|usdt0?)$/i.test(balances.token.symbol)) return null;
     if (state.wallet.value && balances.address.toLowerCase() !== state.wallet.value.address.toLowerCase()) return null;
     return balances.token;
   });

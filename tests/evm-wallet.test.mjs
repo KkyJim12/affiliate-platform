@@ -30,8 +30,9 @@ test("random Amoy wallets store a password-encrypted V3 keystore and only expose
   assert.ok(!("privateKey" in details));
   await assert.rejects(decryptEvmPrivateKey(first, "Different invalid password!"));
   await assert.rejects(decryptEvmPrivateKey({ ...first, address: second.address }, password), /identity/);
-  await assert.rejects(decryptEvmPrivateKey({ ...first, chain_id: 137 }, password), /network/);
-  assert.throws(() => publicEvmWallet({ ...first, chain_id: 137 }), /network/);
+  await assert.rejects(decryptEvmPrivateKey({ ...first, chain_id: 1 }, password));
+  assert.throws(() => publicEvmWallet({ ...first, chain_id: 1 }));
+  assert.equal(publicEvmWallet({ ...first, chain_id: 137 }).testnet,false);
 });
 
 test("wallet generation rejects invalid encryption passwords", async () => {

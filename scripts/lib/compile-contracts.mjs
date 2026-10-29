@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import solc from 'solc';
 
-export function compileContracts({ includeTests = false } = {}) {
-  const names = ['contracts/ReferralDistributor.sol', 'contracts/AmoyTestUSDT.sol', ...(includeTests ? ['contracts/test/TestPaymentToken.sol'] : [])];
+export function compileContracts({ includeTests = false, distributorOnly = false } = {}) {
+  const names = ['contracts/ReferralDistributor.sol', ...(distributorOnly ? [] : ['contracts/AmoyTestUSDT.sol']), ...(includeTests ? ['contracts/test/TestPaymentToken.sol','contracts/test/PolygonUsdtFixture.sol'] : [])];
   const input = { language: 'Solidity', sources: Object.fromEntries(names.map(name => [name, { content: fs.readFileSync(name, 'utf8') }])),
     settings: { optimizer: { enabled: true, runs: 200 }, viaIR: true, evmVersion: 'cancun',
       outputSelection: { '*': { '*': ['abi', 'evm.bytecode.object', 'evm.deployedBytecode.object', 'metadata'] } } } };

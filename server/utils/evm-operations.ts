@@ -1,3 +1,4 @@
+import { appNetwork } from "./network";
 import { createError } from "h3";
 import { Wallet } from "ethers";
 import { decryptEvmPrivateKey, type StoredEvmWallet } from "../lib/evm-wallet";
@@ -7,6 +8,7 @@ import { requireEmbeddedWalletMode } from "./wallet-mode";
 export async function walletSigner(userId: string, password: string) {
   requireEmbeddedWalletMode();
   const row = await db().one<StoredEvmWallet>("SELECT address, public_key, encrypted_keystore, chain_id, created_at FROM evm_wallets WHERE user_id = $1", userId);
+  if (row && row.chain_id !== appNetwork().chainId) throw new Error("Wallet belongs to another network.");
   if (!row) throw createError({ statusCode: 409, statusMessage: "Create your Polygon testnet wallet first." });
   return new Wallet(await decryptEvmPrivateKey(row, password));
 }

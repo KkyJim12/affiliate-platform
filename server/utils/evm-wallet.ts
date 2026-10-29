@@ -2,7 +2,7 @@ import { generateEncryptedEvmWallet, publicEvmWallet } from "../lib/evm-wallet";
 import type { StoredEvmWallet } from "../lib/evm-wallet";
 import { db, transaction } from "./database";
 import { externalWalletMode, requireEmbeddedWalletMode } from "./wallet-mode";
-import { polygonTestnet } from "../../shared/evm-wallet";
+import { appNetwork } from "./network";
 import type { EvmWalletDetails } from "../../shared/evm-wallet";
 
 export async function insertEvmWallet(userId: string, row: StoredEvmWallet) {
@@ -14,9 +14,9 @@ export async function insertEvmWallet(userId: string, row: StoredEvmWallet) {
 export async function evmWalletFor(userId: string) {
   if (externalWalletMode()) {
     const linked = await db().one("SELECT address, created_at FROM connected_wallets WHERE user_id = $1", userId);
-    return linked ? { address: linked.address, publicKey: null, chainId: polygonTestnet.chainId,
-      network: polygonTestnet.name, currency: polygonTestnet.currency, testnet: true,
-      explorerUrl: `${polygonTestnet.explorerUrl}/address/${linked.address}`, createdAt: linked.created_at } as EvmWalletDetails : null;
+    return linked ? { address: linked.address, publicKey: null, chainId: appNetwork().chainId,
+      network: appNetwork().name, currency: appNetwork().currency, testnet: appNetwork().testnet,
+      explorerUrl: `${appNetwork().explorerUrl}/address/${linked.address}`, createdAt: linked.created_at } as EvmWalletDetails : null;
   }
   const row = await db().one<Omit<StoredEvmWallet, "encrypted_keystore">>(
     "SELECT address, public_key, chain_id, created_at FROM evm_wallets WHERE user_id = $1", userId);
@@ -27,7 +27,7 @@ export async function ensureEvmWallet(userId: string, password: string) {
   if (externalWalletMode()) return evmWalletFor(userId);
   const existing = await evmWalletFor(userId);
   if (existing) return existing;
-  const generated = await generateEncryptedEvmWallet(password);
+  const generated = await generateEncryptedEvmWallet(password, appNetwork().chainId);
   return await transaction(async () => {
     // Serialize first sign-ins and explicit provisioning for legacy accounts.
     if (!await db().one("SELECT id FROM users WHERE id = $1 FOR UPDATE", userId)) throw new Error("Wallet owner is unavailable.");

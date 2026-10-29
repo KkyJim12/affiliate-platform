@@ -112,14 +112,15 @@ const alreadyVerified = result => /already\s*(?:been\s*)?verified/i.test(String(
 const retryable = result => /pending|queue|rate limit|temporarily unavailable|try again|not yet indexed|unable to locate contractcode/i.test(String(result));
 
 export class EtherscanVerifier {
-  constructor({ apiKey, fetcher = fetch, wait = delay, attempts = 24, interval = 5000, log = console.log }) {
+  constructor({ apiKey, chainId = 80002, fetcher = fetch, wait = delay, attempts = 24, interval = 5000, log = console.log }) {
     if (!apiKey?.trim()) throw new VerificationError('Set ETHERSCAN_API_KEY in .env (or NUXT_EVM_EXPLORER_API_KEY).');
-    Object.assign(this, { apiKey: apiKey.trim(), fetcher, wait, attempts, interval, log });
+    if (![137,80002].includes(Number(chainId))) throw new VerificationError('Unsupported verification network.');
+    Object.assign(this, { apiKey: apiKey.trim(), chainId:Number(chainId), fetcher, wait, attempts, interval, log });
   }
 
   async request(action, parameters = {}, post = false) {
     const url = new URL('https://api.etherscan.io/v2/api');
-    url.search = new URLSearchParams({ chainid: '80002', module: 'contract', action, apikey: this.apiKey,
+    url.search = new URLSearchParams({ chainid: String(this.chainId), module: 'contract', action, apikey: this.apiKey,
       ...(!post ? parameters : {}) }).toString();
     let response, data;
     try {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const network = usePolygonNetwork();
 import { passwordLoginEnabled } from "#shared/auth-mode";
 const credentialsEnabled = passwordLoginEnabled(useRuntimeConfig().public.passwordLoginEnabled);
 const { t } = useLoopI18n();
@@ -26,7 +27,7 @@ async function migrateAccount() {
 <template>
   <ModalTransition><AppModal v-if="authOpen" :title="t('connected.connectTitle')" variant="wallet" @close="authOpen = false">
     <div class="wallet-auth">
-      <div class="wallet-auth-brand"><BrandLogo /><span class="wallet-auth-network"><span aria-hidden="true"></span>Polygon Amoy</span></div>
+      <div class="wallet-auth-brand"><BrandLogo /><span class="wallet-auth-network"><span aria-hidden="true"></span>{{ network.name }}</span></div>
       <div class="wallet-auth-heading"><h2>{{ t('connected.connectTitle') }}</h2><p>{{ t('connected.connectHint') }}</p></div>
       <WalletConnector purpose="login" :sponsor-code="sponsorCode" :show-heading="false" @connected="signedIn" />
       <div class="wallet-invite is-open">
