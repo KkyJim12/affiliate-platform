@@ -37,6 +37,14 @@ That reservation survives confirmation delays and retries so the tree matches
 the signed recipients. Failed or expired quotes do not unlock the level.
 Ledger reservations roll back if the purchase fails.
 
+Failed automatic rebirths and level upgrades stay in the durable queue and
+retry automatically, with at least fifteen seconds between attempts. There is
+no retry limit; payments resume when wallet funds, token approval and the
+payment service are available. Reverted transactions get a fresh attempt.
+Unresolved transactions reuse their saved signed bytes until their outcome
+is confirmed, preventing duplicate charges. A pending job whose linked purchase
+is already marked failed is recovered automatically after a restart.
+
 For example, User 2 in the first row of User 1's matrix views the same connected
 branch from User 2's own slot. Once User 1's 2/4/8 rows are paid, User 2 has two
 inherited rows (2 + 4 members) and eight empty positions in their third row.

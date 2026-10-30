@@ -1201,7 +1201,7 @@
     "approvalHint": "Only this purchase is charged now. Each completed matrix or unilevel slot charges the same-level rebirth price (level 1: 10, level 2: 20, level 3: 40), then separately charges the next unowned level, up to level 15. Both use your wallet balance and token approval. Rebirths share this finite allowance with upgrades; repeated rebirths may require renewed approval. You can revoke approval in your wallet. Insufficient funds or approval keeps the payment queued.",
     "rebirthQueued": "Same-level rebirth payment for level {level} is queued.",
     "upgradeQueued": "Automatic upgrade to level {level} is queued.",
-    "upgradeWaiting": "Waiting for funds, token approval or the upgrade service."
+    "upgradeWaiting": "Retrying automatically. Please ensure funds and token approval are available."
   },
   "mainnet": {
     "workspace": {

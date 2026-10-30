@@ -13,6 +13,7 @@ import { referralProgram } from "./referral";
 import { audit } from "./admin";
 import { evmWalletFor } from "./evm-wallet";
 import { externalWalletMode } from "./wallet-mode";
+import { queuedReferralJobs, retryFailedReferralJobs } from "./referral-auto-retry";
 
 export interface ChainPurchaseRow {
   id: string; user_id: string; level: number; amount: number; request_key: string;
@@ -177,7 +178,7 @@ export async function reconcileChainPurchase(purchase: ChainPurchaseRow): Promis
       else await unlockMatrixLevel(purchase.user_id, purchase.level);
       await db().execute("UPDATE referral_auto_upgrades SET status = 'completed',last_error = NULL WHERE purchase_id = $1", purchase.id);
     } else {
-      await db().execute("UPDATE referral_auto_upgrades SET status = 'queued',purchase_id = NULL,last_error = 'The upgrade transaction reverted; it will be retried.' WHERE purchase_id = $1", purchase.id);
+      await retryFailedReferralJobs();
     }
   });
   return (await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE id = $1", purchase.id))!;
@@ -244,6 +245,7 @@ export async function reconcilePendingChainOperations() {
     for (const row of purchases) { try { await reconcileChainPurchase(row); } catch { /* Retry on the next reconciliation pass. */ } }
     const updates = await db().all<FeeUpdateRow>("SELECT * FROM referral_chain_fee_updates WHERE status = 'pending' ORDER BY created_at LIMIT 5");
     for (const row of updates) { try { await reconcileFeeUpdate(row); } catch { /* Preserve indeterminate transactions. */ } }
+    await retryFailedReferralJobs();
     await processCommissionQualifications();
     await processReferralAutoUpgrades();
   } finally { sweeping = false; }
@@ -295,7 +297,7 @@ async function processReferralAutoUpgrades() {
   await withWalletLock("referral-auto-upgrade-relayer", async () => {
     if(await db().one("SELECT id FROM referral_qualification_transactions WHERE status='pending' LIMIT 1")) return;
     if (await db().one("SELECT id FROM referral_chain_purchases WHERE signing_mode = 'automatic' AND status = 'pending' LIMIT 1")) return;
-    const jobs = await db().all<ReferralJob>("SELECT * FROM referral_auto_upgrades WHERE status = 'queued' ORDER BY COALESCE(last_attempt_at,created_at),kind,level,cycle_id LIMIT 20");
+    const jobs = await queuedReferralJobs();
     for (const job of jobs) {
       await db().execute("UPDATE referral_auto_upgrades SET last_attempt_at = $1 WHERE cycle_id = $2", new Date().toISOString(),job.cycle_id);
       try {
@@ -338,11 +340,18 @@ async function processReferralAutoUpgrades() {
           await db().execute("UPDATE referral_auto_upgrades SET status = 'pending',purchase_id = $1,last_error = NULL WHERE cycle_id = $2", id,job.cycle_id);
           return (await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE id = $1", id))!;
         }));
-        if (purchase) { await reconcileChainPurchase(purchase); break; }
+        if (purchase) {
+          // Once signed bytes are committed, stop this pass even if RPC
+          // reconciliation fails. The relayer nonce is reserved by this payment.
+          try { await reconcileChainPurchase(purchase); } catch { /* Retry the persisted transaction on the next pass. */ }
+          break;
+        }
       } catch (error) {
         // Persist only our own public explanations, never RPC payloads or raw txs.
         const message = error instanceof Error && /^(Waiting for |Automatic upgrades are paused)/.test(error.message)
-          ? error.message : "Automatic upgrade will retry when the contract and relayer are available.";
+          ? error.message : job.kind === 'rebirth'
+            ? "Automatic rebirth will retry when the contract and relayer are available."
+            : "Automatic upgrade will retry when the contract and relayer are available.";
         await db().execute("UPDATE referral_auto_upgrades SET last_error = $1 WHERE cycle_id = $2 AND status = 'queued'", message,job.cycle_id);
       }
     }

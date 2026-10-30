@@ -693,6 +693,53 @@ test('a full paid matrix charges rebirth and upgrade separately and unlocks the 
   } finally { await root.dispose();provider.destroy();await database.close(); }
 });
 
+for (const kind of ['rebirth','upgrade'] as const) test(`automatic ${kind} retries a reverted payment without duplicate charges`,async({playwright})=>{
+  test.setTimeout(150000);
+  const provider=rpc(),database=openTestDatabase(),api=await playwright.request.newContext({baseURL:origin});
+  const wallet=Wallet.createRandom().connect(provider);
+  const token=new Contract(process.env.NUXT_EVM_TOKEN_ADDRESS!,[
+    'function setBlocked(address)','function balanceOf(address) view returns(uint256)',
+  ],await provider.getSigner(0));
+  try {
+    const owner=await login(api,wallet);await fund(wallet,provider);await buy(api,wallet,1,true,true);
+    const completion=`matrix:1:${owner.id}:0`,job=kind==='rebirth'?`rebirth:${completion}`:completion;
+    // Force a mined revert after signing, rather than failing a balance precheck.
+    await (await token.getFunction('setBlocked')(process.env.NUXT_REFERRAL_CONTRACT_ADDRESS)).wait();
+    await database.transaction(async()=>{
+      await database.execute('SELECT pg_advisory_xact_lock(782438,2)');
+      await database.execute('UPDATE matrix_slots SET completed_at=$1 WHERE id=$2',new Date().toISOString(),completion);
+      await database.execute("SELECT queue_referral_upgrade($1,$2,1,'matrix',$1)",completion,owner.id);
+      await database.execute("SELECT place_program_slot($1,1,'matrix',1)",owner.id);
+      // Exercise each payment independently; the full-cycle test covers ordering.
+      await database.execute('DELETE FROM referral_auto_upgrades WHERE user_id=$1 AND kind<>$2',owner.id,kind);
+    });
+    await expect.poll(async()=> (await database.one(`SELECT COUNT(*) AS count FROM referral_chain_purchases
+      WHERE user_id=$1 AND signing_mode='automatic' AND status='failed'`,owner.id))!.count,
+    {timeout:60000,intervals:[500,1000]}).toBeGreaterThan(0);
+    const waiting=await database.one('SELECT status,purchase_id,last_error FROM referral_auto_upgrades WHERE cycle_id=$1',job);
+    expect(waiting!.status).toBe('queued');expect(waiting!.purchase_id).toBeNull();
+    expect(waiting!.last_error).toContain('retry automatically');
+    expect(await token.getFunction('balanceOf')(wallet.address)).toBe(90_000_000n);
+    // Reproduce a persisted failed payment whose job was left pending before
+    // recovery. The next worker pass must repair it without a member request.
+    const failed=await database.one("SELECT id FROM referral_chain_purchases WHERE user_id=$1 AND signing_mode='automatic' AND status='failed' ORDER BY updated_at DESC LIMIT 1",owner.id);
+    await database.execute("UPDATE referral_auto_upgrades SET status='pending',purchase_id=$1 WHERE cycle_id=$2",failed!.id,job);
+    await (await token.getFunction('setBlocked')('0x0000000000000000000000000000000000000000')).wait();
+    // No member status refresh or manual retry: the background worker recovers.
+    await expect.poll(async()=> (await database.one('SELECT status FROM referral_auto_upgrades WHERE cycle_id=$1',job))?.status,
+      {timeout:60000,intervals:[1000,3000]}).toBe('completed');
+    expect(await token.getFunction('balanceOf')(wallet.address)).toBe(kind==='rebirth'?80_000_000n:70_000_000n);
+    expect((await database.one(`SELECT COUNT(*) AS count FROM referral_chain_purchases
+      WHERE user_id=$1 AND signing_mode='automatic' AND status='confirmed'`,owner.id))!.count).toBe(1);
+    expect((await database.one('SELECT last_error FROM referral_auto_upgrades WHERE cycle_id=$1',job))!.last_error).toBeNull();
+    const contract=new Contract(process.env.NUXT_REFERRAL_CONTRACT_ADDRESS!,['function levelOf(address) view returns(uint8)'],provider);
+    expect(await contract.getFunction('levelOf')(wallet.address)).toBe(kind==='rebirth'?1n:2n);
+  } finally {
+    await (await token.getFunction('setBlocked')('0x0000000000000000000000000000000000000000')).wait();
+    await api.dispose();provider.destroy();await database.close();
+  }
+});
+
 test('a queued unilevel completion uses the relayer and member approval without creating a matrix rebirth', async ({playwright})=>{
   test.setTimeout(120000);
   const provider=rpc(),database=openTestDatabase(),api=await playwright.request.newContext({baseURL:origin});

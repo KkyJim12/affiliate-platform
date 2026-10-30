@@ -1,6 +1,7 @@
 import { completeRebirth, rebirthRecipients, unlockMatrixLevel, referralRecipients } from "../server/utils/matrix.ts";
 import { commissionAuthorization, paidReferralCount, reconcileHeldChainAllocations } from "../server/utils/commission-qualification.ts";
 import { bindDatabaseNetwork } from "../server/lib/database-network.ts";
+import { queuedReferralJobs, retryFailedReferralJobs } from "../server/utils/referral-auto-retry.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
@@ -13,6 +14,35 @@ import { migrate, migrationStatus, prepareMigrations, readMigrations, resetDatab
 import { importSqlite } from "../scripts/lib/import-sqlite.mjs";
 
 const sources = readMigrations();
+
+test('automatic rebirth and upgrade retries recover failed purchases, respect cooldown and preserve unresolved payments',()=>isolated(async db=>{
+  await migrate(db.pool,sources);
+  await db.execute("INSERT INTO users VALUES('retry-owner','retry-owner','hash','retry-owner',NULL,'2026-10-30')");
+  await db.transaction(()=>unlockMatrixLevel('retry-owner',1,db));
+  const slot='matrix:1:retry-owner:0',address=`0x${'12'.repeat(20)}`;
+  for(const [index,kind,status] of [[0,'rebirth','failed'],[1,'upgrade','failed'],[2,'rebirth','pending'],[3,'upgrade','confirmed']]) {
+    const purchase=`retry-purchase-${index}`,job=kind==='rebirth'?`rebirth:${index}`:slot;
+    // Separate matrix and unilevel sources give both upgrade cases distinct IDs.
+    const cycle=index===3?'unilevel:1:retry-owner':job;
+    await db.execute(`INSERT INTO referral_chain_purchases
+      (id,user_id,request_key,level,amount,chain_id,contract_address,token_address,buyer_address,fee_recipient_address,payload,status,signing_mode,created_at,updated_at)
+      VALUES($1,'retry-owner',$1,$2,$3,80002,$4,$4,$4,$4,'{}',$5,'automatic','2026-10-30','2026-10-30')`,purchase,index+1,10_000_000*2**index,address,status);
+    await db.execute(`INSERT INTO referral_auto_upgrades
+      (cycle_id,user_id,level,source,source_level,slot_id,kind,rebirth_cycle,status,purchase_id,created_at)
+      VALUES($1,'retry-owner',$2,$3,$4,$5,$6,$7,'pending',$8,'2026-10-30')`,
+      cycle,kind==='rebirth'?1:2,index===3?'unilevel':'matrix',1,index===3?null:slot,kind,kind==='rebirth'?index+1:null,purchase);
+  }
+  await retryFailedReferralJobs(db);
+  assert.deepEqual((await db.all("SELECT status,purchase_id FROM referral_auto_upgrades ORDER BY cycle_id")).map(row=>[row.status,row.purchase_id]),[
+    ['queued',null],['queued',null],['pending','retry-purchase-2'],['pending','retry-purchase-3'],
+  ]);
+  assert.deepEqual(await queuedReferralJobs(db),[]);
+  await db.execute("UPDATE referral_auto_upgrades SET last_attempt_at=(CURRENT_TIMESTAMP - INTERVAL '16 seconds')::TEXT WHERE status='queued'");
+  assert.deepEqual((await queuedReferralJobs(db)).map(row=>row.kind).sort(),['rebirth','upgrade']);
+  await retryFailedReferralJobs(db);
+  assert.equal((await queuedReferralJobs(db)).length,2,'Recovery must not reset an existing retry delay');
+  assert.ok((await db.all("SELECT last_error FROM referral_auto_upgrades WHERE status='queued'")).every(row=>row.last_error.includes('retry automatically')));
+}));
 
 test('commission qualification counts distinct paid sponsors rather than placements or repeated purchases',()=>isolated(async db=>{
   await migrate(db.pool,sources);

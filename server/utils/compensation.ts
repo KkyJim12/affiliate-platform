@@ -7,6 +7,7 @@ import { walletRow } from "./wallet";
 import { referralPaymentMode } from "./referral-chain";
 import { requireEmbeddedWalletMode } from "./wallet-mode";
 import { paidReferralCount } from "./commission-qualification";
+import { queuedReferralJobs } from "./referral-auto-retry";
 
 
 export async function buyReferralLevel(userId: string, level: number, requestKey: string, rebirth?: ReferralJob) {
@@ -108,7 +109,7 @@ export async function processLedgerReferralUpgrades() {
   if (upgrading || referralPaymentMode() !== "ledger") return;
   upgrading = true;
   try {
-    const jobs = await db().all<ReferralJob>("SELECT * FROM referral_auto_upgrades WHERE status = 'queued' ORDER BY COALESCE(last_attempt_at,created_at),kind,level,cycle_id LIMIT 20");
+    const jobs = await queuedReferralJobs();
     for (const job of jobs) {
       await db().execute("UPDATE referral_auto_upgrades SET last_attempt_at = $1 WHERE cycle_id = $2", new Date().toISOString(),job.cycle_id);
       try {
