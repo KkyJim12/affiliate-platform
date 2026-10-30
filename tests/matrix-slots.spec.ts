@@ -158,7 +158,7 @@ test("completed cards show their own full referral branches across levels and re
     await expect(card).toContainText('View completed tree');
     await card.click();
     const tree=page.getByTestId('binary-referral-tree');
-    await expect(page.locator('.slot-detail-heading')).toContainText(`Level ${level} · ${cycle ? `Rebirth ${cycle}` : 'Initial slot'}`);
+    await expect(page.locator('.slot-detail-heading')).toContainText(`Level ${level} · ${cycle ? `Reborn ${cycle}` : 'Initial slot'}`);
     await expect(tree.getByTestId('matrix-slot-summary')).toContainText(`Slot ${cycle+1}: 14/14`);
     await expect(tree.locator('[data-member-id]')).toHaveCount(15);
     await expect(tree.locator('[data-empty="true"]')).toHaveCount(0);
@@ -195,7 +195,7 @@ test("members browse slots, open each level and rebirth tree, and retain Thai/mo
   await catalog.screenshot({path:info.outputPath('matrix-slots-en.png')});
   await catalog.locator('[data-testid="matrix-slot-card"][data-cycle="1"]').click();
   const tree=page.getByTestId('binary-referral-tree');
-  await expect(page.locator('.slot-detail-heading')).toContainText('Level 1 · Rebirth 1');
+  await expect(page.locator('.slot-detail-heading')).toContainText('Level 1 · Reborn 1');
   await expect(tree.getByTestId('matrix-slot-summary')).toContainText('Slot 2: 0/14');
   await expect(tree.locator(`[data-member-id="${member.children[14]}"]`)).toContainText('Unpaid');
   await expect(tree.locator(`[data-member-id="${member.children[0]}"]`)).toHaveCount(0);
@@ -279,7 +279,7 @@ test("unilevel level and rebirth selectors show each slot's own branch",async({p
   await page.getByRole('option',{name:/^level 2$/i}).click();
   await expect(tree.locator('[data-path="0"]')).toHaveAttribute('data-member-id',member.children[2]!);
   await tree.getByRole('combobox',{name:'Program slot',exact:true}).click();
-  await page.getByRole('option',{name:'Rebirth 1',exact:true}).click();
+  await page.getByRole('option',{name:'Reborn 1',exact:true}).click();
   await expect(tree.locator('[data-path="0"]')).toHaveAttribute('data-member-id',member.children[0]!);
   await expect(tree.locator(`[data-member-id="${member.children[2]}"]`)).toHaveCount(0);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

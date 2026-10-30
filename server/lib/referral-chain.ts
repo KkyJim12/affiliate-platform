@@ -127,7 +127,7 @@ export class ReferralChainClient {
 
   async prepareAutoUpgrade(payload: PurchasePayload, decimals: number) {
     if (payload.rebirth && await this.contract.getFunction("rebirthVersion")().catch(() => 0n) !== 1n)
-      throw new Error("Waiting for deployment of the referral contract with paid rebirth support.");
+      throw new Error("Waiting for deployment of the referral contract with paid reborn support.");
     const price = BigInt(purchaseShares(payload.quote.level).reduce((sum, share) => sum + share.units, 0)) * 10n ** BigInt(decimals - 6);
     if (await this.token.getFunction("balanceOf")(payload.quote.buyer) < price) throw new Error("Waiting for sufficient token balance.");
     if (await this.token.getFunction("allowance")(payload.quote.buyer, this.config.contractAddress) < price) throw new Error("Waiting for token approval for automatic upgrades.");

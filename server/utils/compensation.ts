@@ -23,7 +23,7 @@ export async function buyReferralLevel(userId: string, level: number, requestKey
     if (rebirth) {
       const job = await db().one<ReferralJob & { status: string }>("SELECT * FROM referral_auto_upgrades WHERE cycle_id=$1 FOR UPDATE",rebirth.cycle_id);
       if (!job || job.kind !== 'rebirth' || job.user_id !== userId || job.level !== level)
-        throw createError({ statusCode: 409, statusMessage: "Invalid rebirth payment." });
+        throw createError({ statusCode: 409, statusMessage: "Invalid reborn payment." });
       if (job.status === 'completed') return;
       rebirth = job;
     }
@@ -53,7 +53,7 @@ export async function buyReferralLevel(userId: string, level: number, requestKey
     const id = randomUUID(), transactionId = randomUUID(), timestamp = new Date().toISOString();
     await db().execute("UPDATE wallets SET available = available - $1 WHERE id = $2", price, wallet.id);
     await db().execute("INSERT INTO wallet_transactions VALUES ($1, $2, 'referral_purchase', $3, 'completed', $4, $5, $6)",
-      transactionId, wallet.id, price, rebirth ? `Referral ${rebirth.source} rebirth ${rebirth.rebirth_cycle} · level ${level}` : level === 1 ? "Referral activation" : `Referral level ${level} purchase`, requestKey, timestamp);
+      transactionId, wallet.id, price, rebirth ? `Referral ${rebirth.source} reborn ${rebirth.rebirth_cycle} · level ${level}` : level === 1 ? "Referral activation" : `Referral level ${level} purchase`, requestKey, timestamp);
     await db().execute(`INSERT INTO referral_purchases (id, user_id, level, amount, transaction_id, fee_recipient_address, created_at, rebirth_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, id, userId, level, price, transactionId, settings.fee_recipient_address, timestamp,rebirth?.cycle_id ?? null);
     if (!rebirth && level === 1) {
@@ -130,7 +130,7 @@ export async function processLedgerReferralUpgrades() {
         }
       } catch {
         await db().execute("UPDATE referral_auto_upgrades SET last_error = $2 WHERE cycle_id = $1 AND status = 'queued'", job.cycle_id,
-          job.kind === 'rebirth' ? 'Waiting for enough available wallet credit for the rebirth.' : 'Waiting for enough available wallet credit for the next level.');
+          job.kind === 'rebirth' ? 'Waiting for enough available wallet credit for the reborn.' : 'Waiting for enough available wallet credit for the next level.');
       }
     }
   } finally { upgrading = false; }

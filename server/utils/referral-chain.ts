@@ -350,7 +350,7 @@ async function processReferralAutoUpgrades() {
         // Persist only our own public explanations, never RPC payloads or raw txs.
         const message = error instanceof Error && /^(Waiting for |Automatic upgrades are paused)/.test(error.message)
           ? error.message : job.kind === 'rebirth'
-            ? "Automatic rebirth will retry when the contract and relayer are available."
+            ? "Automatic reborn will retry when the contract and relayer are available."
             : "Automatic upgrade will retry when the contract and relayer are available.";
         await db().execute("UPDATE referral_auto_upgrades SET last_error = $1 WHERE cycle_id = $2 AND status = 'queued'", message,job.cycle_id);
       }

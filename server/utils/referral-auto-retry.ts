@@ -7,7 +7,7 @@ export async function retryFailedReferralJobs(database = db()) {
   await database.execute(`UPDATE referral_auto_upgrades j
     SET status='queued',purchase_id=NULL,
       last_error=CASE WHEN j.kind='rebirth'
-        THEN 'The rebirth payment failed; it will retry automatically.'
+        THEN 'The reborn payment failed; it will retry automatically.'
         ELSE 'The level upgrade failed; it will retry automatically.' END,
       last_attempt_at=CURRENT_TIMESTAMP::TEXT
     FROM referral_chain_purchases p
