@@ -69,7 +69,13 @@ test('ref ID validation blocks forged requests and enables purchases after a val
     await expect(page.getByTestId('referral-required')).toBeVisible();
     const button=page.locator('.referral-unlock-button');
     await expect(button).toBeDisabled();
+    await page.locator('#referral-sponsor-code').fill(member.memberId);
+    await page.locator('.referral-sponsor-form button[type="submit"]').click();
+    await expect(page.locator('.referral-sponsor-form [role="alert"]')).toBeVisible();
+    await expect(button).toBeDisabled();
     await page.locator('#referral-sponsor-code').fill(sponsor.memberId);
+    // Typing a valid ID alone must not unlock payment before the link is saved.
+    await expect(button).toBeDisabled();
     await page.locator('.referral-sponsor-form button[type="submit"]').click();
     await expect(page.getByTestId('referral-sponsor')).toHaveText(`ID ${sponsor.memberId}`);
     await expect(page.getByTestId('referral-required')).toHaveCount(0);
