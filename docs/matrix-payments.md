@@ -26,11 +26,16 @@ remains unchanged when an invitation spills over beneath another member.
 
 Registration previews level 1 in both programs and creates empty higher-level
 cards. Higher-level cards reserve no position. When a member enters a level,
-each program searches the original inviter's slots in cycle order, breadth
-first, left before right. Entry order determines placement independently at
-each level. The member's sponsor ID stays unchanged. An unpaid inviter can
-receive descendants in their placeholder slot but cannot earn commissions
-until they own that level. Previously purchased levels stay unlocked.
+each program follows the original level-1 invitation chain to the nearest
+inviter who has purchased the target level, skipping unpaid inviters. This
+reference always comes from the original invitations, including at levels
+3 through 15, rather than the previous level's placement. For example, if
+2 invited 18 and 18 invited 49, but only 2 owns level 2, 49 connects under 2
+when entering level 2. The selected inviter's slots are searched in cycle order,
+breadth first, left before right. If no inviter owns the target level, the
+entry has no parent. The member's sponsor ID stays unchanged. Previously
+purchased levels stay unlocked; existing entries retain their reserved positions
+when skipped inviters upgrade later.
 
 For contract payments, entry is reserved when preparing the signed quote.
 That reservation survives confirmation delays and retries so the tree matches
@@ -69,9 +74,10 @@ positions. Registration alone does not open a rebirth or trigger an upgrade.
 Reserved future cycles stay out of the slot list and public cycle selector
 until the preceding cycle completes with all fourteen positions and its owner paid.
 
-The owner's root remains visible for context. Unpaid parents and their
-connections remain visible at every level, so descendants retain their original
-paths. The open slot refreshes every fifteen seconds while the tab is visible.
+The owner's root remains visible for context. Level 1 retains unpaid members
+and their connections. New higher-level entries skip unpaid inviters; historical
+paid and quoted branches retain their original paths. The open slot refreshes
+every fifteen seconds while the tab is visible.
 Opening a completed card shows all fourteen members in that exact level and
 cycle, even after later rebirths; the new slot has its own separate tree.
 Unilevel and the member list remain separate views on the same page. The
@@ -170,9 +176,10 @@ When the owner and all fourteen descendant slots are unlocked at a level, the
 backend records that cycle's completion once and opens the next same-level
 cycle. This is a **rebirth**: a separate slot at the same level,
 with the same two branches and three rows, while the previous slot stays intact.
-The new slot re-enters under the member's original referrer at the next
-available position. It does not retain the previous slot's position or become
-an isolated root when the member has a referrer. Placement excludes the member's
+At level 1, the new slot re-enters under the member's original referrer. At higher
+levels it uses the nearest inviter who owns that level, following the same
+original invitation chain as an initial purchase. It takes the next available
+position, or remains a root if no inviter owns that level. Placement excludes the member's
 existing descendant branches to avoid circular ancestry. If eligible positions
 are occupied, overflow can reserve a future referrer cycle until it opens.
 Each rebirth is a separate payment at the full source-level price: level 1
@@ -195,8 +202,8 @@ reserved level first, that job is superseded without a duplicate charge.
 
 The unilevel tree completes once per paid level when its owner and all 65,534
 descendants within fifteen rows own that level. It queues the next unowned level
-through the same worker and opens its next same-level unilevel slot under the
-original referrer. Later level entries follow that slot's fifteen parent steps
+through the same worker and opens its next same-level unilevel slot using the
+same invitation-chain rule. Later level entries follow their slot's fifteen parent steps
 at 1% each. Completed unilevel slots keep their existing descendants.
 Neither program purchases level 16; matrix rebirths continue at the maximum.
 
@@ -275,6 +282,11 @@ allocations and upgrade jobs. Legacy unpaid parents needed by a paid branch
 remain attached. Existing full unilevel trees receive a new cycle without
 retroactive wallet charges. The existing version-3 ABI and percentages are
 unchanged for migration 0016. Paid rebirths introduced in 0018 require a replacement.
+
+Migration `0020_skip_unpaid_level_inviters.sql` makes new entries at levels 2–15
+skip original inviters who do not own the target level. Existing placements,
+paid branches and outstanding quotes keep their recipients, including parentless
+quotes. No historical payments are redistributed and no contract change is required.
 
 For an existing version-3 installation:
 

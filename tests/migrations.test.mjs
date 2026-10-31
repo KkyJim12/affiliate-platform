@@ -480,11 +480,13 @@ test("matrix slots limit each cycle to three descendant rows, recycle once and q
   const locked=await referralRecipients('child3',2,'ledger',db);
   assert.ok(locked.every(item=>item.userId===null));
   await db.transaction(()=>unlockMatrixLevel('root',2,db));
-  const qualified=await referralRecipients('child3',2,'ledger',db);
+  // An existing parentless reservation stays stable; a new entry sees the upgrade.
+  assert.deepEqual(await referralRecipients('child3',2,'ledger',db),locked);
+  const qualified=await referralRecipients('child4',2,'ledger',db);
   assert.equal(qualified[0].userId,'root'); assert.equal(qualified[1].reason,'missing_upline');
   assert.equal(qualified[3].userId,'root'); assert.equal(qualified[4].reason,'missing_upline');
   await db.execute("INSERT INTO user_access VALUES('root','member','suspended')");
-  assert.equal((await referralRecipients('child3',2,'ledger',db))[0].reason,'ineligible_upline');
+  assert.equal((await referralRecipients('child4',2,'ledger',db))[0].reason,'ineligible_upline');
 }));
 
 test("matrix placement attaches existing root branches when a sponsor is linked later", () => isolated(async db => {
@@ -540,15 +542,18 @@ test("paid rebirth migration hides unpaid overflow and preserves completed cycle
   assert.equal((await db.one("SELECT COUNT(*) AS count FROM referral_auto_upgrades")).count,0);
 }));
 
-test("rebirth waits for the owner and every same-level branch, including prepaid overflow cycles", () => isolated(async db => {
-  await migrate(db.pool,sources);
+test("legacy rebirth waits for the owner and every same-level branch, including prepaid overflow cycles", () => isolated(async db => {
+  // Historical paid branches below unpaid owners must survive the new entry rule.
+  await migrate(db.pool,sources.filter(item=>item.name<'0020_'));
   await db.execute("INSERT INTO users VALUES('gate','gate','hash','gate',NULL,'2026-10-29')");
   for (let i=0;i<42;i++) {
     const id = `gate-${i}`;
     await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,'gate','2026-10-29')",id);
+    await db.execute("SELECT enter_referral_level($1,2)",id);
     // Leave one unpaid position in each descendant row of the initial cycle.
     if (![0,2,6].includes(i)) await db.transaction(()=>unlockMatrixLevel(id,2,db));
   }
+  await migrate(db.pool,sources);
   const opened = async () => (await db.all("SELECT cycle FROM matrix_slots WHERE user_id='gate' AND level=2 AND opened ORDER BY cycle")).map(row=>row.cycle);
   assert.deepEqual(await opened(),[0]);
   assert.equal((await db.one("SELECT COUNT(*) AS count FROM referral_auto_upgrades WHERE user_id='gate'")).count,0);
@@ -636,7 +641,7 @@ test("late attachment of a paid unilevel branch refreshes its new ancestors", ()
   assert.equal((await db.one("SELECT COUNT(*) AS count FROM referral_auto_upgrades")).count,0);
 }));
 
-test("level entry order determines both trees and the exact commission parents, with stable quote retries", () => isolated(async db => {
+test("higher levels reference original invitations even after level-1 spillover, with stable quote retries", () => isolated(async db => {
   await migrate(db.pool,sources);
   const create=async(id,sponsor=null)=>{
     await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,$2,'2026-10-29')",id,sponsor);
@@ -649,20 +654,21 @@ test("level entry order determines both trees and the exact commission parents, 
   }
   await db.transaction(()=>unlockMatrixLevel('entry-root',2,db));
   const quote=id=>db.transaction(()=>referralRecipients(id,2,'ledger',db));
+  await quote('entry-a'); await db.transaction(()=>unlockMatrixLevel('entry-a',2,db));
+  // C's level-1 placement parent is A, but its original inviter is root.
   const initial=await quote('entry-c');
   assert.equal(initial[0].userId,'entry-root'); assert.equal(initial[3].userId,'entry-root');
   await db.transaction(()=>unlockMatrixLevel('entry-c',2,db));
-  await quote('entry-a'); await db.transaction(()=>unlockMatrixLevel('entry-a',2,db));
   const recipients=await quote('entry-b');
-  assert.deepEqual(recipients.slice(0,3).map(row=>row.userId),['entry-c','entry-root',null]);
-  assert.deepEqual(recipients.slice(3,6).map(row=>row.userId),['entry-c','entry-root',null]);
+  assert.deepEqual(recipients.slice(0,3).map(row=>row.userId),['entry-a','entry-root',null]);
+  assert.deepEqual(recipients.slice(3,6).map(row=>row.userId),['entry-a','entry-root',null]);
   assert.deepEqual(await quote('entry-b'),recipients);
   for(const program of ['matrix','unilevel']) {
     const rows=await db.all(`SELECT user_id,parent_id,branch FROM ${program}_slots WHERE level=2 AND user_id<>'entry-root' ORDER BY user_id`);
     assert.deepEqual(rows,[
-      {user_id:'entry-a',parent_id:`${program}:2:entry-root:0`,branch:1},
-      {user_id:'entry-b',parent_id:`${program}:2:entry-c:0`,branch:0},
-      {user_id:'entry-c',parent_id:`${program}:2:entry-root:0`,branch:0},
+      {user_id:'entry-a',parent_id:`${program}:2:entry-root:0`,branch:0},
+      {user_id:'entry-b',parent_id:`${program}:2:entry-a:0`,branch:0},
+      {user_id:'entry-c',parent_id:`${program}:2:entry-root:0`,branch:1},
     ]);
     assert.equal((await db.one(`SELECT parent_id FROM ${program}_slots WHERE user_id='entry-c' AND level=1 AND cycle=0`)).parent_id,`${program}:1:entry-a:0`);
   }
@@ -671,6 +677,85 @@ test("level entry order determines both trees and the exact commission parents, 
   await assert.rejects(db.transaction(async()=>{await referralRecipients('entry-failed',2,'ledger',db);throw new Error('failed payment');}),/failed payment/);
   assert.equal((await db.one("SELECT parent_id FROM matrix_slots WHERE user_id='entry-failed' AND level=2")).parent_id,null);
   assert.equal((await db.one("SELECT parent_id FROM unilevel_slots WHERE user_id='entry-failed' AND level=2")).parent_id,null);
+}));
+
+test("2 inviting 18 inviting 49 connects 49 to 2 at levels 2 through 15 while 18 has not upgraded", () => isolated(async db => {
+  await migrate(db.pool,sources);
+  for(const [id,sponsor] of [['2',null],['18','2'],['49','18'],['50','18']]) {
+    await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,$2,'2026-10-31')",id,sponsor);
+    await db.execute("INSERT INTO wallets(id,user_id) VALUES($1,$2)",`w-${id}`,id);
+    await db.transaction(()=>unlockMatrixLevel(id,1,db));
+  }
+  await db.transaction(()=>unlockMatrixLevel('2',15,db));
+  for(let level=2;level<=15;level++) {
+    const recipients=await db.transaction(()=>referralRecipients('49',level,'ledger',db));
+    assert.equal(recipients[0].userId,'2',`matrix level ${level}`);
+    assert.equal(recipients[3].userId,'2',`unilevel level ${level}`);
+    await db.transaction(()=>unlockMatrixLevel('49',level,db));
+    for(const program of ['matrix','unilevel']) {
+      assert.equal((await db.one(`SELECT parent_id FROM ${program}_slots WHERE user_id='49' AND level=$1 AND cycle=0`,level)).parent_id,`${program}:${level}:2:0`);
+      assert.equal((await db.one(`SELECT parent_id FROM ${program}_slots WHERE user_id='18' AND level=$1 AND cycle=0`,level)).parent_id,null);
+    }
+  }
+  const before=await db.transaction(()=>referralRecipients('50',2,'ledger',db));
+  assert.equal(before[0].userId,'2'); assert.equal(before[3].userId,'2');
+  await db.transaction(()=>unlockMatrixLevel('18',3,db));
+  assert.deepEqual(await db.transaction(()=>referralRecipients('50',2,'ledger',db)),before);
+  // Level 3 starts from the original invitation chain, where 18 now qualifies,
+  // even though the member's reserved level-2 parent is 2.
+  const next=await db.transaction(()=>referralRecipients('50',3,'ledger',db));
+  assert.equal(next[0].userId,'18'); assert.equal(next[3].userId,'18');
+  for(const program of ['matrix','unilevel']) {
+    assert.equal((await db.one(`SELECT parent_id FROM ${program}_slots WHERE user_id='49' AND level=1 AND cycle=0`)).parent_id,`${program}:1:18:0`);
+    for(let level=2;level<=15;level++) {
+      assert.equal((await db.one(`SELECT parent_id FROM ${program}_slots WHERE user_id='49' AND level=$1 AND cycle=0`,level)).parent_id,`${program}:${level}:2:0`);
+    }
+  }
+}));
+
+test("higher-level entries skip multiple unpaid inviters and parentless reservations remain stable", () => isolated(async db => {
+  await migrate(db.pool,sources);
+  for(const [id,sponsor] of [['skip-root',null],['skip-a','skip-root'],['skip-b','skip-a'],['skip-leaf','skip-b']]) {
+    await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,$2,'2026-10-31')",id,sponsor);
+    await db.execute("INSERT INTO wallets(id,user_id) VALUES($1,$2)",`w-${id}`,id);
+  }
+  const parentless=await db.transaction(()=>referralRecipients('skip-leaf',2,'ledger',db));
+  assert.ok(parentless.every(row=>row.reason==='missing_upline'));
+  await db.transaction(()=>unlockMatrixLevel('skip-root',3,db));
+  assert.deepEqual(await db.transaction(()=>referralRecipients('skip-leaf',2,'ledger',db)),parentless);
+  const eligible=await db.transaction(()=>referralRecipients('skip-leaf',3,'ledger',db));
+  assert.equal(eligible[0].userId,'skip-root'); assert.equal(eligible[3].userId,'skip-root');
+  await db.execute("INSERT INTO users VALUES('skip-rollback','skip-rollback','hash','skip-rollback','skip-b','2026-10-31')");
+  await assert.rejects(db.transaction(async()=>{
+    await referralRecipients('skip-rollback',3,'ledger',db);
+    throw new Error('failed payment');
+  }),/failed payment/);
+  for(const program of ['matrix','unilevel']) {
+    assert.deepEqual(await db.one(`SELECT parent_id,placement_reserved FROM ${program}_slots WHERE user_id='skip-rollback' AND level=3`),{parent_id:null,placement_reserved:false});
+  }
+}));
+
+test("the level-inviter migration preserves paid ancestry and quotes without reserving unused higher levels", () => isolated(async db => {
+  await migrate(db.pool,sources.filter(item=>item.name<'0020_'));
+  for(const [id,sponsor] of [['old-root',null],['old-middle','old-root'],['old-leaf','old-middle'],['old-quote',null]]) {
+    await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,$2,'2026-10-31')",id,sponsor);
+  }
+  await db.transaction(()=>unlockMatrixLevel('old-root',3,db));
+  await db.transaction(()=>unlockMatrixLevel('old-leaf',2,db));
+  await db.execute(`INSERT INTO referral_chain_purchases(id,user_id,request_key,level,amount,chain_id,contract_address,token_address,buyer_address,fee_recipient_address,payload,status,created_at,updated_at)
+    VALUES('old-quote-purchase','old-quote','old-quote-key',2,20000000,80002,$1,$1,$1,$1,'{}','awaiting_signature','2026-10-31','2026-10-31')`,`0x${'12'.repeat(20)}`);
+  const snapshots={};
+  for(const program of ['matrix','unilevel']) snapshots[program]=await db.all(`SELECT id,parent_id,branch,unlocked,completed_at FROM ${program}_slots ORDER BY id`);
+  await migrate(db.pool,sources);
+  for(const program of ['matrix','unilevel']) {
+    assert.deepEqual(await db.all(`SELECT id,parent_id,branch,unlocked,completed_at FROM ${program}_slots ORDER BY id`),snapshots[program]);
+    assert.equal((await db.one(`SELECT placement_reserved FROM ${program}_slots WHERE user_id='old-quote' AND level=2`)).placement_reserved,true);
+    assert.equal((await db.one(`SELECT placement_reserved FROM ${program}_slots WHERE user_id='old-middle' AND level=3`)).placement_reserved,false);
+  }
+  await db.execute("UPDATE users SET sponsor_id='old-root' WHERE id='old-quote'");
+  const quote=await db.transaction(()=>referralRecipients('old-quote',2,'ledger',db));
+  assert.ok(quote.every(row=>row.reason==='missing_upline'));
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM referral_auto_upgrades")).count,0);
 }));
 
 test("matrix rebirth re-enters the original referrer's next position without moving the completed branch", () => isolated(async db => {
