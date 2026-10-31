@@ -60,8 +60,10 @@ upgrade enters the next level, User 2 takes the next available position under
 User 1 at that level. If another member entered that level first, that member
 keeps the earlier position. The level-1 position is not copied to level 2.
 
-The member referral page starts with a grid of matrix slots, including initial
-slots and rebirths at every purchase level. Cards show locked, filling or
+The member referral page starts with a grid of matrix slots. The Unilevel tab
+also starts with its own slot cards, including initial slots and reborns at
+every purchase level. Matrix capacity is 14; Unilevel capacity is 65,534.
+Cards show locked, filling or
 completed status, paid positions and reserved positions separately. Select a
 card to open that exact level and cycle, then return to the grid to choose
 another. The level filter and pagination support accounts with many rebirths.
@@ -80,16 +82,24 @@ paid and quoted branches retain their original paths. The open slot refreshes
 every fifteen seconds while the tab is visible.
 Opening a completed card shows all fourteen members in that exact level and
 cycle, even after later rebirths; the new slot has its own separate tree.
-Unilevel and the member list remain separate views on the same page. The
-unilevel tree also provides purchase-level and rebirth-cycle selectors.
+Unilevel, the direct referral tree and the member list remain separate views
+on the same page. Choose a level and cycle from the Unilevel slot catalog before
+opening its tree. The direct referral tree follows original invitations rather
+than binary spillover and displays up to 500 members across fifteen invitation
+steps. On the dashboard, clicking Direct referrals opens a searchable list of
+personally invited member IDs, with twenty entries per page and a link to this
+invitation tree. The direct list uses all personal invitations, independently
+of the tree's 500-member display limit.
 
 `GET /api/referrals/slots?level=1&page=1` returns the signed-in member's own
-progress, with at most 24 cards per page. It accepts no other member's identity.
+progress, with at most 24 cards per page. Add `mode=unilevel` for Unilevel slots;
+the default is `mode=matrix`. It accepts no other member's identity.
 The public ID search at `/search?id=<numeric ID>` starts with the same slot
 cards for the requested member, including level filtering, pagination and
 rebirths. Opening a card shows that exact level and cycle; the Unilevel tab
-opens the requested member's unilevel tree. Public cards are read-only and
-load from `GET /api/referrals/public-slots?id=<numeric ID>&level=1&page=1`.
+opens the requested member's Unilevel slot catalog. Public cards are read-only and
+load from `GET /api/referrals/public-slots?id=<numeric ID>&level=1&page=1`,
+also accepting `mode=unilevel`.
 This returns numeric member IDs and slot progress without account UUIDs,
 wallets, balances or payment records. The authenticated endpoint still uses
 the session member regardless of query parameters.

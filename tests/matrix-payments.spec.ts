@@ -117,6 +117,7 @@ test("paid binary matrices recycle and automatically debit the wallet for the ne
     await expect(page.getByRole("button",{ name: "Matrix slots",exact: true })).toHaveAttribute("aria-pressed","true");
     await expect(tree.locator('[data-tree-node]')).toHaveCount(15);
     await page.getByRole("button",{ name: "Unilevel",exact: true }).click();
+    await page.locator('[data-testid="unilevel-slot-card"][data-level="1"][data-cycle="0"]').click();
     await expect(tree.getByRole("button",{ name: "Level 15: 0 members",exact: true })).toBeVisible();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     // Fill the rebirth using the same placement and commission rules. Completing

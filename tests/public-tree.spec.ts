@@ -200,6 +200,7 @@ test('registration via numeric and old invite codes shows payment tags and updat
     await expect(visibleTree.locator(`[data-member-id="${root.memberId}"]`).getByTestId('paid-tag')).toHaveText('Paid');
     await expect(visibleTree.locator('[data-empty="true"] .binary-tree-purchase-tag')).toHaveCount(0);
     await page.getByRole('button', { name: 'Unilevel', exact: true }).click();
+    await page.locator('[data-testid="unilevel-slot-card"][data-level="1"][data-cycle="0"]').click();
     await expect(visibleTree.getByTestId('not-purchased-tag')).toHaveCount(4);
     await expect(visibleTree.getByTestId('paid-tag')).toHaveCount(1);
     await db.execute('UPDATE wallets SET available = 10000000 WHERE user_id = $1', users[0].id);
@@ -238,6 +239,7 @@ test('extra referrals spill under the first referral in both tree views', async 
     await expect(tree.locator('[data-tree-edge][data-parent-path=""]')).toHaveCount(2);
     await expect(tree.locator('[data-path="0/0"]')).toHaveAttribute('data-member-id',children[2].memberId);
     await page.getByRole('button',{name:'Unilevel',exact:true}).click();
+    await page.locator('[data-testid="unilevel-slot-card"][data-level="1"][data-cycle="0"]').click();
     await expect(tree.getByRole('button',{name:'Level 15: 0 members',exact:true})).toBeVisible();
     await expect(tree.locator('[data-path="0/0"]')).toHaveAttribute('data-member-id',children[2].memberId);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -260,6 +262,7 @@ test('any visitor can search by ID and explore empty boxes through 15 levels on 
   await expect(tree.locator('[data-tree-node]')).toHaveCount(15);
   await expect(tree.locator('[data-empty="true"]')).toHaveCount(14);
   await page.getByRole('button',{name:'Unilevel',exact:true}).click();
+    await page.locator('[data-testid="unilevel-slot-card"][data-level="1"][data-cycle="0"]').click();
   await tree.getByRole('combobox', { name: 'Visible levels', exact: true }).click();
   await page.getByRole('listbox').locator('[data-value="15"]').click();
   await expect(tree).toContainText('Showing levels 0–15 of 15');
@@ -289,6 +292,7 @@ test('any visitor can search by ID and explore empty boxes through 15 levels on 
   await expect(tree).toContainText('Showing levels 0–3 of 15');
   await page.reload();
   await page.getByRole('button',{name:'Unilevel',exact:true}).click();
+    await page.locator('[data-testid="unilevel-slot-card"][data-level="1"][data-cycle="0"]').click();
   await expect(tree.locator('[data-member-id]')).toHaveAttribute('data-member-id', root.memberId);
   await expect(tree).toContainText('Showing levels 0–3 of 15');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

@@ -1154,6 +1154,30 @@
     "ownerError": "Your admin wallet must own the referral contract to change its fee address.",
     "useFeeControl": "Use the smart contract fee address control to update the on-chain recipient."
   },
+  "directReferrals": {
+    "personalInvites": "Your personal invitations",
+    "openList": "View direct referral IDs",
+    "listHint": "Members who registered with your invite code. Their IDs stay here even when their matrix placement spills over.",
+    "count": "{count} direct referrals",
+    "viewTree": "View tree",
+    "search": "Search direct referral IDs",
+    "memberList": "Direct referral member IDs",
+    "pagination": "Direct referral pages",
+    "empty": "No direct referrals yet. Share your invite link to get started.",
+    "noMatches": "No matching member IDs.",
+    "treeTitle": "Direct referral tree",
+    "treeHint": "Each connection follows who invited whom, starting with your direct referrals and continuing through their invitations."
+  },
+  "unilevelSlots": {
+    "title": "Your Unilevel slots",
+    "hint": "Each level and reborn has its own Unilevel slot. Choose a slot to explore its fifteen-step tree.",
+    "memberSlots": "Unilevel slots for member ID {id}",
+    "visibilityHint": "This slot follows its own Unilevel placement. You and all 65,534 descendant positions must purchase this level before reborn opens.",
+    "completedHint": "This completed Unilevel slot keeps its own tree. Its reborn has a separate tree.",
+    "loadError": "Your Unilevel slots could not be loaded. Please refresh and try again.",
+    "empty": "No Unilevel slots were found at this level.",
+    "pagination": "Unilevel slot pages"
+  },
   "matrixSlots": {
     "nav": "Matrix slots",
     "title": "Your matrix slots",

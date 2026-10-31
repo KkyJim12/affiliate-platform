@@ -224,10 +224,10 @@ test("members browse slots, open each level and rebirth tree, and retain Thai/mo
   await expect(tree.getByTestId('matrix-slot-summary')).toContainText('0/14');
   expect((await (await page.request.get('/api/referrals/program')).json()).currentLevel).toBe(3);
   await page.getByRole('button',{name:'Unilevel',exact:true}).click();
+  await expect(tree).toHaveCount(0);
+  await page.locator('[data-testid="unilevel-slot-card"][data-level="2"][data-cycle="0"]').click();
   await expect(tree.getByRole('button',{name:'Level 15: 0 members',exact:true})).toBeVisible();
   await expect(tree.getByRole('button',{name:'Binary matrix',exact:true})).toHaveCount(0);
-  await tree.getByRole('combobox',{name:'Explore the 15 purchase levels'}).click();
-  await page.getByRole('option',{name:/^level 2$/i}).click();
   await expect(tree.locator('[data-path="0"]')).toHaveAttribute('data-member-id',member.children[2]!);
   await expect(tree.locator('[data-path="1"]')).toHaveAttribute('data-member-id',member.children[0]!);
   await page.getByRole('button',{name:'List view',exact:true}).click();
@@ -255,7 +255,7 @@ test("members browse slots, open each level and rebirth tree, and retain Thai/mo
   expect(errors).toEqual([]);
 });
 
-test("unilevel level and rebirth selectors show each slot's own branch",async({page})=>{
+test("unilevel slots open their own level and reborn trees and return to the catalog",async({page},info)=>{
   const member=await fixture(1),database=openTestDatabase();
   await confirmedUpgrade(member.childIds[2]!,2);
   try {
@@ -274,13 +274,122 @@ test("unilevel level and rebirth selectors show each slot's own branch",async({p
   expect((await page.request.post('/api/auth/login',{headers:{Origin:origin},data:{memberId:member.memberId,password}})).status()).toBe(200);
   await page.goto('/referrals');
   await page.getByRole('button',{name:'Unilevel',exact:true}).click();
+  const catalog=page.getByTestId('unilevel-slots'),cards=catalog.getByTestId('unilevel-slot-card');
   const tree=page.getByTestId('binary-referral-tree');
-  await tree.getByRole('combobox',{name:'Explore the 15 purchase levels'}).click();
+  await expect(cards).toHaveCount(16); await expect(tree).toHaveCount(0);
+  const filter=catalog.getByRole('combobox',{name:'Filter slots by level'});
+  await filter.click();
   await page.getByRole('option',{name:/^level 2$/i}).click();
+  await expect(cards).toHaveCount(2);
+  await expect(cards.first()).toContainText('1/65,534');
+  await catalog.screenshot({path:info.outputPath('unilevel-slot-catalog.png')});
+  await catalog.locator('[data-level="2"][data-cycle="0"]').click();
   await expect(tree.locator('[data-path="0"]')).toHaveAttribute('data-member-id',member.children[2]!);
-  await tree.getByRole('combobox',{name:'Program slot',exact:true}).click();
-  await page.getByRole('option',{name:'Reborn 1',exact:true}).click();
+  await expect(tree.locator('.binary-tree-levels > button')).toHaveCount(15);
+  await catalog.getByRole('button',{name:'Back to all slots',exact:true}).click();
+  await catalog.locator('[data-level="2"][data-cycle="1"]').click();
   await expect(tree.locator('[data-path="0"]')).toHaveAttribute('data-member-id',member.children[0]!);
   await expect(tree.locator(`[data-member-id="${member.children[2]}"]`)).toHaveCount(0);
+  await page.screenshot({path:info.outputPath('unilevel-slot-tree.png'),fullPage:true});
+  await catalog.getByRole('button',{name:'Back to all slots',exact:true}).click();
+  await expect(cards).toHaveCount(2);
+  await page.getByRole('combobox',{name:'Language',exact:true}).click();
+  await page.getByRole('listbox').locator('[data-value="th"]').click();
+  await expect(page.getByRole('heading',{name:thai.unilevelSlots.title,exact:true})).toBeVisible();
+  await expect(cards.first()).toContainText(thai.matrixSlots.viewCompletedTree);
+  await cards.first().click();
+  await expect(catalog).toContainText(thai.unilevelSlots.completedHint);
+  await page.goto(`/search?id=${member.memberId}`);
+  await page.getByRole('button',{name:thai.matrix.unilevel,exact:true}).click();
+  await expect(catalog.getByTestId('unilevel-slot-card')).toHaveCount(16);
+  await expect(tree).toHaveCount(0);
+  await catalog.locator('[data-level="2"][data-cycle="1"]').click();
+  await expect(tree.locator('[data-path="0"]')).toHaveAttribute('data-member-id',member.children[0]!);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});
+
+test("Unilevel catalogs use their own progress, enforce session ownership and paginate public slots",async({playwright},info)=>{
+  test.skip(info.project.name!=='desktop');
+  const member=await fixture(1),api=await playwright.request.newContext({baseURL:origin});
+  try {
+    expect((await api.get('/api/referrals/slots?mode=unilevel')).status()).toBe(401);
+    expect((await api.post('/api/auth/login',{headers:{Origin:origin},data:{memberId:member.memberId,password}})).status()).toBe(200);
+    const catalog=await (await api.get(`/api/referrals/slots?mode=unilevel&level=1&userId=${member.childIds[0]}`)).json();
+    expect(catalog.memberId).toBe(member.memberId);
+    expect(catalog.items).toEqual([{level:1,cycle:0,status:'open',filled:15,paid:0,capacity:65534}]);
+    const matrix=await (await api.get('/api/referrals/slots?level=1')).json();
+    expect(matrix.items[0].capacity).toBe(14); expect(matrix.items[0].filled).toBe(14);
+    expect((await (await api.get(`/api/referrals/public-slots?id=${member.memberId}&mode=unilevel&level=1`)).json()).items).toEqual(catalog.items);
+    for(const mode of ['other','unilevel_slots','matrix_slots']) {
+      expect((await api.get(`/api/referrals/slots?mode=${mode}`)).status()).toBe(400);
+      expect((await api.get(`/api/referrals/public-slots?id=${member.memberId}&mode=${mode}`)).status()).toBe(400);
+    }
+    const database=openTestDatabase();
+    try {
+      // Import completed historical cycles; keep one future cycle hidden.
+      for(let cycle=1;cycle<=11;cycle++) {
+        await database.execute("INSERT INTO unilevel_slots(id,user_id,level,cycle,created_at) VALUES($1,$2,1,$3,$4)",`unilevel:1:${member.owner}:${cycle}`,member.owner,cycle,new Date().toISOString());
+        if(cycle<=10) await database.execute("UPDATE unilevel_slots SET opened=TRUE,rebirth_paid=TRUE,unlocked=TRUE WHERE user_id=$1 AND level=1 AND cycle=$2",member.owner,cycle);
+      }
+    } finally {await database.close();}
+    const first=await (await api.get(`/api/referrals/public-slots?id=${member.memberId}&mode=unilevel`)).json();
+    const next=await (await api.get(`/api/referrals/public-slots?id=${member.memberId}&mode=unilevel&page=2`)).json();
+    expect(first.total).toBe(25); expect(first.items).toHaveLength(24); expect(next.items).toHaveLength(1);
+    expect([...first.items,...next.items].every((slot:{capacity:number;cycle:number})=>slot.capacity===65534 && slot.cycle!==11)).toBe(true);
+    for(const secret of [member.owner,'password_hash','buyer_address','transaction_hash','slot_child_']) expect(JSON.stringify(first)).not.toContain(secret);
+  } finally {await api.dispose();}
+});
+
+test("dashboard direct referrals open an ID list and the invitation tree keeps personal edges across spillover",async({page},info)=>{
+  const member=await fixture(1),database=openTestDatabase(),directIds=[...member.children];
+  let grandchild='';
+  try {
+    for(let index=0;index<11;index++) {
+      const id=randomUUID();
+      const row=await database.one("INSERT INTO users VALUES($1,$2,'unused',$1,$3,$4) RETURNING referral_code",id,`direct_${id.slice(0,8)}`,member.owner,new Date().toISOString());
+      directIds.push(row!.referral_code);
+    }
+    const id=randomUUID();
+    grandchild=(await database.one("INSERT INTO users VALUES($1,$2,'unused',$1,$3,$4) RETURNING referral_code",id,`indirect_${id.slice(0,8)}`,member.childIds[0],new Date().toISOString()))!.referral_code;
+  } finally {await database.close();}
+  const errors:string[]=[];
+  page.on('pageerror',error=>errors.push(error.message));
+  expect((await page.request.post('/api/auth/login',{headers:{Origin:origin},data:{memberId:member.memberId,password}})).status()).toBe(200);
+  await page.goto('/dashboard');
+  await page.waitForFunction(()=>Boolean((document.querySelector('#__nuxt') as HTMLElement & {__vue_app__?:unknown})?.__vue_app__));
+  const trigger=page.getByRole('button',{name:'View direct referral IDs',exact:true});
+  await expect(page.getByTestId('overview-direct-referrals')).toHaveText('26');
+  await trigger.click();
+  const modal=page.getByRole('dialog',{name:'Direct referrals',exact:true});
+  await expect(modal).toBeVisible(); await expect(modal.getByTestId('direct-referral-row')).toHaveCount(20);
+  await expect(page.locator('body')).toHaveCSS('overflow','hidden');
+  await modal.screenshot({path:info.outputPath('direct-referral-ids.png'),animations:'disabled'});
+  await modal.getByRole('button',{name:'Next',exact:true}).click();
+  await expect(modal.getByTestId('direct-referral-row')).toHaveCount(6);
+  const search=modal.getByRole('textbox',{name:'Search direct referral IDs',exact:true});
+  await search.fill(directIds[14]!);
+  await expect(modal.getByTestId('direct-referral-row')).toHaveCount(1);
+  await expect(modal.getByTestId('direct-referral-row')).toContainText(`ID ${directIds[14]}`);
+  await search.fill(grandchild);
+  await expect(modal).toContainText('No matching member IDs.');
+  await page.keyboard.press('Escape'); await expect(modal).toHaveCount(0); await expect(trigger).toBeFocused();
+  await expect(page.locator('body')).not.toHaveCSS('overflow','hidden');
+  await trigger.click();
+  await modal.getByRole('button',{name:'View tree',exact:true}).click();
+  await expect(page).toHaveURL(origin+'/referrals?layout=direct#direct-referral-tree');
+  const tree=page.getByTestId('direct-referral-tree');
+  await expect(tree).toBeInViewport();
+  await expect(tree.locator(`[data-parent-member="${member.memberId}"]`)).toHaveCount(26);
+  for(const id of directIds) await expect(tree.locator(`[data-parent-member="${member.memberId}"][data-child-member="${id}"]`)).toHaveCount(1);
+  await expect(tree.locator(`[data-parent-member="${member.children[0]}"][data-child-member="${grandchild}"]`)).toHaveCount(1);
+  await expect(page.locator('.member-panel')).toHaveAttribute('data-motion-state','visible');
+  await tree.screenshot({path:info.outputPath('direct-referral-tree.png'),animations:'disabled'});
+  await page.getByRole('combobox',{name:'Language',exact:true}).click();
+  await page.getByRole('listbox').locator('[data-value="th"]').click();
+  await expect(page.getByRole('heading',{name:thai.directReferrals.treeTitle,exact:true})).toBeVisible();
+  await page.goto('/dashboard');
+  await page.getByRole('button',{name:thai.directReferrals.openList,exact:true}).click();
+  await expect(page.getByRole('dialog',{name:thai.dashboard.directReferrals,exact:true})).toBeVisible();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
 });

@@ -2,7 +2,7 @@
 const { t, tr, localeTag, formatDate } = useLoopI18n();
 
 import { formatUsdt } from "#shared/plan";
-import type { ReferralNode, ReferralNetwork } from "../../shared/types";
+import type { ReferralMember, ReferralNode, ReferralNetwork } from "../../shared/types";
 
 const route = useRoute();
 const motionRoot = ref<HTMLElement | null>(null);
@@ -20,12 +20,17 @@ const faqOpen = ref(true);
 const search = ref("");
 const referralStatus = ref("all");
 const members = ref<ReferralNode[]>([]);
+const directMembers = ref<ReferralMember[]>([]);
+const directReferralsOpen = ref(false), referralsLoading = ref(false);
+const directReferralsTrigger = ref<HTMLButtonElement | null>(null);
 const networkTruncated = ref(false);
-const referralLayout = computed(() => route.query.layout === "list" ? "list" : route.query.layout === "unilevel" ? "unilevel" : "tree");
-function setReferralLayout(layout: "list" | "tree" | "unilevel") {
+const referralLayout = computed(() => route.query.layout === "list" ? "list" : route.query.layout === "unilevel" ? "unilevel" : route.query.layout === "direct" ? "direct" : "tree");
+function setReferralLayout(layout: "list" | "tree" | "unilevel" | "direct") {
   return navigateTo({ path: route.path, query: { ...route.query, layout } }, { replace: true });
 }
 const referralError = ref("");
+const referralHeading = computed(() => !preview.value && referralLayout.value === 'tree' ? 'matrixSlots.title' : !preview.value && referralLayout.value === 'unilevel' ? 'unilevelSlots.title' : referralLayout.value === 'direct' ? 'directReferrals.treeTitle' : 'ui.your_referral_network');
+const referralHint = computed(() => !preview.value && referralLayout.value === 'tree' ? 'matrixSlots.hint' : !preview.value && referralLayout.value === 'unilevel' ? 'unilevelSlots.hint' : referralLayout.value === 'direct' ? 'directReferrals.treeHint' : 'ui.your_invites_and_the_connections_growing_from_them');
 const request = useRequestFetch();
 const treeVersion = ref(0);
 const preview = computed(() => !authenticated.value);
@@ -74,18 +79,22 @@ watch(currentView, () => { sidebarOpen.value = false; if (["faq", "ranks", "anal
 watch(() => user.value?.id, async () => { await loadReferrals(); });
 async function loadReferrals() {
   members.value = [];
+  directMembers.value = [];
   networkTruncated.value = false;
   referralError.value = "";
-  if (!user.value) return;
+  if (!user.value) { referralsLoading.value = false; directReferralsOpen.value = false; return; }
   const accountId = user.value.id;
+  referralsLoading.value = true;
   try {
     const result = await request<ReferralNetwork>("/api/referrals");
     if (user.value?.id === accountId) {
       members.value = result.network;
+      directMembers.value = result.members;
       networkTruncated.value = result.truncated;
     }
   }
   catch { if (user.value?.id === accountId) referralError.value = "Your referrals could not be loaded. Please try again."; }
+  finally { if (user.value?.id === accountId) referralsLoading.value = false; }
 }
 await loadReferrals();
 if (authenticated.value && !summary.value) await refreshDashboard();
@@ -98,6 +107,14 @@ async function refreshActivity() {
 }
 async function referralsUpdated() { await Promise.all([loadReferrals(), refreshDashboard()]); treeVersion.value++; }
 
+function closeDirectReferrals() {
+  directReferralsOpen.value = false;
+  nextTick(() => directReferralsTrigger.value?.focus());
+}
+async function openDirectTree() {
+  directReferralsOpen.value = false;
+  await navigateTo('/referrals?layout=direct#direct-referral-tree');
+}
 function invite() { if (preview.value) authOpen.value = true; else if (!user.value?.referralCode) navigateTo("/referrals"); else copy(referralLink.value, "Your invite link is ready to share."); }
 async function signOut() { try { await logout(); } catch { notify("We could not sign you out. Please try again."); } }
 function exportReferrals() {
@@ -145,7 +162,7 @@ function exportReferrals() {
         <p v-if="currentView === 'overview' && dashboardError && !preview" class="auth-error" role="alert">{{ tr(dashboardError) }}</p>
         <div v-if="currentView === 'overview' && !preview" class="network-stat-grid" data-testid="account-overview">
           <article class="network-stat"><span class="stat-icon peach-icon"><AppIcon name="CircleDollarSign" :size="19" /></span><div><p>{{ t('ui.total_commissions_credited') }}</p><strong data-testid="overview-commissions">{{ summary ? formatUsdt(summary.commissions) : '—' }}<small>USDT</small></strong><span>{{ t('ui.completed_credits_to_your_wallet') }}</span></div></article>
-          <article class="network-stat"><span class="stat-icon green-icon"><AppIcon name="Users" :size="19" /></span><div><p>{{ t('dashboard.directReferrals') }}</p><strong data-testid="overview-direct-referrals">{{ summary?.referrals.direct ?? '—' }}</strong><span>{{ t('dashboard.directHint') }}</span></div></article>
+          <button ref="directReferralsTrigger" type="button" class="network-stat direct-referrals-stat" aria-haspopup="dialog" :aria-label="t('directReferrals.openList')" :aria-expanded="directReferralsOpen" @click="directReferralsOpen = true"><span class="stat-icon green-icon"><AppIcon name="Users" :size="19" /></span><div><p>{{ t('dashboard.directReferrals') }}</p><strong data-testid="overview-direct-referrals">{{ summary?.referrals.direct ?? '—' }}</strong><span>{{ t('dashboard.directHint') }}</span></div><AppIcon class="direct-referrals-stat-arrow" name="ArrowUpRight" :size="16" /></button>
           <article class="network-stat"><span class="stat-icon lavender-icon"><AppIcon name="GitFork" :size="19" /></span><div><p>{{ t('dashboard.networkMembers') }}</p><strong data-testid="overview-network-members">{{ summary?.referrals.total ?? '—' }}{{ summary?.referrals.truncated ? '+' : '' }}</strong><span>{{ t('dashboard.networkHint') }}</span></div></article>
         </div>
         <div v-else-if="currentView === 'overview'" class="network-stat-grid">
@@ -164,11 +181,11 @@ function exportReferrals() {
         <template v-if="currentView === 'referrals'">
           <ReferralAccess :key="user?.id || 'preview'" :preview="preview" @updated="referralsUpdated" />
           <section class="panel member-panel">
-            <div class="section-card-header"><div><h2>{{ t(!preview && referralLayout === 'tree' ? 'matrixSlots.title' : 'ui.your_referral_network') }}<span v-if="preview || referralLayout === 'list'" class="sample-label">{{ preview ? t('ui.sample_data') : members.length + " " + t('ui.members') }}</span></h2><p>{{ t(!preview && referralLayout === 'tree' ? 'matrixSlots.hint' : 'ui.your_invites_and_the_connections_growing_from_them') }}</p></div><button v-if="preview || referralLayout === 'list'" class="button button-outline button-small" @click="exportReferrals"><AppIcon name="Download" :size="15" />{{ t('ui.export_csv') }}</button></div>
-            <div class="referral-view-bar"><span>{{ t('ui.see_your_connections_your_way') }}</span><div class="referral-view-toggle" role="group" :aria-label="t('ui.referral_view')"><button :aria-pressed="referralLayout === 'tree'" :class="{ selected: referralLayout === 'tree' }" @click="setReferralLayout('tree')"><AppIcon :name="preview ? 'GitFork' : 'Layers'" :size="16" />{{ t(preview ? 'ui.tree_view' : 'matrixSlots.nav') }}</button><button v-if="!preview" :aria-pressed="referralLayout === 'unilevel'" :class="{ selected: referralLayout === 'unilevel' }" @click="setReferralLayout('unilevel')"><AppIcon name="GitFork" :size="16" />{{ t('matrix.unilevel') }}</button><button :aria-pressed="referralLayout === 'list'" :class="{ selected: referralLayout === 'list' }" @click="setReferralLayout('list')"><AppIcon name="List" :size="16" />{{ t('ui.list_view') }}</button></div></div>
+            <div class="section-card-header"><div><h2>{{ t(referralHeading) }}<span v-if="preview || referralLayout === 'list'" class="sample-label">{{ preview ? t('ui.sample_data') : members.length + " " + t('ui.members') }}</span></h2><p>{{ t(referralHint) }}</p></div><button v-if="preview || referralLayout === 'list'" class="button button-outline button-small" @click="exportReferrals"><AppIcon name="Download" :size="15" />{{ t('ui.export_csv') }}</button></div>
+            <div class="referral-view-bar"><span>{{ t('ui.see_your_connections_your_way') }}</span><div class="referral-view-toggle" role="group" :aria-label="t('ui.referral_view')"><button :aria-pressed="referralLayout === 'tree'" :class="{ selected: referralLayout === 'tree' }" @click="setReferralLayout('tree')"><AppIcon :name="preview ? 'GitFork' : 'Layers'" :size="16" />{{ t(preview ? 'ui.tree_view' : 'matrixSlots.nav') }}</button><button v-if="!preview" :aria-pressed="referralLayout === 'unilevel'" :class="{ selected: referralLayout === 'unilevel' }" @click="setReferralLayout('unilevel')"><AppIcon name="GitFork" :size="16" />{{ t('matrix.unilevel') }}</button><button v-if="!preview" :aria-pressed="referralLayout === 'direct'" :class="{ selected: referralLayout === 'direct' }" @click="setReferralLayout('direct')"><AppIcon name="Users" :size="16" />{{ t('directReferrals.treeTitle') }}</button><button :aria-pressed="referralLayout === 'list'" :class="{ selected: referralLayout === 'list' }" @click="setReferralLayout('list')"><AppIcon name="List" :size="16" />{{ t('ui.list_view') }}</button></div></div>
             <div v-if="referralLayout === 'list' || preview" class="member-tools"><label class="search-field"><AppIcon name="Search" :size="17" /><input v-model="search" :aria-label="t('ui.search_referrals')" :placeholder="t('ui.search_by_username')" /></label><AppDropdown v-model="referralStatus" :label="t('ui.filter_referral_status')" :options="[{ value: 'all', label: t('ui.all_statuses') }, { value: 'Registered', label: t('ui.registered') }, ...(preview ? [{ value: 'Qualified', label: t('ui.qualified') }] : [])]" /></div>
             <p v-if="referralError" class="form-error" role="alert">{{ tr(referralError) }}</p>
-            <MatrixSlots v-if="referralLayout === 'tree' && user?.memberId" :key="`referrals-${user.memberId}-${treeVersion}`" :member-id="user.memberId" /><BinaryReferralTree v-else-if="referralLayout === 'unilevel' && user?.memberId" :key="`unilevel-${user.memberId}-${treeVersion}`" :member-id="user.memberId" initial-mode="unilevel" fixed-program live /><ReferralTree v-else-if="referralLayout === 'tree'" :members="referralMembers" :root-id="user?.id || 'preview-root'" :memberId="user?.memberId || '1000'" :matching-ids="visibleMembers.map((member) => member.id)" :filtered="!!search || referralStatus !== 'all'" />
+            <MatrixSlots v-if="referralLayout === 'tree' && user?.memberId" :key="`referrals-${user.memberId}-${treeVersion}`" :member-id="user.memberId" /><MatrixSlots v-else-if="referralLayout === 'unilevel' && user?.memberId" :key="`unilevel-${user.memberId}-${treeVersion}`" :member-id="user.memberId" program="unilevel" /><div v-else-if="referralLayout === 'direct' && user" id="direct-referral-tree" data-testid="direct-referral-tree"><p v-if="networkTruncated" class="slot-detail-note" role="status">{{ t('ui.showing_the_first_500_members_8ad45') }}</p><ReferralTree :members="members" :root-id="user.id" :member-id="user.memberId" :matching-ids="members.map(member => member.id)" :filtered="false" /></div><ReferralTree v-else-if="referralLayout === 'tree'" :members="referralMembers" :root-id="user?.id || 'preview-root'" :memberId="user?.memberId || '1000'" :matching-ids="visibleMembers.map((member) => member.id)" :filtered="!!search || referralStatus !== 'all'" />
             <div v-else class="table-scroll"><table><thead><tr><th>{{ t('ui.member') }}</th><th>{{ t('ui.date_joined') }}</th><th>{{ t('ui.status') }}</th><th>{{ t('ui.referral_level') }}</th></tr></thead><tbody><tr v-for="(member, index) in visibleMembers" :key="member.id"><td><div class="member-identity"><span class="table-avatar" :class="`avatar-${['peach', 'lavender', 'green', 'blue'][index % 4]}`">{{ member.memberId.slice(0, 2).toUpperCase() }}</span><strong>ID {{ member.memberId }}</strong></div></td><td>{{ formatDate(member.joinedAt) }}</td><td><span class="member-status" :class="{ qualified: member.status === 'Qualified' }"><i></i>{{ tr(member.status) }}</span></td><td>{{ t('ui.level') }} {{ member.depth }}{{ member.depth === 1 ? " " + t('ui.direct') : '' }}</td></tr><tr v-if="!visibleMembers.length"><td colspan="4" class="empty-state"><AppIcon name="Users" :size="27" /><strong>{{ search || referralStatus !== 'all' ? t('ui.no_matching_referrals') : t('ui.your_circle_starts_here') }}</strong><span>{{ search || referralStatus !== 'all' ? t('ui.try_another_search_or_status') : t('ui.share_your_invite_link_to_bring_someone_into_your_loop') }}</span></td></tr></tbody></table></div>
             <div v-if="referralLayout === 'list' || preview" class="member-table-foot">{{ visibleMembers.length }} {{ preview ? tr('sample') : tr('network') }} {{ t('ui.members_f13eb') }}{{ networkTruncated ? " " + t('ui.showing_the_first_500_members_8ad45') : '' }} {{ t('ui.up_to_15_referral_levels_179fe') }}</div>
           </section>
@@ -190,5 +207,20 @@ function exportReferrals() {
         <footer class="dashboard-footer"><a v-if="platform?.supportEmail" :href="'mailto:' + platform.supportEmail">{{ t('admin.supportEmail') }}</a><span><BrandLogo />{{ t('ui.good_connections_come_full_circle') }}</span><span>{{ preview ? t('ui.illustrative_plan_preview_sample_figures') : t(external ? 'connected.walletTitle' : 'ui.loop_account_in_app_usdt_ledger') }}<span class="green-dot"></span></span></footer>
       </main>
     </div>
+    <DirectReferralsModal v-if="user" :open="directReferralsOpen" :members="directMembers" :loading="referralsLoading" :error="referralError" @close="closeDirectReferrals" @tree="openDirectTree" @retry="loadReferrals" />
   </div>
 </template>
+
+<style scoped>
+.direct-referrals-stat { position: relative; width: 100%; min-width: 0; padding-right: 44px; text-align: left; font: inherit; cursor: pointer; }
+.direct-referrals-stat:hover { border-color: var(--gold); background: var(--gold-soft); }
+.direct-referrals-stat:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+.direct-referrals-stat-arrow { position: absolute; top: 16px; right: 16px; color: var(--gold-text); }
+#direct-referral-tree { scroll-margin-top: 100px; }
+.referral-view-bar { flex-wrap: wrap; }
+.referral-view-toggle { max-width: 100%; min-width: 0; flex-wrap: wrap; }
+@media (max-width: 700px) {
+  .referral-view-toggle { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); width: 100%; }
+  .referral-view-toggle > button { min-width: 0; white-space: normal; }
+}
+</style>

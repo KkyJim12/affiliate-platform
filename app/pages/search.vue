@@ -35,13 +35,13 @@ async function search() {
         <p v-if="invalid" id="member-id-error" class="auth-error" role="alert">{{ t('publicTree.invalidId') }}</p>
       </form>
       <div v-if="submitted && !invalid" class="panel public-tree-result">
-        <div class="public-member-heading"><h2>{{ t('publicTree.memberTitle',{id:submitted}) }}</h2><p>{{ t('matrixSlots.hint') }}</p></div>
+        <div class="public-member-heading"><h2>{{ t('publicTree.memberTitle',{id:submitted}) }}</h2><p>{{ t(layout === 'unilevel' ? 'unilevelSlots.hint' : 'matrixSlots.hint') }}</p></div>
         <div class="public-tree-views" role="group" :aria-label="t('ui.referral_view')">
           <button class="button button-outline button-small" :aria-pressed="layout === 'matrix'" @click="layout = 'matrix'">{{ t('matrixSlots.nav') }}</button>
           <button class="button button-outline button-small" :aria-pressed="layout === 'unilevel'" @click="layout = 'unilevel'">{{ t('matrix.unilevel') }}</button>
         </div>
         <MatrixSlots v-if="layout === 'matrix'" :key="submitted" :member-id="submitted" public-view />
-        <BinaryReferralTree v-else :key="`unilevel-${submitted}`" :member-id="submitted" initial-mode="unilevel" fixed-program live />
+        <MatrixSlots v-else :key="`unilevel-${submitted}`" :member-id="submitted" program="unilevel" public-view />
       </div>
       <div v-else class="public-tree-welcome panel"><span class="public-tree-symbol"><AppIcon name="GitFork" :size="36" /></span><h2>{{ t('publicTree.welcomeTitle') }}</h2><p>{{ t('publicTree.welcomeHint') }}</p><div><span>15 <small>{{ t('publicTree.steps') }}</small></span></div></div>
     </main>
