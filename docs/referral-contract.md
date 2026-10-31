@@ -1,6 +1,6 @@
 # Amoy referral contract
 
-Current behavior: [version-3 binary matrix, unilevel payments and automatic upgrades](matrix-payments.md).
+Current behavior: [version-5 ref ID validation, binary matrix, unilevel payments and automatic upgrades](matrix-payments.md).
 
 Step-by-step deployment guides: [ภาษาไทย](th/deploy-contracts.md) · [English](en/deploy-contracts.md). For application hosting, see [Deploy Nuxt ภาษาไทย](th/deploy-nuxt.md) / [English](en/deploy-nuxt.md).
 
@@ -9,6 +9,12 @@ Connected wallets are now the default: wallet signatures for login and every on-
 `contracts/ReferralDistributor.sol` collects the configured ERC-20 payment and
 distributes 100% in the same transaction. The default app mode is `contract`;
 missing blockchain configuration never falls back to internal credits.
+
+Every purchase, automatic upgrade and reborn requires a linked ref ID, except
+for server-allowlisted numeric member IDs. Member ID 1 is exempt by default;
+configure `NUXT_REFERRAL_SPONSOR_EXEMPT_MEMBER_IDS` in `.env`. The server signs
+the exemption into the purchase quote and the contract verifies it. Version 5
+is required; replace earlier distributors before accepting new purchases.
 
 ## Deploy using .env
 

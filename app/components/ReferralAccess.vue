@@ -35,6 +35,7 @@ const purchaseTitle = computed(() => upgrading.value ? t('referral.upgradeTitle'
 const feeReady = computed(() => props.preview || !!program.value?.feeConfigured);
 const available = computed(() => wallet.value?.available ?? 0);
 const canAfford = computed(() => !!wallet.value && available.value >= price.value);
+const canPurchase = computed(() => props.preview || program.value?.purchaseAccess?.allowed === true);
 if (!props.preview && paymentMode.value === "ledger") await refreshWallet();
 const inviteLink = computed(() => program.value?.code ? `${String(config.public.appUrl || origin).replace(/\/$/, "")}/referrals?ref=${program.value.code}` : "");
 
@@ -61,6 +62,7 @@ onMounted(() => {
 onBeforeUnmount(()=>clearInterval(qualificationTimer));
 function openPurchase() {
   if (props.preview) { authOpen.value = true; return; }
+  if (!canPurchase.value) return;
   password.value = "";
   purchaseError.value = "";
   requestKey.value = crypto.randomUUID();
@@ -76,7 +78,7 @@ function applyResult(result: ReferralUpdate) {
   emit("updated");
 }
 async function activate() {
-  if (busy.value) return;
+  if (busy.value || !canPurchase.value) return;
   busy.value = true;
   purchaseError.value = "";
   try {
@@ -132,7 +134,8 @@ async function connectSponsor() {
             <template v-if="program.nextLevel">
               <p>{{ t('referral.nextLevel', { level: program.nextLevel, amount: formatUsdt(price) }) }}</p>
               <div class="referral-balance"><span>{{ t('referral.legacyCredits') }}</span><strong>{{ formatUsdt(available) }} USDT</strong></div>
-              <button class="button button-orange referral-unlock-button" :disabled="busy || !canAfford || !feeReady" @click="openPurchase">{{ t('referral.upgrade', { level: program.nextLevel, amount: formatUsdt(price) }) }}</button>
+              <button class="button button-orange referral-unlock-button" :disabled="busy || !canPurchase || !canAfford || !feeReady" @click="openPurchase">{{ t('referral.upgrade', { level: program.nextLevel, amount: formatUsdt(price) }) }}</button>
+              <p v-if="program.purchaseAccess?.requiresSponsor" data-testid="referral-required" role="status">{{ t('referral.sponsorRequired') }}</p>
               <p v-if="!canAfford" class="referral-funding-hint">{{ t('referral.evmPaymentPending') }}</p>
             </template>
             <p v-else>{{ t('referral.maximumLevel') }}</p>
@@ -147,7 +150,8 @@ async function connectSponsor() {
           <template v-else>
             <div class="referral-price"><strong>{{ formatUsdt(price) }}</strong><span>USDT<small>{{ t('referral.oneTime') }}</small></span></div>
             <div v-if="!preview" class="referral-balance"><span>{{ t('referral.legacyCredits') }}</span><strong>{{ formatUsdt(available) }} USDT</strong></div>
-            <button class="button button-orange referral-unlock-button" :disabled="!preview && (!canAfford || !feeReady || busy || status === 'pending')" @click="openPurchase">{{ preview ? t('ui.sign_in') : t('referral.buy', { amount: formatUsdt(price) }) }}<AppIcon name="ArrowRight" :size="16" /></button>
+            <button class="button button-orange referral-unlock-button" :disabled="!preview && (!canPurchase || !canAfford || !feeReady || busy || status === 'pending')" @click="openPurchase">{{ preview ? t('ui.sign_in') : t('referral.buy', { amount: formatUsdt(price) }) }}<AppIcon name="ArrowRight" :size="16" /></button>
+            <p v-if="!preview && program?.purchaseAccess?.requiresSponsor" data-testid="referral-required" role="status">{{ t('referral.sponsorRequired') }}</p>
             <p v-if="!feeReady" class="referral-funding-hint">{{ t('referral.feeNotConfigured') }}</p>
             <p v-if="!preview && !canAfford" class="referral-funding-hint">{{ t('referral.evmPaymentPending') }}</p>
           </template>
@@ -187,7 +191,7 @@ async function connectSponsor() {
     </section>
 
     <ModalTransition><AppModal v-if="purchaseOpen" :title="purchaseTitle" @close="closePurchase">
-      <div class="admin-dialog referral-purchase-dialog"><span class="admin-dialog-icon"><AppIcon name="LockKeyhole" :size="25" /></span><h2>{{ purchaseTitle }}</h2><p>{{ t(upgrading ? 'referral.upgradeHint' : 'referral.confirmHint') }}</p><dl class="admin-details"><div><dt>{{ t(upgrading ? 'referral.levelPrice' : 'referral.activationFee') }}</dt><dd>{{ formatUsdt(price) }} USDT</dd></div><div><dt>{{ t('ui.available_balance') }}</dt><dd>{{ formatUsdt(available) }} USDT</dd></div><div><dt>{{ t('referral.balanceAfter') }}</dt><dd>{{ formatUsdt(Math.max(0, available - price)) }} USDT</dd></div></dl><form class="account-form" @submit.prevent="activate"><label for="referral-purchase-password">{{ t('ui.confirm_with_your_password') }}</label><input id="referral-purchase-password" v-model="password" class="auth-input" type="password" autocomplete="current-password" required maxlength="128" :disabled="busy" /><p v-if="purchaseError" class="auth-error" role="alert">{{ tr(purchaseError) }}</p><button class="button button-orange" type="submit" :disabled="busy || !canAfford || !feeReady"><AppIcon v-if="busy" name="LoaderCircle" class="auth-loading" :size="16" />{{ busy ? t('ui.please_wait') : t(upgrading ? 'referral.confirmUpgrade' : 'referral.confirmPay', { amount: formatUsdt(price) }) }}</button></form></div>
+      <div class="admin-dialog referral-purchase-dialog"><span class="admin-dialog-icon"><AppIcon name="LockKeyhole" :size="25" /></span><h2>{{ purchaseTitle }}</h2><p>{{ t(upgrading ? 'referral.upgradeHint' : 'referral.confirmHint') }}</p><dl class="admin-details"><div><dt>{{ t(upgrading ? 'referral.levelPrice' : 'referral.activationFee') }}</dt><dd>{{ formatUsdt(price) }} USDT</dd></div><div><dt>{{ t('ui.available_balance') }}</dt><dd>{{ formatUsdt(available) }} USDT</dd></div><div><dt>{{ t('referral.balanceAfter') }}</dt><dd>{{ formatUsdt(Math.max(0, available - price)) }} USDT</dd></div></dl><form class="account-form" @submit.prevent="activate"><label for="referral-purchase-password">{{ t('ui.confirm_with_your_password') }}</label><input id="referral-purchase-password" v-model="password" class="auth-input" type="password" autocomplete="current-password" required maxlength="128" :disabled="busy" /><p v-if="purchaseError" class="auth-error" role="alert">{{ tr(purchaseError) }}</p><button class="button button-orange" type="submit" :disabled="busy || !canPurchase || !canAfford || !feeReady"><AppIcon v-if="busy" name="LoaderCircle" class="auth-loading" :size="16" />{{ busy ? t('ui.please_wait') : t(upgrading ? 'referral.confirmUpgrade' : 'referral.confirmPay', { amount: formatUsdt(price) }) }}</button></form></div>
     </AppModal></ModalTransition>
   </div>
 </template>

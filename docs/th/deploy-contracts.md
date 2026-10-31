@@ -152,7 +152,7 @@ NUXT_REFERRAL_MIN_CONFIRMATIONS=2
 
 | ค่าที่อ่านจาก contract | ผลที่ควรได้ |
 | --- | --- |
-| Distributor `distributionVersion()` | `3` |
+| Distributor `distributionVersion()` | `5` |
 | Distributor `paymentToken()` | ตรงกับ `NUXT_EVM_TOKEN_ADDRESS` |
 | Distributor `owner()` | Owner ที่ตั้งใจใช้ เริ่มต้นคือ `REFERRAL_OWNER_ADDRESS` |
 | Distributor `feeRecipient()` | ผู้รับที่ตั้งใจใช้ เริ่มต้นคือ `REFERRAL_FEE_RECIPIENT_ADDRESS` |
@@ -208,7 +208,7 @@ npm run contracts:deploy -- --replace-distributor --previous-contract CURRENT_DI
 npm.cmd run contracts:deploy -- --replace-distributor --previous-contract 0x485cC2Cd52fBC7adeEAdf175b37f9c50741FdCB6 --broadcast
 ```
 
-ก่อนใช้คำสั่งส่งจริง แผนต้องแสดง `distributionVersion: 3`, `broadcast: false`, owner/ผู้รับค่าธรรมเนียม/authority ที่ตั้งใจใช้, token เดิม, distributor เดิมตรงใน `replaces` และ `missing: []` การเพิ่ม `--broadcast` จะส่งธุรกรรมและใช้ test POL ของ deployer รอข้อความ `Deployment confirmed` และ address ใหม่ที่บันทึกไว้ หากถูกขัดจังหวะให้รันคำสั่งเดิมต่อจาก progress ที่เก็บไว้
+ก่อนใช้คำสั่งส่งจริง แผนต้องแสดง `distributionVersion: 5`, `broadcast: false`, owner/ผู้รับค่าธรรมเนียม/authority ที่ตั้งใจใช้, token เดิม, distributor เดิมตรงใน `replaces` และ `missing: []` การเพิ่ม `--broadcast` จะส่งธุรกรรมและใช้ test POL ของ deployer รอข้อความ `Deployment confirmed` และ address ใหม่ที่บันทึกไว้ หากถูกขัดจังหวะให้รันคำสั่งเดิมต่อจาก progress ที่เก็บไว้
 
 สคริปต์ตรวจ token ของ distributor เดิม deploy เฉพาะ distributor ใหม่ เก็บ deployment progress เดิมไว้ และบันทึก replacement ลง `.data/contracts/replacement-ADDRESS.json` กับ `.data/contracts/latest-replacement.json` จากนั้นอัปเดต `.env` ในเครื่องให้ใช้ distributor ใหม่ ต้องส่งค่านี้ไปยัง Nuxt runtime environment และ restart ด้วย
 
@@ -223,7 +223,7 @@ npm.cmd run contracts:verify
 npm.cmd run build
 ```
 
-เริ่มบริการแอปใหม่ให้โหลด runtime configuration ล่าสุด Migration `0013_matrix_slots_and_auto_upgrades.sql` เก็บ paid levels เดิม เพิ่มช่องแมทริกซ์และคิวอัปเกรดถาวร และไม่หักอัปเกรดย้อนหลังจากแมทริกซ์เก่าที่เต็มอยู่แล้ว สมาชิกต้องอนุมัติ **distributor ใหม่** เพราะวงเงินเดิมไม่ย้ายตาม ตรวจ `distributionVersion() == 3`, token, signer, pause state และ POL ของ relayer ก่อนเปิดให้ซื้ออีกครั้ง
+เริ่มบริการแอปใหม่ให้โหลด runtime configuration ล่าสุด Migration `0013_matrix_slots_and_auto_upgrades.sql` เก็บ paid levels เดิม เพิ่มช่องแมทริกซ์และคิวอัปเกรดถาวร และไม่หักอัปเกรดย้อนหลังจากแมทริกซ์เก่าที่เต็มอยู่แล้ว สมาชิกต้องอนุมัติ **distributor ใหม่** เพราะวงเงินเดิมไม่ย้ายตาม ตรวจ `distributionVersion() == 5`, token, signer, pause state และ POL ของ relayer ก่อนเปิดให้ซื้ออีกครั้ง
 
 ## 8. การกู้คืนและเปลี่ยน configuration
 

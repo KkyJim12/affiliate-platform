@@ -11,10 +11,11 @@ import { evmWalletFor } from "./evm-wallet";
 import { withWalletLock, assertNoPendingWalletOperation } from "./evm-operations";
 import { requireExternalWalletMode } from "./wallet-mode";
 import { chainPurchaseStatus, pendingChainPurchase, reconcileChainPurchase, requireChainClient, type ChainPurchaseRow } from "./referral-chain";
-import { distributorInterface, uplineHash, type PurchasePayload } from "../lib/referral-chain";
+import { distributorInterface, version4DistributorInterface, uplineHash, type PurchasePayload } from "../lib/referral-chain";
 import { EvmSendClient, type SendPlan } from "../lib/evm-send";
 import { referralProgram } from "./referral";
 import { audit } from "./admin";
+import { assertReferralPurchaseAllowed } from "./referral-purchase-access";
 
 export async function connectedAddress(userId: string) {
   requireExternalWalletMode();
@@ -23,6 +24,7 @@ export async function connectedAddress(userId: string) {
   return wallet.address;
 }
 export async function prepareExternalPurchase(userId: string, level: number, requestKey: string, automaticApproval = false) {
+  await assertReferralPurchaseAllowed(userId);
   const address = await connectedAddress(userId), reader = requireChainClient();
   return withWalletLock(userId, async () => {
     let row = await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE user_id = $1 AND request_key = $2", userId, requestKey)
@@ -37,6 +39,7 @@ export async function prepareExternalPurchase(userId: string, level: number, req
       if (state.paused) throw createError({ statusCode: 409, statusMessage: "Referral purchases are paused." });
       row = await transaction(async () => {
         await db().execute("SELECT pg_advisory_xact_lock(782438, 2)");
+        const access = await assertReferralPurchaseAllowed(userId);
         const program = await referralProgram(userId);
         if (program.nextLevel !== level || (state.currentLevel !== 0 && state.currentLevel !== program.currentLevel))
           throw createError({ statusCode: 409, statusMessage: "Purchase the next referral level in order." });
@@ -44,7 +47,7 @@ export async function prepareExternalPurchase(userId: string, level: number, req
         const block = await reader.provider.getBlock("latest");
         if (!block) throw new Error("Chain head unavailable.");
         const id = randomUUID(), now = new Date().toISOString(), uplines = recipients.map(item => item.address);
-        const quote = { ...await commissionAuthorization(userId,recipients,"external",level===1), id: hashId(id), buyer: address, level, previousLevel: program.currentLevel, uplinesHash: uplineHash(uplines),
+        const quote = { ...await commissionAuthorization(userId,recipients,"external",level===1,db(),access.exempt), id: hashId(id), buyer: address, level, previousLevel: program.currentLevel, uplinesHash: uplineHash(uplines),
           feeRecipient: state.feeRecipient, configNonce: state.configNonce, deadline: block.timestamp + 600, matrixCycle: ZeroHash };
         const payload: PurchasePayload = { createdBlock: block.number, quote, uplines, automaticApproval,
           recipients: recipients.map(({ userId, reason }) => ({ userId, reason })), signature: await reader.sign(quote) };
@@ -79,8 +82,9 @@ export async function confirmExternalPurchase(userId: string, id: string, hash: 
   const row = await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE id = $1 AND user_id = $2 AND signing_mode = 'external'", id, userId);
   if (!row) throw createError({ statusCode: 404, statusMessage: "Purchase not found." });
   if (row.status === "confirmed" || row.status === "failed") return chainPurchaseStatus(row);
+  const purchaseInterface = typeof row.payload.quote.sponsorExempt === "boolean" ? distributorInterface : version4DistributorInterface;
   const validHash = await assertWalletTransaction(hash, { from: address, to: row.contract_address, value: "0", chainId: appNetwork().chainId,
-    data: distributorInterface.encodeFunctionData("purchase", [row.payload.quote,row.payload.uplines,row.payload.signature]) }, reader.provider);
+    data: purchaseInterface.encodeFunctionData("purchase", [row.payload.quote,row.payload.uplines,row.payload.signature]) }, reader.provider);
   await db().execute("UPDATE referral_chain_purchases SET transaction_hash = $1,status = 'pending',updated_at = $2 WHERE id = $3 AND status IN ('awaiting_signature','pending')", validHash,new Date().toISOString(),id);
   return chainPurchaseStatus(await reconcileChainPurchase({ ...row, status: "pending", transaction_hash: validHash }));
 }

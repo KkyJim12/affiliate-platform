@@ -20,6 +20,7 @@ const symbol = computed(() => props.chain?.tokenSymbol || "USDT");
 const price = computed(() => props.program?.nextPrice ?? 10);
 const pending = computed(() => props.chain?.pending || (current.value?.status === "pending" ? current.value : null));
 const canAfford = computed(() => props.chain?.balance !== null && Number(props.chain?.balance) >= price.value);
+const canPurchase = computed(() => props.program?.purchaseAccess?.allowed === true);
 let timer: ReturnType<typeof setInterval> | undefined;
 let mounted = false;
 const observed = new Set<string>();
@@ -41,13 +42,13 @@ async function refreshState() {
   finally { refreshing.value = false; }
 }
 function openConfirmation() {
-  if (!props.program?.nextLevel || !props.chain?.ready || pending.value) return;
+  if (!canPurchase.value || !props.program?.nextLevel || !props.chain?.ready || pending.value) return;
   error.value = ""; password.value = ""; requestKey.value = crypto.randomUUID();
   confirmOpen.value = true;
 }
 function closeConfirmation() { if (!busy.value) { confirmOpen.value = false; password.value = ""; } }
 async function purchase() {
-  if (busy.value || !props.program?.nextLevel) return;
+  if (busy.value || !canPurchase.value || !props.program?.nextLevel) return;
   busy.value = true; error.value = "";
   try {
     current.value = await $fetch<ChainPurchaseStatus>("/api/referrals/chain/purchase", { method: "POST", body: {
@@ -74,12 +75,13 @@ onBeforeUnmount(() => { mounted = false; password.value = ""; if (timer) clearIn
   <div class="referral-contract-purchase">
     <strong class="referral-paid-level" data-testid="referral-level">{{ t('referral.currentLevel', { level: program?.currentLevel || 0, max: 15 }) }}</strong>
     <p class="referral-contract-note">{{ t('onchain.networkHint') }}</p>
+    <p v-if="program?.purchaseAccess?.requiresSponsor" class="referral-funding-hint" data-testid="referral-required" role="status">{{ t('referral.sponsorRequired') }}</p>
     <template v-if="chain?.configured">
       <div class="referral-balance"><span>{{ t('onchain.tokenBalance') }}</span><strong data-testid="chain-token-balance">{{ formatUsdt(Number(chain.balance || 0)) }} {{ symbol }}</strong></div>
       <a :href="`${network.explorerUrl}/address/${chain.contractAddress}`" target="_blank" rel="noopener noreferrer" class="inline-link">{{ t('onchain.viewContract') }}<AppIcon name="ArrowUpRight" :size="14" /></a>
       <template v-if="program?.nextLevel">
         <p class="referral-contract-note">{{ t('referral.nextLevel', { level: program.nextLevel, amount: formatUsdt(price) }) }}</p>
-        <button class="button button-orange referral-unlock-button" :disabled="busy || !!pending || !chain.ready || !canAfford" @click="openConfirmation">{{ t('onchain.buy', { level: program.nextLevel, amount: formatUsdt(price), symbol }) }}</button>
+        <button class="button button-orange referral-unlock-button" :disabled="busy || !canPurchase || !!pending || !chain.ready || !canAfford" @click="openConfirmation">{{ t('onchain.buy', { level: program.nextLevel, amount: formatUsdt(price), symbol }) }}</button>
         <p v-if="!canAfford && chain.balance !== null" class="referral-funding-hint" data-testid="chain-insufficient-token" role="status">{{ t('onchain.tokenRequired', { required: formatUsdt(price), available: formatUsdt(Number(chain.balance)), symbol }) }}</p>
         <p v-if="!canAfford" class="referral-funding-hint"><NuxtLink to="/wallet">{{ t('ui.open_wallet') }}</NuxtLink></p>
         <p v-if="!chain.ready" class="referral-funding-hint">{{ t('onchain.pausedOrUnavailable') }}</p>
@@ -102,7 +104,7 @@ onBeforeUnmount(() => { mounted = false; password.value = ""; if (timer) clearIn
         <label class="admin-checkbox"><input v-model="automaticApproval" type="checkbox" :disabled="busy" /><span>{{ t('matrix.autoApproval', { amount: formatUsdt(remainingLevelPrice(program?.nextLevel || 1)), symbol: chain?.tokenSymbol || 'USDT' }) }}</span></label><p>{{ t('matrix.approvalHint') }}</p>
         <form class="account-form" @submit.prevent="purchase"><label for="chain-purchase-password">{{ t('ui.confirm_with_your_password') }}</label><input id="chain-purchase-password" v-model="password" class="auth-input" type="password" autocomplete="current-password" maxlength="128" required :disabled="busy" />
           <p v-if="error" class="auth-error" role="alert">{{ tr(error) }}</p>
-          <button class="button button-orange" :disabled="busy" type="submit"><AppIcon v-if="busy" name="LoaderCircle" :size="16" class="auth-loading" />{{ busy ? t('ui.please_wait') : t('onchain.confirmPay', { amount: formatUsdt(price), symbol }) }}</button>
+          <button class="button button-orange" :disabled="busy || !canPurchase" type="submit"><AppIcon v-if="busy" name="LoaderCircle" :size="16" class="auth-loading" />{{ busy ? t('ui.please_wait') : t('onchain.confirmPay', { amount: formatUsdt(price), symbol }) }}</button>
         </form>
       </div>
     </AppModal></ModalTransition>

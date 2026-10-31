@@ -35,6 +35,8 @@ const legacyDistributorInterface = new Interface([
 ]);
 const version3DistributorInterface = new Interface(["purchase", "autoUpgrade", "rebirth"].map(method =>
   `function ${method}((bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline,bytes32 matrixCycle) quote,address[18] uplines,bytes signature)`));
+export const version4DistributorInterface = new Interface(["purchase", "autoUpgrade", "rebirth"].map(method =>
+  `function ${method}((bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline,bytes32 matrixCycle,address sponsor,uint256 qualifiedMask) quote,address[18] uplines,bytes signature)`));
 
 export function uplineHash(uplines: string[]) {
   return keccak256(AbiCoder.defaultAbiCoder().encode([uplines.length === 18 ? "address[18]" : "address[15]"], [uplines]));
@@ -69,8 +71,8 @@ export class ReferralChainClient {
   async inspect(buyer?: string, nextLevel?: number | null, includeGas = true) {
     if ((await this.provider.getNetwork()).chainId !== BigInt(this.chainId)) throw new Error("Referral RPC must match the configured Polygon network.");
     if (await this.provider.getCode(this.config.contractAddress) === "0x") throw new Error("Referral contract is not deployed.");
-    if (await this.contract.getFunction("distributionVersion")().catch(() => 0n) !== 4n)
-      throw new Error("Deploy the updated referral contract with two-paid-referral commission holds before accepting purchases.");
+    if (await this.contract.getFunction("distributionVersion")().catch(() => 0n) !== 5n)
+      throw new Error("Deploy the updated referral contract with required ref ID validation before accepting purchases.");
     const [token, decimals, actualDecimals, feeRecipient, owner, quoteSigner, nonce, paused, symbol, gasFees] = await Promise.all([
       this.contract.getFunction("paymentToken")(), this.contract.getFunction("tokenDecimals")(), this.token.getFunction("decimals")(), this.contract.getFunction("feeRecipient")(),
       this.contract.getFunction("owner")(), this.contract.getFunction("quoteSigner")(), this.contract.getFunction("configNonce")(), this.contract.getFunction("paused")(),
@@ -99,6 +101,8 @@ export class ReferralChainClient {
   }
 
   async sign(quote: ChainPurchaseQuote) {
+    if (getAddress(quote.sponsor) === ZeroAddress && !quote.sponsorExempt)
+      throw new Error("The linked ref ID needs a wallet for contract purchases.");
     return this.authority.signTypedData({ name: "UNXO Referral Distributor", version: "1", chainId: this.chainId,
       verifyingContract: this.config.contractAddress }, purchaseTypes, quote);
   }
@@ -228,7 +232,7 @@ export class ReferralChainClient {
     const version = await this.contract.getFunction("distributionVersion")().catch(() => 1n);
     const tx = await this.provider.getTransaction(receipt.hash);
     const automatic = version >= 3n && payload.quote.matrixCycle !== ZeroHash;
-    const purchaseInterface = version >= 4n ? distributorInterface : version === 3n ? version3DistributorInterface : legacyDistributorInterface;
+    const purchaseInterface = version >= 5n ? distributorInterface : version === 4n ? version4DistributorInterface : version === 3n ? version3DistributorInterface : legacyDistributorInterface;
     const expectedData = purchaseInterface.encodeFunctionData(payload.rebirth ? "rebirth" : automatic ? "autoUpgrade" : "purchase", [payload.quote, payload.uplines, payload.signature]);
     if (!tx || tx.chainId !== BigInt(this.chainId) || tx.value !== 0n || (!automatic && getAddress(tx.from) !== getAddress(payload.quote.buyer))
       || !tx.to || getAddress(tx.to) !== getAddress(this.config.contractAddress) || tx.data !== expectedData) throw new Error("Purchase transaction does not match its authorization.");

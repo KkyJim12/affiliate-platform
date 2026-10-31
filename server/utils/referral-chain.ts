@@ -14,6 +14,7 @@ import { audit } from "./admin";
 import { evmWalletFor } from "./evm-wallet";
 import { externalWalletMode } from "./wallet-mode";
 import { queuedReferralJobs, retryFailedReferralJobs } from "./referral-auto-retry";
+import { assertReferralPurchaseAllowed } from "./referral-purchase-access";
 
 export interface ChainPurchaseRow {
   id: string; user_id: string; level: number; amount: number; request_key: string;
@@ -72,6 +73,7 @@ async function saveTransactions(userId: string, operationId: string, prepared: P
 }
 
 export async function submitChainPurchase(userId: string, password: string, level: number, requestKey: string, automaticApproval = false) {
+  await assertReferralPurchaseAllowed(userId);
   const reader = requireChainClient();
   return withWalletLock(userId, async () => {
     const previous = await db().one<ChainPurchaseRow>("SELECT * FROM referral_chain_purchases WHERE user_id = $1 AND request_key = $2", userId, requestKey);
@@ -90,6 +92,7 @@ export async function submitChainPurchase(userId: string, password: string, leve
     if (state.paused) throw createError({ statusCode: 409, statusMessage: "Referral smart contract purchases are paused." });
     const purchase = await transaction(async () => {
       await db().execute("SELECT pg_advisory_xact_lock(782438, 2)");
+      const access = await assertReferralPurchaseAllowed(userId);
       const program = await referralProgram(userId);
       if (program.nextLevel !== level || (state.currentLevel !== 0 && state.currentLevel !== program.currentLevel))
         throw createError({ statusCode: 409, statusMessage: "Purchase the next referral level in order. The maximum is level 15." });
@@ -98,7 +101,7 @@ export async function submitChainPurchase(userId: string, password: string, leve
       const uplines = recipients.map(row => row.address);
       const block = await reader.provider.getBlock("latest");
       if (!block) throw new Error("Blockchain head unavailable.");
-      const quote = { ...await commissionAuthorization(userId,recipients,"embedded",level===1), id: hashId(id), buyer: signer.address, level, previousLevel: program.currentLevel,
+      const quote = { ...await commissionAuthorization(userId,recipients,"embedded",level===1,db(),access.exempt), id: hashId(id), buyer: signer.address, level, previousLevel: program.currentLevel,
         uplinesHash: uplineHash(uplines), feeRecipient: state.feeRecipient, configNonce: state.configNonce, deadline: block.timestamp + 3600, matrixCycle: ZeroHash };
       const payload: PurchasePayload = { createdBlock: block.number, quote, uplines, automaticApproval, recipients: recipients.map(({ userId, reason }) => ({ userId, reason })), signature: await reader.sign(quote) };
       const prepared = await reader.preparePurchase(signer, payload, state.decimals);
@@ -305,6 +308,7 @@ async function processReferralAutoUpgrades() {
           await db().execute("SELECT pg_advisory_xact_lock(782438, 2)");
           const currentJob = await db().one<{status: string}>("SELECT status FROM referral_auto_upgrades WHERE cycle_id=$1 FOR UPDATE",job.cycle_id);
           if (currentJob?.status !== 'queued') return null;
+          const access = await assertReferralPurchaseAllowed(job.user_id);
           if (await db().one("SELECT user_id FROM user_access WHERE user_id = $1 AND status <> 'active'",job.user_id)) throw new Error("Waiting for an active member account.");
           const program = await referralProgram(job.user_id);
           if (job.kind === 'upgrade' && program.currentLevel >= job.level) {
@@ -324,7 +328,7 @@ async function processReferralAutoUpgrades() {
           const uplines = recipients.map(item => item.address), block = await reader.provider.getBlock("latest");
           if (!block) throw new Error("Chain head unavailable.");
           const id = randomUUID(), timestamp = new Date().toISOString();
-          const quote = { ...await commissionAuthorization(job.user_id,recipients,mode,false), id: hashId(id), buyer: wallet.address, level: job.level, previousLevel: program.currentLevel,
+          const quote = { ...await commissionAuthorization(job.user_id,recipients,mode,false,db(),access.exempt), id: hashId(id), buyer: wallet.address, level: job.level, previousLevel: program.currentLevel,
             uplinesHash: uplineHash(uplines), feeRecipient: state.feeRecipient, configNonce: state.configNonce,
             deadline: block.timestamp + 3600, matrixCycle: hashId(job.cycle_id) };
           const payload: PurchasePayload = { createdBlock: block.number, quote, uplines,
@@ -361,6 +365,7 @@ async function processReferralAutoUpgrades() {
 export function chainActionError(error: unknown): never {
   if (typeof error === "object" && error && "statusCode" in error) throw error;
   const message = error instanceof Error ? error.message : "";
+  if (message === "The linked ref ID needs a wallet for contract purchases.") throw createError({ statusCode: 409, statusMessage: message });
   if (message === "INSUFFICIENT_TOKEN") throw createError({ statusCode: 400, statusMessage: "Your on-chain USDT balance is too low for this purchase." });
   if (message === "INSUFFICIENT_GAS") throw createError({ statusCode: 400, statusMessage: "Add POL to your Amoy wallet to cover transaction gas." });
   if (message === "GAS_PRICE_CHANGED") throw createError({ statusCode: 409, statusMessage: "Gas prices changed. Refresh the gas estimate and confirm again." });

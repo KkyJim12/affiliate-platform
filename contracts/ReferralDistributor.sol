@@ -19,10 +19,10 @@ contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable 
     using SafeERC20 for IERC20;
 
     uint8 public constant MAX_LEVEL = 15;
-    uint256 public constant distributionVersion = 4;
+    uint256 public constant distributionVersion = 5;
     uint256 public constant rebirthVersion = 1;
     bytes32 public constant PURCHASE_TYPEHASH = keccak256(
-        "Purchase(bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline,bytes32 matrixCycle,address sponsor,uint256 qualifiedMask)"
+        "Purchase(bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline,bytes32 matrixCycle,address sponsor,uint256 qualifiedMask,bool sponsorExempt)"
     );
     bytes32 public constant QUALIFICATION_TYPEHASH = keccak256("Qualification(address member,uint256 configNonce)");
     IERC20 public immutable paymentToken;
@@ -55,6 +55,9 @@ contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable 
         // Bits 0..17 attest existing recipients with two paid direct referrals;
         // bit 18 attests the original sponsor, including legacy paid referrals.
         uint256 qualifiedMask;
+        // The authority resolves the buyer's numeric member ID against the
+        // server-only allowlist. Buyers cannot change this signed exemption.
+        bool sponsorExempt;
     }
 
     error InvalidAddress();
@@ -65,6 +68,7 @@ contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable 
     error InvalidSignature();
     error InvalidUplines();
     error UnsupportedToken();
+    error ReferralRequired();
 
     event FeeRecipientChanged(address indexed previousRecipient, address indexed recipient, uint256 configNonce);
     event QuoteSignerChanged(address indexed signer, uint256 configNonce);
@@ -152,8 +156,9 @@ contract ReferralDistributor is Ownable2Step, EIP712, ReentrancyGuard, Pausable 
         if (quote.sponsor == quote.buyer || quote.sponsor == address(this) || quote.qualifiedMask >> 19 != 0) revert InvalidUplines();
         bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(PURCHASE_TYPEHASH, quote.id, quote.buyer,
             quote.level, quote.previousLevel, quote.uplinesHash, quote.feeRecipient, quote.configNonce, quote.deadline, quote.matrixCycle,
-            quote.sponsor, quote.qualifiedMask)));
+            quote.sponsor, quote.qualifiedMask, quote.sponsorExempt)));
         if (ECDSA.recover(digest, signature) != quoteSigner) revert InvalidSignature();
+        if (quote.sponsor == address(0) && !quote.sponsorExempt) revert ReferralRequired();
         for (uint256 i; i < 18; ++i) {
             if (uplines[i] == address(0)) continue;
             if (uplines[i] == quote.buyer || uplines[i] == address(this)) revert InvalidUplines();

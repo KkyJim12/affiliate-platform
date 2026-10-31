@@ -26,7 +26,7 @@ async function fixture(decimals = 6) {
   async function quote(level = 1, changes = {}, ancestors = uplines, signingWallet = authority) {
     const value = { id: id(`purchase-${Math.random()}`), buyer: await buyer.getAddress(), level, previousLevel: level - 1,
       uplinesHash: keccak256(AbiCoder.defaultAbiCoder().encode(['address[18]'], [ancestors])), feeRecipient: await fee.getAddress(),
-      configNonce: String(await contract.configNonce()), deadline: (await provider.getBlock('latest')).timestamp + 3600, matrixCycle: ZeroHash, sponsor: ZeroAddress, qualifiedMask: (1<<19)-1, ...changes };
+      configNonce: String(await contract.configNonce()), deadline: (await provider.getBlock('latest')).timestamp + 3600, matrixCycle: ZeroHash, sponsor: ZeroAddress, qualifiedMask: (1<<19)-1, sponsorExempt: true, ...changes };
     return { value, uplines: ancestors, signature: await signingWallet.signTypedData(
       { name: 'UNXO Referral Distributor', version: '1', chainId: 80002, verifyingContract: await contract.getAddress() }, purchaseTypes, value) };
   }
@@ -44,6 +44,44 @@ test('contract ABI matches server selectors and event signatures', () => {
     const reference = fragment.type === 'event' ? compiled.getEvent(fragment.name) : compiled.getFunction(fragment.name);
     assert.equal(fragment.format('sighash'), reference.format('sighash'));
   }
+});
+
+test('contract requires a ref ID or a signed exemption before taking any purchase payment',async()=>{
+  const f=await fixture();
+  try {
+    const buyer=await f.buyer.getAddress(),before=await f.token.balanceOf(buyer);
+    const blocked=await f.quote(1,{sponsorExempt:false});
+    await assert.rejects(f.buy(blocked));
+    assert.equal(await f.token.balanceOf(buyer),before);
+    assert.equal(await f.contract.levelOf(buyer),0n);
+    assert.equal(await f.contract.purchased(blocked.value.id),false);
+    // Changing the browser's exemption flag breaks the authority signature.
+    await assert.rejects(f.buy({...blocked,value:{...blocked.value,sponsorExempt:true}}));
+    const sponsored=await f.quote(1,{sponsor:f.uplines[0],sponsorExempt:false});
+    await f.buy(sponsored);
+    assert.equal(await f.contract.levelOf(buyer),1n);
+    assert.equal(await f.contract.paidReferrerOf(buyer),f.uplines[0]);
+  } finally {await f.close();}
+});
+
+test('signed exemptions allow the root account while upgrades and reborns still enforce the ref ID rule',async()=>{
+  const f=await fixture();
+  try {
+    await f.buy(await f.quote(1,{sponsor:ZeroAddress,sponsorExempt:true}));
+    const buyer=await f.buyer.getAddress(),before=await f.token.balanceOf(buyer);
+    await assert.rejects(f.buy(await f.quote(2,{sponsorExempt:false})));
+    await (await f.token.connect(f.buyer).approve(await f.contract.getAddress(),100_000_000n)).wait();
+    for(const [method,level,cycle] of [['autoUpgrade',2,id('missing-ref-upgrade')],['rebirth',1,id('missing-ref-rebirth')]]) {
+      const signed=await f.quote(level,{previousLevel:1,matrixCycle:cycle,sponsorExempt:false});
+      await assert.rejects(f.contract.connect(f.owner)[method](signed.value,signed.uplines,signed.signature));
+      assert.equal(await f.contract.purchased(signed.value.id),false);
+      assert.equal(await f.contract[method==='rebirth'?'rebornCycles':'upgradedCycles'](cycle),false);
+    }
+    assert.equal(await f.token.balanceOf(buyer),before);
+    assert.equal(await f.contract.levelOf(buyer),1n);
+    await f.buy(await f.quote(2,{sponsor:f.uplines[0],sponsorExempt:false}));
+    assert.equal(await f.contract.levelOf(buyer),2n);
+  } finally {await f.close();}
 });
 
 for(const decimals of [6,18]) test(`commissions stay in the contract until two distinct paid direct referrals, then release once (${decimals} decimals)`,async()=>{
@@ -151,7 +189,7 @@ test('separate binary trees pay 10/20/50 and fifteen 1% shares without folding m
       const ancestors = [...f.uplines.slice(0,3),...f.uplines.slice(3).map((address,i) => i < count ? address : ZeroAddress)];
       const receipt = await f.buy(await f.quote(1,{},ancestors));
       const shares = receipt.logs.flatMap(log => { try { const e=f.contract.interface.parseLog(log); return e?.name==='SharePaid'?[e]:[]; } catch { return []; } });
-      assert.equal(await f.contract.distributionVersion(),4n);
+      assert.equal(await f.contract.distributionVersion(),5n);
       assert.deepEqual(shares.slice(0,3).map(e => e.args.amount),[1_000_000n,2_000_000n,5_000_000n]);
       for(let i=0;i<15;i++) {
         assert.equal(shares[i+3].args.amount,100_000n);

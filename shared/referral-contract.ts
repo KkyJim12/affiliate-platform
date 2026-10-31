@@ -18,9 +18,9 @@ export const referralContractAbi = [
   "function purchased(bytes32) view returns (bool)",
   "function priceForLevel(uint8) view returns (uint256)",
   "function previewShares(uint8) view returns (uint256[19])",
-  "function purchase((bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline,bytes32 matrixCycle,address sponsor,uint256 qualifiedMask) quote,address[18] uplines,bytes signature)",
-  "function autoUpgrade((bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline,bytes32 matrixCycle,address sponsor,uint256 qualifiedMask) quote,address[18] uplines,bytes signature)",
-  "function rebirth((bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline,bytes32 matrixCycle,address sponsor,uint256 qualifiedMask) quote,address[18] uplines,bytes signature)",
+  "function purchase((bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline,bytes32 matrixCycle,address sponsor,uint256 qualifiedMask,bool sponsorExempt) quote,address[18] uplines,bytes signature)",
+  "function autoUpgrade((bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline,bytes32 matrixCycle,address sponsor,uint256 qualifiedMask,bool sponsorExempt) quote,address[18] uplines,bytes signature)",
+  "function rebirth((bytes32 id,address buyer,uint8 level,uint8 previousLevel,bytes32 uplinesHash,address feeRecipient,uint256 configNonce,uint256 deadline,bytes32 matrixCycle,address sponsor,uint256 qualifiedMask,bool sponsorExempt) quote,address[18] uplines,bytes signature)",
   "function rebornCycles(bytes32) view returns (bool)",
   "function upgradedCycles(bytes32) view returns (bool)",
   "function setFeeRecipient(address)",
@@ -39,13 +39,14 @@ export const purchaseTypes = { Purchase: [
   { name: "configNonce", type: "uint256" }, { name: "deadline", type: "uint256" },
   { name: "matrixCycle", type: "bytes32" },
   { name: "sponsor", type: "address" }, { name: "qualifiedMask", type: "uint256" },
+  { name: "sponsorExempt", type: "bool" },
 ] };
 export const qualificationTypes = { Qualification:[{name:"member",type:"address"},{name:"configNonce",type:"uint256"}] };
 
 export interface ChainPurchaseQuote {
   id: string; buyer: string; level: number; previousLevel: number;
   uplinesHash: string; feeRecipient: string; configNonce: string; deadline: number; matrixCycle: string;
-  sponsor: string; qualifiedMask: number;
+  sponsor: string; qualifiedMask: number; sponsorExempt: boolean;
 }
 
 export interface ChainPurchaseStatus {

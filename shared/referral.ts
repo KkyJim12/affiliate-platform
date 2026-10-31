@@ -1,9 +1,11 @@
 import type { Account, WalletSummary } from "./types";
 import { baseReferralPrice } from "./compensation";
+import type { ReferralPurchaseAccess } from "./referral-purchase-policy";
 
 export const referralPrice = baseReferralPrice;
 
 export interface ReferralProgram {
+  purchaseAccess?: ReferralPurchaseAccess;
   price: number;
   code: string | null;
   activatedAt: string | null;

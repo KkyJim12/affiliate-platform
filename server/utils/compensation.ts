@@ -8,6 +8,7 @@ import { referralPaymentMode } from "./referral-chain";
 import { requireEmbeddedWalletMode } from "./wallet-mode";
 import { paidReferralCount } from "./commission-qualification";
 import { queuedReferralJobs } from "./referral-auto-retry";
+import { assertReferralPurchaseAllowed } from "./referral-purchase-access";
 
 
 export async function buyReferralLevel(userId: string, level: number, requestKey: string, rebirth?: ReferralJob) {
@@ -35,6 +36,7 @@ export async function buyReferralLevel(userId: string, level: number, requestKey
       if (previous.level !== level) throw createError({ statusCode: 409, statusMessage: "This request was already used for another transaction." });
       return;
     }
+    await assertReferralPurchaseAllowed(userId);
     const current = await db().one("SELECT COALESCE(MAX(level), $2::INTEGER) AS level FROM referral_purchases WHERE user_id = $1", userId, activation ? 1 : 0);
     if (!rebirth && level !== current!.level + 1)
       throw createError({ statusCode: 409, statusMessage: "Purchase the next referral level in order. The maximum is level 15." });

@@ -152,7 +152,7 @@ Use the explorer's Read Contract view or an RPC reader to compare:
 
 | Contract read | Expected result |
 | --- | --- |
-| Distributor `distributionVersion()` | `3` |
+| Distributor `distributionVersion()` | `5` |
 | Distributor `paymentToken()` | `NUXT_EVM_TOKEN_ADDRESS` |
 | Distributor `owner()` | Intended owner; initially `REFERRAL_OWNER_ADDRESS` |
 | Distributor `feeRecipient()` | Intended recipient; initially `REFERRAL_FEE_RECIPIENT_ADDRESS` |
@@ -206,7 +206,7 @@ For the recorded distributor above, the complete PowerShell command is:
 npm.cmd run contracts:deploy -- --replace-distributor --previous-contract 0x485cC2Cd52fBC7adeEAdf175b37f9c50741FdCB6 --broadcast
 ```
 
-The reviewed plan must show `distributionVersion: 3`, `broadcast: false`, the intended owner/fee/authority, the existing token, the exact old distributor in `replaces`, and `missing: []`. Adding `--broadcast` sends the deployment and spends the deployer's test POL. Wait for `Deployment confirmed` and the saved new address. If interrupted, resume the same command using its saved progress.
+The reviewed plan must show `distributionVersion: 5`, `broadcast: false`, the intended owner/fee/authority, the existing token, the exact old distributor in `replaces`, and `missing: []`. Adding `--broadcast` sends the deployment and spends the deployer's test POL. Wait for `Deployment confirmed` and the saved new address. If interrupted, resume the same command using its saved progress.
 
 The script checks the old distributor's token, deploys only the new distributor, preserves the original deployment progress, and saves replacement records to `.data/contracts/replacement-ADDRESS.json` and `.data/contracts/latest-replacement.json`. The local `.env` is updated to the new distributor; publish that value to the Nuxt runtime environment and restart.
 
@@ -221,7 +221,7 @@ npm.cmd run contracts:verify
 npm.cmd run build
 ```
 
-Restart the application with the new runtime configuration. Migration `0013_matrix_slots_and_auto_upgrades.sql` preserves paid levels, adds matrix slots and durable upgrade jobs, and avoids retroactive automatic charges for pre-existing full matrices. Members must approve the **new distributor** before it can spend their tokens; old allowances do not transfer. Recheck `distributionVersion() == 3`, token, signer, pause state and relayer gas before reopening purchases.
+Restart the application with the new runtime configuration. Migration `0013_matrix_slots_and_auto_upgrades.sql` preserves paid levels, adds matrix slots and durable upgrade jobs, and avoids retroactive automatic charges for pre-existing full matrices. Members must approve the **new distributor** before it can spend their tokens; old allowances do not transfer. Recheck `distributionVersion() == 5`, token, signer, pause state and relayer gas before reopening purchases.
 
 ## 8. Recovery and configuration changes
 

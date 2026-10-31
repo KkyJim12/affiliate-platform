@@ -28,7 +28,9 @@ test('mainnet deployment reuses canonical USDT, persists one signed deployment a
     await fs.mkdir(path.join(directory,'.data/contracts'),{recursive:true});
     await fs.writeFile(path.join(directory,'.data/contracts/AmoyTestUSDT.json'),'Amoy record remains intact');
     await fs.writeFile(path.join(directory,'.env'),'AMOY_ENV=untouched\n');
-    const env={NUXT_EVM_CHAIN_ID:'137',NUXT_PUBLIC_CHAIN_ID:'137',NUXT_EVM_RPC_URL:url,NUXT_EVM_TOKEN_ADDRESS:POLYGON_USDT,NUXT_REFERRAL_CONTRACT_ADDRESS:'',NUXT_REFERRAL_MIN_CONFIRMATIONS:'2',REFERRAL_OWNER_ADDRESS:owner.address,REFERRAL_FEE_RECIPIENT_ADDRESS:fee.address,REFERRAL_DEPLOYER_PRIVATE_KEY:deployer.privateKey,NUXT_REFERRAL_AUTHORITY_PRIVATE_KEY:authority.privateKey,MAINNET_MAX_DEPLOYMENT_COST_POL:'2'};
+    // The version-5 deployment exceeds 2 POL at this local chain's gas price.
+    // Keep the test's reviewed ceiling separate from the production default.
+    const env={NUXT_EVM_CHAIN_ID:'137',NUXT_PUBLIC_CHAIN_ID:'137',NUXT_EVM_RPC_URL:url,NUXT_EVM_TOKEN_ADDRESS:POLYGON_USDT,NUXT_REFERRAL_CONTRACT_ADDRESS:'',NUXT_REFERRAL_MIN_CONFIRMATIONS:'2',REFERRAL_OWNER_ADDRESS:owner.address,REFERRAL_FEE_RECIPIENT_ADDRESS:fee.address,REFERRAL_DEPLOYER_PRIVATE_KEY:deployer.privateKey,NUXT_REFERRAL_AUTHORITY_PRIVATE_KEY:authority.privateKey,MAINNET_MAX_DEPLOYMENT_COST_POL:'3'};
     const save=()=>fs.writeFile(path.join(directory,'.env.mainnet'),Object.entries(env).map(([key,value])=>`${key}=${value}`).join('\n')+'\n');
     await save();
     const inherited={...process.env};for(const key of Object.keys(env))delete inherited[key];
@@ -52,7 +54,7 @@ test('mainnet deployment reuses canonical USDT, persists one signed deployment a
     for(const secret of [deployer.privateKey,authority.privateKey])assert.ok(!result.output.includes(secret));
     const record=JSON.parse(await fs.readFile(path.join(directory,'.data/contracts/polygon-mainnet/deployment-result.json'),'utf8'));
     const main=new Contract(record.contractAddress,fixtures.ReferralDistributor.abi,provider);
-    assert.equal(await main.paymentToken(),POLYGON_USDT);assert.equal(await main.distributionVersion(),4n);
+    assert.equal(await main.paymentToken(),POLYGON_USDT);assert.equal(await main.distributionVersion(),5n);
     assert.equal(await main.owner(),owner.address);assert.equal(await main.feeRecipient(),fee.address);assert.equal(await main.quoteSigner(),authority.address);
     assert.equal(await fs.readFile(path.join(directory,'.env'),'utf8'),'AMOY_ENV=untouched\n');
     assert.equal(await fs.readFile(path.join(directory,'.data/contracts/AmoyTestUSDT.json'),'utf8'),'Amoy record remains intact');

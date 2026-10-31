@@ -2,6 +2,7 @@ import { completeRebirth, rebirthRecipients, unlockMatrixLevel, referralRecipien
 import { commissionAuthorization, paidReferralCount, reconcileHeldChainAllocations } from "../server/utils/commission-qualification.ts";
 import { bindDatabaseNetwork } from "../server/lib/database-network.ts";
 import { queuedReferralJobs, retryFailedReferralJobs } from "../server/utils/referral-auto-retry.ts";
+import { assertReferralPurchaseAllowed, referralPurchaseAccess } from "../server/utils/referral-purchase-access.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
@@ -14,6 +15,23 @@ import { migrate, migrationStatus, prepareMigrations, readMigrations, resetDatab
 import { importSqlite } from "../scripts/lib/import-sqlite.mjs";
 
 const sources = readMigrations();
+
+test('ref ID purchase access uses the stored numeric member ID and sponsor, with a strict configurable allowlist',()=>isolated(async db=>{
+  await migrate(db.pool,sources);
+  for(const member of ['access-root','access-member','access-unpaid']) await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,NULL,'2026-10-31')",member);
+  const root=(await db.one("SELECT referral_code FROM users WHERE id='access-root'")).referral_code;
+  const member=(await db.one("SELECT referral_code FROM users WHERE id='access-member'")).referral_code;
+  assert.equal(root,'1');
+  assert.deepEqual(await assertReferralPurchaseAllowed('access-root',db,'1'),{allowed:true,exempt:true,requiresSponsor:false});
+  await assert.rejects(assertReferralPurchaseAllowed('access-member',db,'1'),error=>error.statusCode===409 && error.data.code==='REF_ID_REQUIRED');
+  assert.deepEqual(await referralPurchaseAccess('access-member',db,member),{allowed:true,exempt:true,requiresSponsor:false});
+  await assert.rejects(assertReferralPurchaseAllowed('access-root',db,member),{statusCode:409});
+  await assert.rejects(assertReferralPurchaseAllowed('access-root',db,''),{statusCode:409});
+  await assert.rejects(referralPurchaseAccess('access-member',db,'*'),/Invalid referral purchase exemption/);
+  await db.execute("UPDATE users SET sponsor_id='access-root' WHERE id='access-member'");
+  assert.deepEqual(await assertReferralPurchaseAllowed('access-member',db,''),{allowed:true,exempt:false,requiresSponsor:false});
+  assert.deepEqual(await referralPurchaseAccess('access-unpaid',db,'1'),{allowed:false,exempt:false,requiresSponsor:true});
+}));
 
 test('automatic rebirth and upgrade retries recover failed purchases, respect cooldown and preserve unresolved payments',()=>isolated(async db=>{
   await migrate(db.pool,sources);

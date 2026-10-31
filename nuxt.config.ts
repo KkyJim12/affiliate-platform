@@ -42,7 +42,7 @@ export default defineNuxtConfig({
     detectBrowserLanguage: false,
   },
   runtimeConfig: {
-    referral: { paymentMode: "contract", contractAddress: "", authorityPrivateKey: "", minConfirmations: "2", minGasBalance: "0.003" },
+    referral: { paymentMode: "contract", contractAddress: "", authorityPrivateKey: "", minConfirmations: "2", minGasBalance: "0.003", sponsorExemptMemberIds: "1" },
     evm: { rpcUrl: "", chainId: "", tokenAddress: "", treasuryAddress: "", minConfirmations: "", explorerApiKey: "" },
     public: { appUrl: "", walletMode: "external", passwordLoginEnabled: false, chainId: "80002" },
   },

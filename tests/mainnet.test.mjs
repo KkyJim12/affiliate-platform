@@ -28,7 +28,7 @@ test('wallet sign-in and purchase signatures explicitly bind chain 137',async()=
   assert.ok(!verifyWalletChallenge(message.replace('137','80002'),wallet.address,await wallet.signMessage(message)));
   const reader=new ReferralChainClient({chainId:137,rpcUrl:'http://127.0.0.1:1',contractAddress:contract,tokenAddress:POLYGON_USDT,authorityPrivateKey:authority.privateKey,minConfirmations:2});
   try {
-    const quote={id:ZeroHash,buyer:wallet.address,level:1,previousLevel:0,uplinesHash:ZeroHash,feeRecipient:Wallet.createRandom().address,configNonce:'0',deadline:10000000000,matrixCycle:ZeroHash,sponsor:ZeroAddress,qualifiedMask:0};
+    const quote={id:ZeroHash,buyer:wallet.address,level:1,previousLevel:0,uplinesHash:ZeroHash,feeRecipient:Wallet.createRandom().address,configNonce:'0',deadline:10000000000,matrixCycle:ZeroHash,sponsor:ZeroAddress,qualifiedMask:0,sponsorExempt:true};
     const signature=await reader.sign(quote);
     const domain={name:'UNXO Referral Distributor',version:'1',chainId:137,verifyingContract:contract};
     assert.equal(verifyTypedData(domain,purchaseTypes,quote,signature),authority.address);

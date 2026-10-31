@@ -4,6 +4,7 @@ import { ledgerScale, levelPrice, maxReferralLevel } from "../../shared/compensa
 import { isReferralCode, normalizeReferralCode } from "../../shared/referral-code";
 import { db } from "./database";
 import { commissionQualification } from "./commission-qualification";
+import { referralPurchaseAccess } from "./referral-purchase-access";
 export async function activeSponsor(code: string) {
     if (!isReferralCode(code)) return;
     code = normalizeReferralCode(code);
@@ -40,7 +41,7 @@ export async function referralProgram(userId: string): Promise<ReferralProgram> 
     const level = Math.max(chain!.level, purchase?.level ?? (row.code ? 1 : 0));
     const settings = await db().one("SELECT fee_recipient_address FROM platform_settings WHERE id = 1") as { fee_recipient_address: string };
     const autoUpgrade = await db().one<{ level: number; kind: 'upgrade' | 'rebirth'; status: string; lastError: string | null }>("SELECT level,kind,status,last_error AS \"lastError\" FROM referral_auto_upgrades WHERE user_id = $1 AND status IN ('queued','pending') ORDER BY kind,level,created_at LIMIT 1", userId);
-    return { commissionQualification:await commissionQualification(userId),autoUpgrade: autoUpgrade ?? null, price: referralPrice, code: row.code, activatedAt: row.activatedAt, transactionId: row.transactionId,
+    return { purchaseAccess: await referralPurchaseAccess(userId),commissionQualification:await commissionQualification(userId),autoUpgrade: autoUpgrade ?? null, price: referralPrice, code: row.code, activatedAt: row.activatedAt, transactionId: row.transactionId,
         currentLevel: level, maxLevel: maxReferralLevel, nextLevel: level < maxReferralLevel ? level + 1 : null,
         nextPrice: level < maxReferralLevel ? levelPrice(level + 1) : null, feeConfigured: !!settings.fee_recipient_address,
         latestPurchase: purchase ? { level: purchase.level, amount: purchase.amount / ledgerScale,

@@ -1,4 +1,4 @@
-# Binary matrix and unilevel payments (distribution version 3)
+# Binary matrix and unilevel payments (distribution version 5)
 
 [ภาษาไทย](th/matrix-payments.md) · [Documentation index](README.md) · [Deploy contracts](en/deploy-contracts.md)
 
@@ -6,6 +6,38 @@ Level 1 costs 10 token units. Each subsequent level doubles, up to level 15.
 Members can purchase the next level themselves or receive a wallet-funded
 automatic upgrade after completing a paid matrix slot or unilevel tree. The supplied deployment uses
 Amoy test tokens.
+
+## Ref ID required before purchase
+
+Members must connect a valid ref ID before activating, buying another level,
+or paying for a reborn. The frontend disables purchase controls and shows the
+ref ID form. The backend checks the stored sponsor before creating a quote or
+debiting funds, including automatic purchases; submitted member IDs, sponsor
+fields and exemption flags cannot override the account's stored identity.
+Invalid, self-referencing, inactive and circular ref ID links are rejected by
+the existing sponsor-link endpoint.
+
+Member ID **1** is exempt by default. Configure the server-only
+`NUXT_REFERRAL_SPONSOR_EXEMPT_MEMBER_IDS=1` in `.env` (or `.env.mainnet`). A
+comma-separated value such as `1,7` replaces the allowlist; an empty value
+requires a ref ID for everyone. IDs are numeric public member IDs, not account
+UUIDs or wallet addresses. Restart the app after changing this setting.
+
+The version-5 contract requires a nonzero sponsor address or `sponsorExempt`
+in the authority-signed EIP-712 purchase quote. The authority resolves this
+exemption from the stored member ID and server configuration, just as it
+attests off-chain placement and qualification. The signature binds the buyer,
+sponsor and exemption; changing any of them invalidates the quote. Existing
+issued quotes keep their signed policy until expiry. A linked sponsor needs a
+wallet for the selected payment mode before a contract quote can be signed.
+
+Deploy a **new version-5 distributor**, point the app at its address, and
+rebuild/restart to enforce this check on chain. Existing contracts are not
+upgradeable. Finish pending transactions on the old distributor first; past
+receipts retain their original ABI for reconciliation. Members must approve
+the replacement distributor. This source change does not broadcast a
+deployment. A missing ref ID prevents payment; purchase funds are not debited
+or put into escrow.
 
 ## Trees and slots
 

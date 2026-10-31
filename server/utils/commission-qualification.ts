@@ -8,7 +8,7 @@ export async function paidReferralCount(userId: string, database = db()) {
 
 // The quote authority attests historical paid direct referrals. New first
 // activations are also counted on chain, independently of receipt polling order.
-export async function commissionAuthorization(userId: string, recipients: { userId: string | null }[], mode: "external" | "embedded", firstActivation: boolean, database = db()) {
+export async function commissionAuthorization(userId: string, recipients: { userId: string | null }[], mode: "external" | "embedded", firstActivation: boolean, database = db(), sponsorExempt = false) {
   const table = mode === "external" ? "connected_wallets" : "evm_wallets";
   const sponsor = await database.one<{ id: string; address: string | null }>(`SELECT u.sponsor_id AS id,w.address FROM users u
     LEFT JOIN ${table} w ON w.user_id=u.sponsor_id WHERE u.id=$1`,userId);
@@ -19,7 +19,7 @@ export async function commissionAuthorization(userId: string, recipients: { user
   let qualifiedMask = 0;
   recipients.forEach((row,index)=>{if (row.userId && count(row.userId)>=2) qualifiedMask |= 1 << index;});
   if (sponsor?.id && count(sponsor.id)+(firstActivation ? 1 : 0)>=2) qualifiedMask |= 1 << 18;
-  return { sponsor: sponsor?.address ? getAddress(sponsor.address) : ZeroAddress, qualifiedMask };
+  return { sponsor: sponsor?.address ? getAddress(sponsor.address) : ZeroAddress, qualifiedMask, sponsorExempt };
 }
 
 export async function commissionQualification(userId: string, database = db()) {

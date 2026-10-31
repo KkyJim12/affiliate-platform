@@ -21,7 +21,7 @@ async function fixture({ confirmations = 1, funds = 100n, decimals = 6 } = {}) {
   const client = new ReferralChainClient(config, provider);
   const uplines = Array(18).fill(ZeroAddress);
   const quote = { id: id(`library-${Math.random()}`), buyer: buyer.address, level: 1, previousLevel: 0, uplinesHash: uplineHash(uplines), feeRecipient: fee.address,
-    configNonce: '0', deadline: (await provider.getBlock('latest')).timestamp + 3600, matrixCycle: ZeroHash, sponsor: ZeroAddress, qualifiedMask:(1<<19)-1 };
+    configNonce: '0', deadline: (await provider.getBlock('latest')).timestamp + 3600, matrixCycle: ZeroHash, sponsor: ZeroAddress, qualifiedMask:(1<<19)-1, sponsorExempt:true };
   const payload = { createdBlock: (await provider.getBlock('latest')).number, quote, uplines, recipients: uplines.map(() => ({ userId: null, reason: 'missing_upline' })), signature: await client.sign(quote) };
   return { connection, provider, buyer, token, contract, client, payload, fee, config, close: async () => { provider.destroy(); await connection.close(); } };
 }
