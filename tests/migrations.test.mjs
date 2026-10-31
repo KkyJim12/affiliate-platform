@@ -131,7 +131,7 @@ test("rebirth charging migration preserves existing open slots and queued upgrad
   assert.deepEqual(await db.one("SELECT level,kind,status FROM referral_auto_upgrades"),{level:2,kind:'upgrade',status:'queued'});
 }));
 
-test("rebirth payouts use the new slot's parents while the other program keeps its own paid position",()=>isolated(async db=>{
+test("each program's rebirth creates and pays distinct linked entries in both trees",()=>isolated(async db=>{
   await migrate(db.pool,sources);
   for(const member of ['route-root','route-left','route-right','route-buyer']) {
     await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,$2,'2026-10-29')",member,member==='route-root'?null:'route-root');
@@ -145,18 +145,96 @@ test("rebirth payouts use the new slot's parents while the other program keeps i
     await db.execute("SELECT place_program_slot('route-root',1,$1,1)",program);
     // Imported already-paid sponsor cycle; the buyer's new cycle is still unpaid.
     await db.execute(`UPDATE ${program}_slots SET rebirth_paid=TRUE,unlocked=TRUE WHERE user_id='route-root' AND level=1 AND cycle=1`);
+  }
+  const original={};
+  for(const program of ['matrix','unilevel']) original[program]=await db.one(`SELECT parent_id,branch FROM ${program}_slots WHERE user_id='route-buyer' AND level=1 AND cycle=0`);
+  const jobs=[];
+  for(const program of ['matrix','unilevel']) {
     await db.execute(`UPDATE ${program}_slots SET completed_at='2026-10-29' WHERE user_id='route-buyer' AND level=1 AND cycle=0`);
     const completion=program==='matrix'?'matrix:1:route-buyer:0':'unilevel:1:route-buyer';
     await db.execute("SELECT queue_referral_upgrade($1,'route-buyer',1,$2,$3)",completion,program,program==='matrix'?completion:null);
-    await db.execute("SELECT place_program_slot('route-buyer',1,$1,1)",program);
     const charge=await db.one("SELECT * FROM referral_auto_upgrades WHERE cycle_id=$1",`rebirth:${completion}`);
+    jobs.push(charge);
+    assert.equal(charge.rebirth_cycle,jobs.length,'Each completion gets fresh cycles, including when the other program completed first');
     const recipients=await db.transaction(()=>rebirthRecipients(charge,'ledger',db));
-    assert.deepEqual(recipients.slice(program==='matrix'?0:3,program==='matrix'?3:6).map(row=>row.userId),['route-root',null,null]);
-    // The matrix rebirth has not been paid; it cannot replace the paid initial
-    // matrix position when the independent unilevel rebirth is distributed.
-    if(program==='matrix') assert.deepEqual(recipients.slice(3,6).map(row=>row.userId),['route-left','route-root',null]);
-    else assert.deepEqual(recipients.slice(0,3).map(row=>row.userId),['route-left','route-root',null]);
+    assert.deepEqual(recipients.slice(0,3).map(row=>row.userId),['route-root',null,null]);
+    assert.deepEqual(recipients.slice(3,6).map(row=>row.userId),['route-root',null,null]);
+    await db.execute("SELECT queue_referral_upgrade($1,'route-buyer',1,$2,$3)",completion,program,program==='matrix'?completion:null);
+    assert.equal((await db.one("SELECT COUNT(*) AS count FROM referral_rebirth_entries")).count,jobs.length,'Retries keep the same pair');
   }
+  for(const program of ['matrix','unilevel']) {
+    assert.deepEqual(await db.all(`SELECT cycle,opened,unlocked,rebirth_paid FROM ${program}_slots WHERE user_id='route-buyer' AND level=1 AND cycle>0 ORDER BY cycle`),[
+      {cycle:1,opened:true,unlocked:false,rebirth_paid:false},{cycle:2,opened:true,unlocked:false,rebirth_paid:false},
+    ]);
+  }
+  // Settling one payment opens both of its entries, without paying the next pair.
+  await db.transaction(()=>completeRebirth(jobs[0],db));
+  await db.transaction(()=>completeRebirth(jobs[0],db));
+  for(const program of ['matrix','unilevel']) {
+    assert.deepEqual(await db.all(`SELECT cycle,unlocked,rebirth_paid FROM ${program}_slots WHERE user_id='route-buyer' AND level=1 AND cycle>0 ORDER BY cycle`),[
+      {cycle:1,unlocked:true,rebirth_paid:true},{cycle:2,unlocked:false,rebirth_paid:false},
+    ]);
+  }
+  await db.transaction(()=>completeRebirth(jobs[1],db));
+  for(const program of ['matrix','unilevel']) {
+    assert.deepEqual(await db.one(`SELECT parent_id,branch FROM ${program}_slots WHERE user_id='route-buyer' AND level=1 AND cycle=0`),original[program]);
+    assert.equal((await db.one(`SELECT COUNT(*) AS count FROM ${program}_slots WHERE user_id='route-buyer' AND level=1 AND rebirth_paid AND unlocked`)).count,2);
+  }
+}));
+
+test('linked rebirth entries keep separate cycle numbers and never reuse an existing paid position',()=>isolated(async db=>{
+  await migrate(db.pool,sources);
+  await db.execute("INSERT INTO users VALUES('pair-cycles','pair-cycles','hash','pair-cycles',NULL,'2026-10-31')");
+  await db.transaction(()=>unlockMatrixLevel('pair-cycles',1,db));
+  await db.execute("UPDATE matrix_slots SET completed_at='2026-10-31' WHERE user_id='pair-cycles' AND level=1 AND cycle=0");
+  await db.execute("SELECT place_program_slot('pair-cycles',1,'matrix',1)");
+  await db.execute("UPDATE matrix_slots SET rebirth_paid=TRUE,unlocked=TRUE WHERE user_id='pair-cycles' AND level=1 AND cycle=1");
+  const completion='unilevel:1:pair-cycles';
+  await db.execute("UPDATE unilevel_slots SET completed_at='2026-10-31' WHERE user_id='pair-cycles' AND level=1 AND cycle=0");
+  await db.execute("SELECT queue_referral_upgrade($1,'pair-cycles',1,'unilevel')",completion);
+  assert.deepEqual(await db.one('SELECT matrix_slot_id,unilevel_slot_id FROM referral_rebirth_entries WHERE rebirth_id=$1',`rebirth:${completion}`),
+    {matrix_slot_id:'matrix:1:pair-cycles:2',unilevel_slot_id:'unilevel:1:pair-cycles:1'});
+  assert.deepEqual(await db.one("SELECT unlocked,rebirth_paid FROM matrix_slots WHERE id='matrix:1:pair-cycles:1'"),{unlocked:true,rebirth_paid:true});
+  const job=await db.one('SELECT * FROM referral_auto_upgrades WHERE cycle_id=$1',`rebirth:${completion}`);
+  await db.transaction(()=>completeRebirth(job,db));
+  for(const [program,cycle] of [['matrix',2],['unilevel',1]]) assert.deepEqual(await db.one(`SELECT unlocked,rebirth_paid FROM ${program}_slots WHERE user_id='pair-cycles' AND level=1 AND cycle=$1`,cycle),{unlocked:true,rebirth_paid:true});
+}));
+
+test('linked rebirths follow the original paid inviter at higher levels and remain roots without an inviter',()=>isolated(async db=>{
+  await migrate(db.pool,sources);
+  for(const [member,sponsor] of [['pair-root',null],['pair-unpaid','pair-root'],['pair-owner','pair-unpaid'],['pair-alone',null]]) {
+    await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,$2,'2026-10-31')",member,sponsor);
+    if(member!=='pair-unpaid') await db.transaction(()=>unlockMatrixLevel(member,2,db));
+  }
+  for(const [member,program] of [['pair-owner','matrix'],['pair-alone','unilevel']]) {
+    const completion=program==='matrix'?`matrix:2:${member}:0`:`unilevel:2:${member}`;
+    await db.execute(`UPDATE ${program}_slots SET completed_at='2026-10-31' WHERE user_id=$1 AND level=2 AND cycle=0`,member);
+    await db.transaction(()=>db.execute('SELECT queue_referral_upgrade($1,$2,2,$3,$4)',completion,member,program,program==='matrix'?completion:null));
+    for(const target of ['matrix','unilevel']) {
+      assert.deepEqual(await db.one(`SELECT parent_id,opened,unlocked FROM ${target}_slots WHERE user_id=$1 AND level=2 AND cycle=1`,member),
+        {parent_id:member==='pair-alone'?null:`${target}:2:pair-root:0`,opened:true,unlocked:false});
+    }
+  }
+}));
+
+test('linked rebirth migration preserves routing and settlement of outstanding legacy quotes',()=>isolated(async db=>{
+  await migrate(db.pool,sources.filter(item=>item.name<'0021_'));
+  for(const [member,sponsor] of [['old-pair-root',null],['old-pair-owner','old-pair-root']]) {
+    await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,$2,'2026-10-31')",member,sponsor);
+    await db.execute('INSERT INTO wallets(id,user_id) VALUES($1,$2)',`w-${member}`,member);
+    await db.transaction(()=>unlockMatrixLevel(member,1,db));
+  }
+  const completion='matrix:1:old-pair-owner:0';
+  await db.execute("UPDATE matrix_slots SET completed_at='2026-10-31' WHERE id=$1",completion);
+  await db.execute("SELECT queue_referral_upgrade($1,'old-pair-owner',1,'matrix',$1)",completion);
+  await db.execute("SELECT place_program_slot('old-pair-owner',1,'matrix',1)");
+  await migrate(db.pool,sources);
+  const job=await db.one('SELECT * FROM referral_auto_upgrades WHERE cycle_id=$1',`rebirth:${completion}`);
+  const recipients=await db.transaction(()=>rebirthRecipients(job,'ledger',db));
+  assert.equal(recipients[0].userId,'old-pair-root');assert.equal(recipients[3].userId,'old-pair-root');
+  await db.transaction(()=>completeRebirth(job,db));
+  assert.equal((await db.one("SELECT unlocked FROM matrix_slots WHERE user_id='old-pair-owner' AND level=1 AND cycle=1")).unlocked,true);
+  assert.equal((await db.one("SELECT COUNT(*) AS count FROM unilevel_slots WHERE user_id='old-pair-owner' AND level=1 AND cycle>0")).count,0);
 }));
 
 test("existing Amoy paid databases cannot be reopened as mainnet databases",()=>isolated(async db=>{

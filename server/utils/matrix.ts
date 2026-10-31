@@ -28,11 +28,15 @@ export async function unlockMatrixLevel(userId: string, level: number, database 
     for (const slot of full) {
       await database.execute("UPDATE matrix_slots SET completed_at = $1 WHERE id = $2 AND completed_at IS NULL", now, slot.id);
       await database.execute("SELECT queue_referral_upgrade($1,$2,$3,'matrix',$1)",slot.id,slot.user_id,slot.level);
-      // Reserved overflow is opened strictly in cycle order after paid completion.
+      // The other program can already have created a linked cycle. Use the
+      // cycle reserved for this completion, retaining pre-payment migrations.
+      const next = await database.one<{ cycle: number }>(`SELECT COALESCE((
+        SELECT (to_jsonb(j)->>'rebirth_cycle')::INTEGER FROM referral_auto_upgrades j WHERE cycle_id=$1
+      ),$2::INTEGER) AS cycle`, `rebirth:${slot.id}`,slot.cycle + 1);
       await database.execute(`INSERT INTO matrix_slots(id,user_id,level,cycle,unlocked,created_at) VALUES($1,$2,$3,$4,TRUE,$5)
         ON CONFLICT(user_id,level,cycle) DO UPDATE SET opened = TRUE,unlocked = TRUE`,
-        `matrix:${slot.level}:${slot.user_id}:${slot.cycle + 1}`,slot.user_id,slot.level,slot.cycle + 1,now);
-      await database.execute("SELECT place_program_slot($1,$2,'matrix',$3)",slot.user_id,slot.level,slot.cycle + 1);
+        `matrix:${slot.level}:${slot.user_id}:${next!.cycle}`,slot.user_id,slot.level,next!.cycle,now);
+      await database.execute("SELECT place_program_slot($1,$2,'matrix',$3)",slot.user_id,slot.level,next!.cycle);
       affected.add(slot.user_id);
     }
   }
@@ -83,6 +87,11 @@ export interface ReferralJob {
 }
 
 export async function rebirthRecipients(job: ReferralJob, mode: "external" | "embedded" | "ledger", database = db()) {
+  const entries = await database.one<{ matrix: number; unilevel: number }>(`SELECT m.cycle AS matrix,u.cycle AS unilevel
+    FROM referral_rebirth_entries e JOIN matrix_slots m ON m.id=e.matrix_slot_id
+    JOIN unilevel_slots u ON u.id=e.unilevel_slot_id WHERE e.rebirth_id=$1`,job.cycle_id);
+  if (entries) return referralRecipients(job.user_id,job.level,mode,database,entries);
+  // Quotes queued before linked rebirths retain their original recipients.
   const cycles = { matrix: 0, unilevel: 0 };
   for (const program of ["matrix", "unilevel"] as const) {
     cycles[program] = program === job.source ? job.rebirth_cycle! : (await database.one<{ cycle: number }>(
@@ -93,6 +102,13 @@ export async function rebirthRecipients(job: ReferralJob, mode: "external" | "em
 
 export async function completeRebirth(job: ReferralJob, database = db()) {
   await database.execute("UPDATE referral_auto_upgrades SET status='completed',last_error=NULL WHERE cycle_id=$1",job.cycle_id);
-  await database.execute(`UPDATE ${job.source}_slots SET unlocked=TRUE,rebirth_paid=TRUE WHERE user_id=$1 AND level=$2 AND cycle=$3`,job.user_id,job.level,job.rebirth_cycle);
+  const entries = await database.one<{ matrix_slot_id: string; unilevel_slot_id: string }>(
+    "SELECT matrix_slot_id,unilevel_slot_id FROM referral_rebirth_entries WHERE rebirth_id=$1",job.cycle_id);
+  if (entries) {
+    await database.execute("UPDATE matrix_slots SET unlocked=TRUE,rebirth_paid=TRUE WHERE id=$1",entries.matrix_slot_id);
+    await database.execute("UPDATE unilevel_slots SET unlocked=TRUE,rebirth_paid=TRUE WHERE id=$1",entries.unilevel_slot_id);
+  } else {
+    await database.execute(`UPDATE ${job.source}_slots SET unlocked=TRUE,rebirth_paid=TRUE WHERE user_id=$1 AND level=$2 AND cycle=$3`,job.user_id,job.level,job.rebirth_cycle);
+  }
   await unlockMatrixLevel(job.user_id,job.level,database);
 }

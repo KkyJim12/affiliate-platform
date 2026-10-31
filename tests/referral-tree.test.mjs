@@ -16,6 +16,13 @@ test('branch exploration and tree paths preserve depth',()=>{
  const {nodes}=layoutReferralTree(fixture([member('2','0','1'),member('4','0/0','2')],2,'0'),0,2000);
  assert.equal(nodes[0].member.id,'2');assert.equal(nodes.find(n=>n.path==='0/0').parent.path,'0');
 });
+test('reborn member IDs remain separate nodes at each branch path',()=>{
+ const tree=fixture([member('2','0','1'),member('2','1','1'),member('3','0/0','2'),member('4','1/0','2')]);
+ const {nodes}=layoutReferralTree(tree,0,3000);
+ assert.deepEqual(nodes.filter(n=>n.member?.id==='2').map(n=>n.path),['0','1']);
+ assert.equal(nodes.find(n=>n.member?.id==='3').parent.path,'0');
+ assert.equal(nodes.find(n=>n.member?.id==='4').parent.path,'1');
+});
 test('fifteen-step unilevel previews stay virtualized while matrix has four total rows',()=>{
  assert.equal(layoutReferralTree(fixture(),0,1000).nodes.length,15);
  const full=fixture([],15);const middle=layoutReferralTree(full,2_000_000,2_001_000);

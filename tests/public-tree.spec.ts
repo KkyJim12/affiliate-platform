@@ -42,6 +42,36 @@ async function slotFixture() {
   } finally {await db.close();}
 }
 
+test('a matrix reborn appears as the same member ID on a second branch in both program trees',async({page,request},info)=>{
+  test.skip(info.project.name!=='desktop');
+  const root=await fixture(true),db=openTestDatabase(),child=randomUUID();
+  try {
+    const row=await db.one("INSERT INTO users VALUES($1,$2,'hash',$1,$3,$4) RETURNING referral_code",child,`linked_${child.slice(0,8)}`,root.id,new Date().toISOString());
+    for(const program of ['matrix','unilevel']) await db.execute(`UPDATE ${program}_slots SET unlocked=TRUE WHERE user_id=$1 AND level=1 AND cycle=0`,child);
+    const completion=`matrix:1:${child}:0`;
+    await db.transaction(async()=>{
+      await db.execute('UPDATE matrix_slots SET completed_at=$1 WHERE id=$2',new Date().toISOString(),completion);
+      await db.execute("SELECT queue_referral_upgrade($1,$2,1,'matrix',$1)",completion,child);
+    });
+    for(const mode of ['matrix','unilevel']) {
+      const response=await request.get(`/api/referrals/tree?id=${root.memberId}&mode=${mode}`);
+      expect(response.status()).toBe(200);
+      const tree=await response.json();
+      expect(tree.members.filter((member:{id:string})=>member.id===row!.referral_code).map((member:{path:string;purchased:boolean})=>({path:member.path,purchased:member.purchased})))
+        .toEqual([{path:'0',purchased:true},{path:'1',purchased:false}]);
+      const catalog=await (await request.get(`/api/referrals/public-slots?id=${row!.referral_code}&mode=${mode}&level=1`)).json();
+      expect(catalog.items.map((slot:{cycle:number})=>slot.cycle)).toEqual([0,1]);
+    }
+    await page.goto(`/search?id=${root.memberId}`);
+    await openInitialSlot(page);
+    const tree=page.getByTestId('binary-referral-tree');
+    await expect(tree.locator(`[data-tree-node][data-member-id="${row!.referral_code}"]`)).toHaveCount(2);
+    await page.getByRole('button',{name:'Unilevel',exact:true}).click();
+    await page.locator('[data-testid="unilevel-slot-card"][data-level="1"][data-cycle="0"]').click();
+    await expect(tree.locator(`[data-tree-node][data-member-id="${row!.referral_code}"]`)).toHaveCount(2);
+  } finally {await db.close();}
+});
+
 test('public slot catalogs show the requested member, validate pagination, and keep account data private',async({request},info)=>{
   test.skip(info.project.name!=='desktop');
   const root=await slotFixture(),other=await fixture(),db=openTestDatabase();

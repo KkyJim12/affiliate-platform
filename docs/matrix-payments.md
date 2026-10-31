@@ -20,9 +20,17 @@ remains unchanged when an invitation spills over beneath another member.
   after the owner and all fourteen positions purchase that level.
 - **Unilevel:** two children per slot with breadth-first spillover at each purchase level.
   Payments and the tree view cover fifteen ancestors, starting with the buyer's
-  placement parent. Its slots and rebirths are independent of matrix cycles.
+  placement parent. Its progress is tracked separately from matrix cycles.
   A full fifteen-row binary tree contains 65,534 descendants; its owner and
   every descendant must own the same purchase level to complete it.
+
+A new rebirth from either program adds a same-level branch in **both** trees.
+Both positions follow the original ref ID connection using each program's
+placement rules. The same member ID can therefore appear at multiple paths in
+a tree; each path is a separate slot. Existing branches stay in place. One
+rebirth payment activates both linked entries; creating the companion entry
+does not charge again or queue another level upgrade. Cycle numbers are
+assigned separately in each program and can differ.
 
 Registration previews level 1 in both programs and creates empty higher-level
 cards. Higher-level cards reserve no position. When a member enters a level,
@@ -74,7 +82,8 @@ Members who have not purchased the selected level carry a "Not purchased yet"
 tag. Tree counts show paid
 positions. Registration alone does not open a rebirth or trigger an upgrade.
 Reserved future cycles stay out of the slot list and public cycle selector
-until the preceding cycle completes with all fourteen positions and its owner paid.
+until their own program completes or a completion in the other program opens
+a linked rebirth entry.
 
 The owner's root remains visible for context. Level 1 retains unpaid members
 and their connections. New higher-level entries skip unpaid inviters; historical
@@ -196,11 +205,11 @@ Each rebirth is a separate payment at the full source-level price: level 1
 costs 10 tokens, level 2 costs 20, level 3 costs 40, doubling through level 15.
 The member's wallet is debited once, and the price pays the new slot's parent
 chain using the existing 10% / 20% / 50% matrix, fifteen 1% unilevel and 5%
-platform shares. The other program uses its latest paid, opened slot at this
-level. Missing or ineligible parents still pay the platform. The rebirth stays
-unpaid until settlement; it cannot count as a paid parent or complete again.
+platform shares. Both programs use their newly linked positions for this
+payment. Missing or ineligible parents still pay the platform. Both entries stay
+unpaid until settlement; they cannot count as paid parents or complete again.
 Reserved future cycles also stay unpaid until their own rebirth charges settle.
-Each rebirth can fill and complete again.
+Each linked entry can fill and complete again under its own program's rules.
 Prepaid reserved cycles are checked in order when opened; each must satisfy
 the same paid completion rule before the following rebirth opens.
 
@@ -212,7 +221,7 @@ reserved level first, that job is superseded without a duplicate charge.
 
 The unilevel tree completes once per paid level when its owner and all 65,534
 descendants within fifteen rows own that level. It queues the next unowned level
-through the same worker and opens its next same-level unilevel slot using the
+through the same worker and opens new same-level slots in both programs using the
 same invitation-chain rule. Later level entries follow their slot's fifteen parent steps
 at 1% each. Completed unilevel slots keep their existing descendants.
 Neither program purchases level 16; matrix rebirths continue at the maximum.
@@ -237,6 +246,12 @@ charges. Contract payments require a newly deployed distributor exposing
 with a deployment message. Build and restart the app after migration and update
 its contract configuration after deployment. No live deployment is performed by
 this source change.
+
+Migration `0021_linked_program_rebirths.sql` links both positions for new
+completions. Existing rebirth jobs retain their original recipients and
+settlement behavior, preserving outstanding signed quotes and past payments.
+Apply the migration and rebuild/restart the app together. No contract change
+is required for linked placement.
 
 The `rebirth` contract method spends a signed completion once independently
 from `autoUpgrade`, charges the source-level price and preserves the buyer's
