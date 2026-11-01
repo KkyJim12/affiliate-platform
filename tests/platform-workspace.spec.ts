@@ -184,7 +184,7 @@ test("landing launches the app, every FAQ is Thai, and invite codes are always v
 test("recent sends is styled inside the overview column and absent from the EVM wallet page", async ({ page }, info) => {
   test.skip(!external, "Connected-wallet layout regression.");
   const password = "A recent sends test password 42!";
-  const memberId = createTestAdmin(password);
+  const memberId = await createTestAdmin(password);
   const database = openTestDatabase(), wallet = Wallet.createRandom().address, recipient = Wallet.createRandom().address;
   try {
     const user = await database.one("SELECT id FROM users WHERE referral_code = $1", memberId);

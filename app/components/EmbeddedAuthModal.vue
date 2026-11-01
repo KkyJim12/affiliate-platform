@@ -37,7 +37,7 @@ async function submit() {
     password.value = "";
     confirmation.value = "";
     authOpen.value = false;
-    notify(mode.value === "register" ? t('profile.accountCreated', { memberId: useAccount().user.value?.memberId }) : "Welcome back to your loop.");
+    notify(mode.value === "register" ? (useAccount().user.value?.memberId ? t('profile.accountCreated', { memberId: useAccount().user.value?.memberId }) : t('profile.accountCreatedPending')) : "Welcome back to your loop.");
     await navigateTo(incomingReferral ? "/referrals" : "/dashboard");
   } catch (err) {
     const failure = err as { data?: { statusMessage?: string } };

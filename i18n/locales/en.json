@@ -115,7 +115,8 @@
   "profile": {
     "adminPasswordRequired": "Sign in to admin with your member ID and password.",
     "memberIdHint": "Your member ID is assigned automatically and cannot be changed.",
-    "autoIdHint": "Choose a password. Your member ID will be assigned automatically.",
+    "autoIdHint": "Your Member ID stays blank until your first confirmed purchase. Only the first account receives ID 1 at signup.",
+    "accountCreatedPending": "Account created. Your Member ID will be assigned after your first confirmed purchase.",
     "accountCreated": "Account ready. Your member ID is {memberId}."
   },
   "connected": {

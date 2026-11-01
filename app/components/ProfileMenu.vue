@@ -119,14 +119,14 @@ onBeforeUnmount(() => {
 <template>
   <div v-if="user" class="profile-menu">
     <button :id="triggerId" ref="trigger" type="button" class="profile-menu-trigger" :class="{ active: open }"
-      :aria-label="t('profileMenu.open', { memberId: user.memberId })" :aria-describedby="balanceId" aria-haspopup="menu" :aria-expanded="open" :aria-controls="open ? menuId : undefined"
+      :aria-label="user.memberId ? t('profileMenu.open', { memberId: user.memberId }) : t('profileMenu.account')" :aria-describedby="balanceId" aria-haspopup="menu" :aria-expanded="open" :aria-controls="open ? menuId : undefined"
       @click="open ? close() : show()" @keydown.down.prevent="show()" @keydown.up.prevent="show(true)">
       <span :id="balanceId" class="profile-menu-balance" :title="balanceTitle" :aria-busy="balanceLoading" data-testid="profile-usdt-balance"><strong>{{ formattedBalance }}</strong> <small>{{ symbol }}</small></span>
       <span class="profile-menu-avatar" aria-hidden="true">{{ user.memberId.slice(0, 2).toUpperCase() }}</span><AppIcon class="profile-menu-chevron" name="ChevronDown" :size="12" />
     </button>
     <Teleport to="body"><Transition name="dropdown" @before-leave="retire">
       <div v-if="open" :id="menuId" ref="menu" class="profile-menu-panel" role="menu" :aria-labelledby="triggerId" :style="menuStyle" @keydown="onMenuKeydown">
-        <div class="profile-menu-heading" role="presentation"><strong>ID {{ user.memberId }}</strong><span>{{ t('profileMenu.account') }}</span></div>
+        <div class="profile-menu-heading" role="presentation"><strong>{{ user.memberId ? 'ID ' + user.memberId : '' }}</strong><span>{{ t('profileMenu.account') }}</span></div>
         <AccountWalletSummary menu />
         <div class="profile-menu-actions" role="presentation">
           <NuxtLink role="menuitem" class="profile-menu-action" to="/wallet" @click="close()"><AppIcon name="Wallet" :size="17" />{{ t('profileMenu.wallet') }}</NuxtLink>

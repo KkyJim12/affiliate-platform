@@ -36,7 +36,7 @@ export default defineEventHandler(async event => {
       const sponsor = challenge.sponsor_code ? await activeSponsor(challenge.sponsor_code) : undefined;
       if (challenge.sponsor_code && !sponsor) throw createError({ statusCode: 400, statusMessage: "That invite code was not found. Check it or leave it blank." });
       owner = { id: randomUUID(), username: `w_${randomBytes(9).toString("hex")}`, password_hash: unusablePassword,
-        referral_code: `UNASSIGNED-${randomUUID()}`, sponsor_id: sponsor?.id ?? null, created_at: new Date().toISOString(), role: "member" };
+        referral_code: null, sponsor_id: sponsor?.id ?? null, created_at: new Date().toISOString(), role: "member" };
       await db().execute("INSERT INTO users (id,username,password_hash,referral_code,sponsor_id,created_at) VALUES ($1,$2,$3,$4,$5,$6)",
         owner.id, owner.username, owner.password_hash, owner.referral_code, owner.sponsor_id, owner.created_at);
       await db().execute("INSERT INTO wallets (id,user_id) VALUES ($1,$2)", `LW-${randomUUID()}`, owner.id);

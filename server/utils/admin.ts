@@ -21,7 +21,7 @@ export function listQuery(event: H3Event) {
     const search = String(query.search || "").trim().slice(0, 64);
     return { page, pageSize: 12, search, status: String(query.status || "all") };
 }
-export const paymentSelect = `SELECT t.id, u.referral_code AS "memberId", w.id AS "walletId", t.amount,
+export const paymentSelect = `SELECT t.id, COALESCE(u.referral_code, '') AS "memberId", w.id AS "walletId", t.amount,
   CASE WHEN r.decision = 'rejected' THEN 'rejected' ELSE t.status END AS status,
   t.created_at AS "createdAt", r.reference, r.note, a.referral_code AS "reviewedBy", r.created_at AS "reviewedAt"
   FROM wallet_transactions t JOIN wallets w ON w.id = t.wallet_id JOIN users u ON u.id = w.user_id

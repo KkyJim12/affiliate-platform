@@ -24,7 +24,7 @@ Access notation below: **P** public/no session, **M** active signed-in account, 
 | GET | `/api/auth/session` | P / Any | `{ user: Account or null }` |
 | POST | `/api/auth/wallet/challenge` | P for login, M for link / X | `{address,purpose?,sponsorCode?}` → `{id,message}`; purpose defaults to `login`, or `link`; five-minute challenge |
 | POST | `/api/auth/wallet/verify` | Signature; M for link / X | `{id,signature}` → `{user}` and session cookie; creates an unknown member wallet account when registration is open |
-| POST | `/api/auth/register` | P / E+C | `{password,sponsorCode?}` → `{user}`, HTTP 201/session; server assigns `memberId` and creates encrypted wallet |
+| POST | `/api/auth/register` | P / E+C | `{password,sponsorCode?}` → `{user}`, HTTP 201/session; creates encrypted wallet; `memberId` is blank until the first confirmed purchase, except the first signup (ID `1`) |
 | POST | `/api/auth/login` | P / C | `{memberId,password}` → `{user}` and session; external linked accounts must use wallet login |
 | PATCH | `/api/auth/profile` | M / Any | Retained protected route; returns 409 because automatically assigned member IDs cannot be changed |
 | POST | `/api/auth/logout` | P / Any | No required body → `{success:true}`; revokes the supplied current session |
@@ -34,7 +34,7 @@ Access notation below: **P** public/no session, **M** active signed-in account, 
 | GET | `/api/platform/transactions` | P / Any | Public recorded activity for the configured distributor; filters below |
 | GET | `/api/platform/analytics` | P / Any | Aggregate accounts, confirmed purchases/distributions and 30-day activity |
 
-`Account` fields are `id` (internal UUID), `memberId` (numeric string), `referralCode` (null until activated), `sponsorCode`, `createdAt`, `role`. A public tree response does not expose the internal UUID. An admin cannot use a wallet login challenge to replace admin credential sign-in.
+`Account` fields are `id` (internal UUID), `memberId` (numeric string, or `""` before the first confirmed purchase), `referralCode` (null until activated), `sponsorCode`, `createdAt`, `role`. Only the first signup receives ID `1` immediately. The same rule applies to wallet registration. Pending, failed and unsigned purchases issue no ID; retries and later purchases retain the assigned ID. Existing IDs are preserved. A public tree response does not expose the internal UUID. An admin cannot use a wallet login challenge to replace admin credential sign-in.
 
 ## 3. Member, wallet and connected transactions — 18 routes
 

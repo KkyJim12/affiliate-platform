@@ -89,7 +89,7 @@ test("signed-in navbar shows the owner's wallet, supports keyboard dismissal, an
 });
 
 test("administrator profile menu links to admin settings and signs out to admin login", async ({ page }) => {
-  const adminMemberId = createTestAdmin(password);
+  const adminMemberId = await createTestAdmin(password);
   const memberId = adminMemberId;
   const login = await page.request.post("/api/admin/login", { headers: { Origin: origin }, data: { memberId: adminMemberId, password } });
   expect(login.status()).toBe(200);

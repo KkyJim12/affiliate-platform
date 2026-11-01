@@ -6,7 +6,7 @@ export interface UserRow {
     id: string;
     username: string;
     password_hash: string;
-    referral_code: string;
+    referral_code: string | null;
     sponsor_id: string | null;
     created_at: string;
     role?: "member" | "admin";
@@ -45,7 +45,7 @@ export async function accountFor(user: UserRow): Promise<Account> {
             referral_code: string;
         } | undefined
         : undefined;
-    return { id: user.id, memberId: identity!.referral_code, referralCode: activation ? identity!.referral_code : null, sponsorCode: sponsor?.referral_code || null, createdAt: user.created_at, role: user.role || "member" };
+    return { id: user.id, memberId: identity!.referral_code || "", referralCode: activation ? identity!.referral_code : null, sponsorCode: sponsor?.referral_code || null, createdAt: user.created_at, role: user.role || "member" };
 }
 export async function currentUser(event: H3Event): Promise<UserRow | undefined> {
     const token = getCookie(event, cookieName);

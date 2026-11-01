@@ -29,7 +29,7 @@ watch(() => props.open, () => { search.value = ''; page.value = 1; });
       <template v-else>
         <div class="direct-referrals-list" tabindex="0" role="region" :aria-label="t('directReferrals.memberList')">
           <table v-if="visible.length"><thead><tr><th>{{ t('publicTree.memberId') }}</th><th>{{ t('admin.joined') }}</th></tr></thead>
-            <tbody><tr v-for="member in visible" :key="member.memberId" data-testid="direct-referral-row"><td><strong>ID {{ member.memberId }}</strong></td><td>{{ formatDate(member.joinedAt) }}</td></tr></tbody>
+            <tbody><tr v-for="(member, index) in visible" :key="index" data-testid="direct-referral-row"><td><strong>ID {{ member.memberId }}</strong></td><td>{{ formatDate(member.joinedAt) }}</td></tr></tbody>
           </table>
           <p v-else class="direct-referrals-message">{{ t(search.trim() ? 'directReferrals.noMatches' : 'directReferrals.empty') }}</p>
         </div>

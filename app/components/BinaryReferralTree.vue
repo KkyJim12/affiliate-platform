@@ -113,7 +113,7 @@ const number = (value: number) => value.toLocaleString(localeTag.value);
             <rect :width="cardWidth" :height="cardHeight" rx="10" :fill="node.member ? 'var(--gold-soft)' : 'var(--surface)'" :stroke="node.member ? 'var(--gold-border)' : 'var(--border)'" :stroke-dasharray="node.member ? undefined : '4 4'" />
             <text x="12" y="19" font-size="9" fill="var(--text-secondary)">{{ t('publicTree.level', { level: node.depth }) }}</text>
             <foreignObject x="12" y="27" :width="cardWidth - 24" height="18">
-              <div class="binary-tree-node-id" :title="node.member ? t('publicTree.id') + ' ' + node.member.id : undefined">{{ t('publicTree.id') }} {{ node.member?.id || '—' }}</div>
+              <div class="binary-tree-node-id" :title="node.member ? t('publicTree.id') + ' ' + node.member.id : undefined">{{ t('publicTree.id') }} {{ node.member ? node.member.id : '—' }}</div>
             </foreignObject>
             <foreignObject v-if="node.member" x="8" y="49" :width="cardWidth - 16" height="24">
               <span class="binary-tree-purchase-tag" :class="{ 'is-paid': node.member.purchased }" :data-testid="node.member.purchased ? 'paid-tag' : 'not-purchased-tag'">{{ t(node.member.purchased ? 'publicTree.paid' : 'publicTree.notPurchased') }}</span>

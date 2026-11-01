@@ -25,7 +25,7 @@ async function gotoReady(page: Page, path: string) {
 test("admin authorization, settlement idempotency, rejection, suspension, and persisted controls", async ({ playwright }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "API coverage is shared between desktop and mobile.");
   const suffix = Date.now().toString(36);
-  const adminName = provisionAdmin();
+  const adminName = await provisionAdmin();
   const admin = await playwright.request.newContext({ baseURL: origin });
   const member = await playwright.request.newContext({ baseURL: origin });
   const guest = await playwright.request.newContext({ baseURL: origin });
@@ -101,7 +101,7 @@ test("admin authorization, settlement idempotency, rejection, suspension, and pe
 test("admin login and all management pages work in English, Thai, light and dark", async ({ page, playwright }, testInfo) => {
   test.setTimeout(60000);
   const suffix = Date.now().toString(36);
-  const adminName = provisionAdmin();
+  const adminName = await provisionAdmin();
   let memberName = `uimember_${suffix}`;
   const supportEmail = `help+${suffix}@example.com`;
   const member = await playwright.request.newContext({ baseURL: origin });

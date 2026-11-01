@@ -24,7 +24,7 @@
 | GET | `/api/auth/session` | P / ทุกโหมด | `{user: Account หรือ null}` |
 | POST | `/api/auth/wallet/challenge` | P เมื่อ login, M เมื่อ link / X | `{address,purpose?,sponsorCode?}` → `{id,message}`; purpose เริ่มต้น `login` หรือ `link`; อายุ 5 นาที |
 | POST | `/api/auth/wallet/verify` | ลายเซ็น; M เมื่อ link / X | `{id,signature}` → `{user}` และ session cookie; กระเป๋าสมาชิกใหม่สร้างบัญชีเมื่อเปิดสมัคร |
-| POST | `/api/auth/register` | P / E+C | `{password,sponsorCode?}` → `{user}`, HTTP 201/session; ระบบสร้าง `memberId` และกระเป๋าเข้ารหัส |
+| POST | `/api/auth/register` | P / E+C | `{password,sponsorCode?}` → `{user}`, HTTP 201/session; สร้างกระเป๋าเข้ารหัส โดย `memberId` ว่างจนกว่าการซื้อครั้งแรกจะยืนยัน ยกเว้นบัญชีแรกที่ได้ ID `1` เมื่อสมัคร |
 | POST | `/api/auth/login` | P / C | `{memberId,password}` → `{user}` และ session; external ที่ผูกแล้วต้องใช้ wallet login |
 | PATCH | `/api/auth/profile` | M / ทุกโหมด | Route เดิมที่ตรวจสิทธิ์ คืน 409 เพราะ ID ที่ระบบกำหนดแก้ไม่ได้ |
 | POST | `/api/auth/logout` | P / ทุกโหมด | ไม่บังคับ body → `{success:true}`; ยกเลิก session ปัจจุบันที่ส่งมา |
@@ -34,7 +34,7 @@
 | GET | `/api/platform/transactions` | P / ทุกโหมด | ธุรกรรม distributor ปัจจุบันที่บันทึกไว้ มีตัวกรองด้านล่าง |
 | GET | `/api/platform/analytics` | P / ทุกโหมด | บัญชีรวม การซื้อ/แบ่งจ่ายที่ confirmed และกิจกรรม 30 วัน |
 
-`Account` มี `id` เป็น UUID ภายใน, `memberId` เป็น numeric string, `referralCode` ซึ่งเป็น null ก่อนเปิด, `sponsorCode`, `createdAt`, `role` ผังสาธารณะไม่เปิด UUID ภายใน ผู้ดูแลใช้ wallet challenge มาแทน admin credential login ไม่ได้
+`Account` มี `id` เป็น UUID ภายใน, `memberId` เป็น numeric string หรือ `""` ก่อนการซื้อครั้งแรกยืนยัน, `referralCode` ซึ่งเป็น null ก่อนเปิด, `sponsorCode`, `createdAt`, `role` เฉพาะบัญชีแรกได้ ID `1` เมื่อสมัคร ทั้งการสมัครด้วยรหัสผ่านและกระเป๋าใช้กติกาเดียวกัน รายการที่รอลายเซ็น รอยืนยัน หรือล้มเหลวจะไม่ออก ID การลองใหม่และการซื้อครั้งถัดไปใช้ ID เดิม และ ID เดิมที่เคยออกแล้วจะไม่เปลี่ยน ผังสาธารณะไม่เปิด UUID ภายใน ผู้ดูแลใช้ wallet challenge มาแทน admin credential login ไม่ได้
 
 ## 3. สมาชิก กระเป๋า และธุรกรรม connected — 18 routes
 

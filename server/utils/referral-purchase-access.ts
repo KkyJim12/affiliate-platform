@@ -3,10 +3,10 @@ import { referralExemptMemberIds, type ReferralPurchaseAccess } from "../../shar
 import { db } from "./database.ts";
 
 export async function referralPurchaseAccess(userId: string, database = db(), exemptIds: string = useRuntimeConfig().referral.sponsorExemptMemberIds): Promise<ReferralPurchaseAccess> {
-  const member = await database.one<{ referral_code: string; sponsor_id: string | null }>(
+  const member = await database.one<{ referral_code: string | null; sponsor_id: string | null }>(
     "SELECT referral_code,sponsor_id FROM users WHERE id=$1", userId);
   if (!member) throw createError({ statusCode: 404, statusMessage: "Member not found." });
-  const exempt = referralExemptMemberIds(exemptIds).includes(member.referral_code);
+  const exempt = referralExemptMemberIds(exemptIds).includes(member.referral_code ?? "");
   const allowed = !!member.sponsor_id || exempt;
   return { allowed, exempt, requiresSponsor: !allowed };
 }

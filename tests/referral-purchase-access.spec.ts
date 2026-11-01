@@ -51,6 +51,7 @@ test('ref ID validation blocks forged requests and enables purchases after a val
       await db.execute("INSERT INTO wallet_transactions VALUES($1,(SELECT id FROM wallets WHERE user_id=$2),'referral_purchase',10000000,'completed','Historic test activation',$1,$3)",transaction,sponsor.id,new Date().toISOString());
       await db.execute('INSERT INTO referral_activations(user_id,transaction_id,created_at) VALUES($1,$2,$3)',sponsor.id,transaction,new Date().toISOString());
     }
+    sponsor.memberId=(await (await sponsorApi.get('/api/auth/session')).json()).user.memberId;
     const member=await register(page.request);await fund(page.request,member);
     const program=await (await page.request.get('/api/referrals/program')).json();
     expect(program.purchaseAccess).toEqual({allowed:false,exempt:false,requiresSponsor:true});
@@ -69,7 +70,7 @@ test('ref ID validation blocks forged requests and enables purchases after a val
     await expect(page.getByTestId('referral-required')).toBeVisible();
     const button=page.locator('.referral-unlock-button');
     await expect(button).toBeDisabled();
-    await page.locator('#referral-sponsor-code').fill(member.memberId);
+    await page.locator('#referral-sponsor-code').fill('0');
     await page.locator('.referral-sponsor-form button[type="submit"]').click();
     await expect(page.locator('.referral-sponsor-form [role="alert"]')).toBeVisible();
     await expect(button).toBeDisabled();

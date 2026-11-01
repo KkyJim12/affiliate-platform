@@ -10,7 +10,7 @@ export async function networkFor(event: H3Event, actor: UserRow, admin = false):
     const memberId = typeof query.memberId === "string" ? query.memberId.trim() : "";
     if (query.memberId !== undefined && !isMemberId(memberId))
         throw createError({ statusCode: 400, statusMessage: "Enter a valid numeric member ID." });
-    const root = await db().one(`SELECT id, referral_code AS "memberId", created_at AS "joinedAt" FROM users WHERE ${rootId ? "id = $1" : memberId ? "referral_code = $1" : "id = $1"}`, rootId || memberId || actor.id) as ExplorerNetwork["root"] | undefined;
+    const root = await db().one(`SELECT id, COALESCE(referral_code, '') AS "memberId", created_at AS "joinedAt" FROM users WHERE ${rootId ? "id = $1" : memberId ? "referral_code = $1" : "id = $1"}`, rootId || memberId || actor.id) as ExplorerNetwork["root"] | undefined;
     // Use the same response for missing accounts and accounts outside this member's network.
     if (!root)
         throw createError({ statusCode: 404, statusMessage: "This network is unavailable." });
@@ -31,7 +31,7 @@ export async function networkFor(event: H3Event, actor: UserRow, admin = false):
     UNION ALL SELECT u.id, u.referral_code, u.sponsor_id, u.created_at, p.depth + 1
     FROM users u JOIN descendants p ON u.sponsor_id = p.id WHERE p.depth < $3
   ), limited AS (SELECT * FROM descendants LIMIT 501)
-  SELECT id, referral_code AS "memberId", sponsor_id AS "parentId", created_at AS "joinedAt", depth FROM limited ORDER BY depth, created_at, id`, root.id, remainingDepth, remainingDepth) as unknown as Omit<ExplorerNetwork["members"][number], "status">[];
+  SELECT id, COALESCE(referral_code, '') AS "memberId", sponsor_id AS "parentId", created_at AS "joinedAt", depth FROM limited ORDER BY depth, created_at, id`, root.id, remainingDepth, remainingDepth) as unknown as Omit<ExplorerNetwork["members"][number], "status">[];
     return { root, members: rows.slice(0, 500).map(row => ({ ...row, status: "Registered" })), truncated: rows.length > 500, remainingDepth };
 }
 export async function activityFor(event: H3Event, actor: UserRow, admin = false): Promise<ExplorerActivity> {
@@ -59,7 +59,7 @@ export async function activityFor(event: H3Event, actor: UserRow, admin = false)
         debits: number;
         pending: number;
     };
-    const rows = await db().all(`SELECT t.id, u.referral_code AS "memberId", w.id AS "walletId", t.type, t.amount, ${displayStatus} AS status,
+    const rows = await db().all(`SELECT t.id, COALESCE(u.referral_code, '') AS "memberId", w.id AS "walletId", t.type, t.amount, ${displayStatus} AS status,
     ${ledgerDescriptionSql} AS description, t.created_at AS "createdAt", r.reference, r.note, r.created_at AS "reviewedAt" ${from} ${where}
     ORDER BY t.created_at DESC, t.sequence DESC LIMIT $12 OFFSET $13`, ...args, pageSize, (page - 1) * pageSize) as unknown as ExplorerTransaction[];
     return { items: rows.map(row => ({ ...row, amount: row.amount / moneyScale })), total: summary.total, page, pageSize,

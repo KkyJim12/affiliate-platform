@@ -1,5 +1,22 @@
 # Member ID update / การเปลี่ยนมาใช้ ID สมาชิก
 
+From 1 November 2026, only the first account receives ID `1` at signup.
+All later password and wallet registrations return `memberId: ""` until the
+first confirmed purchase. The database assigns the ID atomically with payment,
+in purchase order; unsigned, pending, failed and rolled-back purchases consume
+no ID. Subsequent purchases and retries retain the same ID. Existing IDs remain
+unchanged. An unpaid embedded account keeps its signup session until purchase;
+Member ID/password login becomes available after an ID has been assigned.
+Create the first administrator before member signup, or promote an existing
+account with an assigned ID using `LOOP_ADMIN_MEMBER_ID` and its password.
+
+ตั้งแต่วันที่ 1 พฤศจิกายน 2026 เฉพาะบัญชีแรกเท่านั้นที่ได้รับ ID `1` เมื่อสมัคร
+บัญชีถัดไปจะแสดง ID ว่างจนกว่าการซื้อครั้งแรกจะได้รับการยืนยัน
+ระบบออก ID ตามลำดับการซื้อและใช้ ID เดิมในการซื้อครั้งถัดไป โดยคง ID เดิมที่ออกไปแล้ว
+
+The table below describes the earlier 28 October identity migration; registration
+timing is superseded by the rule above.
+
 Updated / อัปเดต: 28 October 2026 / 28 ตุลาคม 2026 (Asia/Bangkok).
 
 The application now identifies members by their existing numeric **Member ID**. Thai UI labels use **เลเวล (Level)**. Existing account UUIDs, numeric IDs, passwords, wallet links, sponsor relationships and payment history are preserved.

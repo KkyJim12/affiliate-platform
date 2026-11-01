@@ -24,9 +24,9 @@ export default defineEventHandler(async (event): Promise<ReferralTreeData> => {
   const cycles = await db().all<{ cycle: number }>(`SELECT cycle FROM ${table} WHERE user_id = $1 AND level = $2 AND opened ORDER BY cycle`, root.id, level);
   if (!cycles.some(item => item.cycle === cycle))
     throw createError({ statusCode: 404, statusMessage: "This referral slot does not exist." });
-  const source = `SELECT s.id,u.referral_code,NULL::TEXT AS parent_code,ARRAY[]::INTEGER[] AS path,s.unlocked AS purchased
+  const source = `SELECT s.id,COALESCE(u.referral_code, '') AS referral_code,NULL::TEXT AS parent_code,ARRAY[]::INTEGER[] AS path,s.unlocked AS purchased
       FROM ${table} s JOIN users u ON u.id = s.user_id WHERE s.user_id = $1 AND s.level = $5 AND s.cycle = $6
-      UNION ALL SELECT s.id,u.referral_code,n.referral_code,n.path || s.branch::INTEGER,s.unlocked
+      UNION ALL SELECT s.id,COALESCE(u.referral_code, '') AS referral_code,n.referral_code,n.path || s.branch::INTEGER,s.unlocked
       FROM network n JOIN ${table} s ON s.parent_id = n.id JOIN users u ON u.id = s.user_id`;
   const result = await db().one(`WITH RECURSIVE network AS (
     ${source} WHERE cardinality(n.path) < $2

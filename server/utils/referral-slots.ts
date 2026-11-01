@@ -13,7 +13,7 @@ export function slotCatalogQuery(query: Record<string, unknown>): { page: number
 }
 
 // Public placement data only: never return account IDs, wallets or payments.
-export async function referralSlotCatalog(member: { id: string; referral_code: string }, { page, level, mode = 'matrix' }: { page: number; level: number; mode?: 'matrix' | 'unilevel' }): Promise<MatrixSlotCatalog> {
+export async function referralSlotCatalog(member: { id: string; referral_code: string | null }, { page, level, mode = 'matrix' }: { page: number; level: number; mode?: 'matrix' | 'unilevel' }): Promise<MatrixSlotCatalog> {
   const pageSize = 24;
   const table = mode === 'unilevel' ? 'unilevel_slots' : 'matrix_slots';
   const depth = mode === 'unilevel' ? 15 : 3, capacity = 2 ** (depth + 1) - 2;
@@ -36,7 +36,7 @@ export async function referralSlotCatalog(member: { id: string; referral_code: s
       FROM selected s JOIN positions p ON p.root = s.id
       GROUP BY s.id,s.level,s.cycle,s.unlocked,s.completed_at ORDER BY s.level,s.cycle`,member.id,level,pageSize,(page-1)*pageSize),
   ]);
-  return { memberId:member.referral_code,page,pageSize,levels,
+  return { memberId:member.referral_code ?? "",page,pageSize,levels,
     total:levels.filter(row=>!level || row.level===level).reduce((total,row)=>total+row.slots,0),
     items:slots.map(slot=>({level:slot.level,cycle:slot.cycle,
       status:!slot.unlocked ? "locked" : slot.completed ? "completed" : "open",filled:slot.filled,paid:slot.paid,capacity})),

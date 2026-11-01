@@ -10,7 +10,7 @@ const password = "An explorer test password 42!";
 const post = (api: APIRequestContext, path: string, data: object) => api.post(path, { headers: { Origin: origin }, data });
 async function fixture() {
     const suffix = Date.now().toString(36) + randomUUID().slice(0, 3);
-    const adminName = createTestAdmin(password);
+    const adminName = await createTestAdmin(password);
     const database = openTestDatabase();
     const admin = await database.one("SELECT id FROM users WHERE referral_code = $1", adminName) as {
         id: string;

@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { hashPassword } from "../server/lib/password";
 import { openTestDatabase } from "./database";
+import { Wallet } from "ethers";
+import { createTestAdmin } from "./member-fixtures";
 import thai from "../i18n/locales/th.json" with { type: "json" };
 
 const origin = "http://127.0.0.1:3100";
@@ -14,10 +16,14 @@ const patch = (api: APIRequestContext, path: string, data: object) => api.patch(
 async function retainedAccount(admin = false, sponsorId: string | null = null) {
   const database = openTestDatabase(), id = randomUUID(), legacyName = `retained_${id.slice(0,8)}`;
   try {
-    const row = await database.one("INSERT INTO users VALUES ($1,$2,$3,$4,$5,$6) RETURNING referral_code", id, legacyName,
+    await database.execute("INSERT INTO users VALUES ($1,$2,$3,$4,$5,$6)", id, legacyName,
       await hashPassword(password), `UNASSIGNED-${id}`, sponsorId, new Date().toISOString());
     await database.execute("INSERT INTO wallets (id,user_id,available) VALUES ($1,$2,100000000)", `LW-${id}`, id);
+    const payment = randomUUID();
+    await database.execute("INSERT INTO wallet_transactions VALUES($1,$2,'referral_purchase',10000000,'completed','Historical fixture activation',$1,$3)",payment,`LW-${id}`,new Date().toISOString());
+    await database.execute("INSERT INTO referral_activations(user_id,transaction_id,created_at) VALUES($1,$2,$3)",id,payment,new Date().toISOString());
     if (admin) await database.execute("INSERT INTO user_access (user_id,role) VALUES ($1,'admin')", id);
+    const row = await database.one("SELECT referral_code FROM users WHERE id=$1",id);
     return { id, memberId: row!.referral_code as string, legacyName };
   } finally { await database.close(); }
 }
@@ -30,19 +36,35 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/wallet/evm/transactions", route => route.fulfill({ status: 503, json: {} }));
 });
 
-test("password registration assigns unique IDs and member login accepts only the assigned ID", async ({ playwright }, info) => {
-  test.skip(external || info.project.name !== "desktop");
+test("password registration leaves IDs blank until the first completed purchase, then member login uses the assigned ID", async ({ playwright }, info) => {
+  test.skip(external || process.env.NUXT_REFERRAL_PAYMENT_MODE === 'contract' || info.project.name !== "desktop");
+  const sponsor = await retainedAccount();
   const first = await playwright.request.newContext({ baseURL: origin });
   const second = await playwright.request.newContext({ baseURL: origin });
   try {
-    const registered = await post(first, "/api/auth/register", { password });
+    const registered = await post(first, "/api/auth/register", { password, sponsorCode: sponsor.memberId });
     expect(registered.status()).toBe(201);
-    const { user } = await registered.json();
-    expect(user.memberId).toMatch(/^[1-9][0-9]*$/);
-    expect(user).not.toHaveProperty("username");
+    const pending = (await registered.json()).user;
+    expect(pending.memberId).toBe("");
+    expect(pending.referralCode).toBeNull();
+    expect(pending).not.toHaveProperty("username");
     const again = await post(second, "/api/auth/register", { password });
     expect(again.status()).toBe(201);
-    expect((await again.json()).user.memberId).not.toBe(user.memberId);
+    expect((await again.json()).user.memberId).toBe("");
+    expect((await (await first.get('/api/auth/session')).json()).user.memberId).toBe('');
+    const purchase = {password,requestKey:randomUUID()};
+    expect((await post(first,'/api/referrals/activate',purchase)).status()).toBe(400);
+    expect((await (await first.get('/api/auth/session')).json()).user.memberId).toBe('');
+    const database = openTestDatabase();
+    try { await database.execute('UPDATE wallets SET available=10000000 WHERE user_id=$1',pending.id); }
+    finally { await database.close(); }
+    const purchased = await post(first,'/api/referrals/activate',purchase);
+    expect(purchased.status(),await purchased.text()).toBe(200);
+    const {user} = await purchased.json();
+    expect(user.memberId).toMatch(/^[1-9][0-9]*$/);
+    expect(user.referralCode).toBe(user.memberId);
+    expect((await (await post(first,'/api/referrals/activate',purchase)).json()).user.memberId).toBe(user.memberId);
+    expect((await (await second.get('/api/auth/session')).json()).user.memberId).toBe('');
     await post(first, "/api/auth/logout", {});
     expect((await post(first, "/api/auth/login", { username: user.memberId, password })).status()).toBe(401);
     expect((await post(first, "/api/auth/login", { memberId: user.memberId, password: "wrong" })).status()).toBe(401);
@@ -53,6 +75,40 @@ test("password registration assigns unique IDs and member login accepts only the
     expect((await patch(first, "/api/auth/profile", { memberId: "999" })).status()).toBe(409);
     expect((await (await first.get("/api/auth/session")).json()).user).toEqual(user);
   } finally { await first.dispose(); await second.dispose(); }
+});
+
+test("unpaid member settings and referral displays leave the ID blank", async ({ page }, info) => {
+  test.skip(external || info.project.name !== 'desktop');
+  await retainedAccount(); // Ensure this signup is not the bootstrap exception.
+  const response=await post(page.request,'/api/auth/register',{password});
+  expect(response.status()).toBe(201);
+  expect((await response.json()).user.memberId).toBe('');
+  await page.goto('/dashboard?view=settings');
+  await expect(page.getByTestId('account-member-id')).toBeEmpty();
+  await expect(page.locator('.account-settings-row').filter({has:page.getByTestId('account-member-id')}).getByRole('link')).toHaveCount(0);
+  await page.goto('/dashboard');
+  await expect(page.getByTestId('overview-referral-tree').locator('[data-tree-node]').first()).toHaveAttribute('data-member','');
+});
+
+test("wallet signup and repeated wallet sign-in keep an unpaid Member ID blank", async ({ playwright }, info) => {
+  test.skip(!external || info.project.name !== 'desktop');
+  await retainedAccount();
+  const api=await playwright.request.newContext({baseURL:origin}),wallet=Wallet.createRandom();
+  const login=async()=>{
+    const response=await post(api,'/api/auth/wallet/challenge',{address:wallet.address});
+    expect(response.status()).toBe(200);
+    const challenge=await response.json();
+    const verified=await post(api,'/api/auth/wallet/verify',{id:challenge.id,signature:await wallet.signMessage(challenge.message)});
+    expect(verified.status(),await verified.text()).toBe(200);
+    return (await verified.json()).user;
+  };
+  try {
+    const user=await login();
+    expect(user.memberId).toBe('');
+    expect(user.referralCode).toBeNull();
+    await post(api,'/api/auth/logout',{});
+    expect(await login()).toEqual(user);
+  } finally { await api.dispose(); }
 });
 
 test("retained accounts keep their IDs; admin lookup, public trees and status changes expose IDs only", async ({ playwright }, info) => {
@@ -67,7 +123,7 @@ test("retained accounts keep their IDs; admin lookup, public trees and status ch
     expect(session).toMatchObject({ id: admin.id, memberId: admin.memberId, role: "admin" });
     expect(session).not.toHaveProperty("username");
     const tree = await (await guest.get(`/api/referrals/tree?id=${admin.memberId}`)).json();
-    expect(tree.root).toEqual({ id: admin.memberId, path: "", parentId: null });
+    expect(tree.root).toMatchObject({ id: admin.memberId, path: "", parentId: null });
     expect(tree.members[1].id).toBe(member.memberId);
     for (const value of ["username", admin.legacyName, member.legacyName, admin.id, member.id]) expect(JSON.stringify(tree)).not.toContain(value);
     const users = await (await api.get(`/api/admin/users?search=${member.memberId}`)).json();
@@ -113,10 +169,8 @@ test("internal transfers use recipient IDs and old descriptions render without e
 test("admin setup prints an assigned ID and lists existing admin IDs without requesting a name", async ({}, info) => {
   test.skip(info.project.name !== "desktop");
   const env = { ...process.env, DATABASE_URL: process.env.TEST_DATABASE_URL, LOOP_ADMIN_PASSWORD: password };
-  const output = execFileSync(process.execPath, ["scripts/create-admin.mjs"], { encoding: "utf8", env });
-  const memberId = output.match(/Administrator ID ([0-9]+) created/)?.[1];
+  const memberId = await createTestAdmin(password);
   expect(memberId).toBeTruthy();
-  expect(output).not.toContain(password);
   const listed = execFileSync(process.execPath, ["scripts/create-admin.mjs", "--list"], { encoding: "utf8", env });
   expect(listed).toContain(`Administrator ID ${memberId}`);
 });

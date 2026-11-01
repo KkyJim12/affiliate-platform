@@ -44,7 +44,7 @@ export default defineEventHandler(async (event) => {
         await db().execute("UPDATE wallets SET available = available + $1 WHERE id = $2", amount, receiverWallet.id);
         const timestamp = new Date().toISOString();
         await db().execute("INSERT INTO wallet_transactions VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", randomUUID(), senderWallet.id, "transfer_out", amount, "completed", description, key, timestamp);
-        await db().execute("INSERT INTO wallet_transactions VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", randomUUID(), receiverWallet.id, "transfer_in", amount, "completed", `Transfer from ID ${user.referral_code}`, key, timestamp);
+        await db().execute("INSERT INTO wallet_transactions VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", randomUUID(), receiverWallet.id, "transfer_in", amount, "completed", `Transfer from ID ${user.referral_code ?? ""}`, key, timestamp);
     });
     return await walletFor(user.id);
 });

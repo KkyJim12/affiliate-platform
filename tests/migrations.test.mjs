@@ -16,11 +16,78 @@ import { importSqlite } from "../scripts/lib/import-sqlite.mjs";
 
 const sources = readMigrations();
 
+async function activateMember(db, member, key = randomUUID()) {
+  await db.execute("INSERT INTO wallet_transactions VALUES($1,(SELECT id FROM wallets WHERE user_id=$2),'referral_purchase',10000000,'completed','Activation',$1,'2026-11-01')",key,member);
+  await db.execute("INSERT INTO referral_activations(user_id,transaction_id,created_at) VALUES($1,$2,'2026-11-01')",member,key);
+  return (await db.one('SELECT referral_code FROM users WHERE id=$1',member)).referral_code;
+}
+
+test('only the first signup gets ID 1; later IDs follow first completed purchases rather than signup order',()=>isolated(async db=>{
+  await migrate(db.pool,sources);
+  const insert=async member=>{
+    await db.execute("INSERT INTO users VALUES($1,$1,'hash',NULL,NULL,'2026-11-01')",member);
+    await db.execute('INSERT INTO wallets(id,user_id) VALUES($1,$2)',`w-${member}`,member);
+  };
+  await assert.rejects(db.transaction(async()=>{await insert('rolled-back-first');throw Error('rollback');}),/rollback/);
+  await insert('first');
+  await Promise.all(['second','third','fourth'].map(insert));
+  assert.deepEqual(await db.all('SELECT id,referral_code FROM users ORDER BY id'),[
+    {id:'first',referral_code:'1'},{id:'fourth',referral_code:null},{id:'second',referral_code:null},{id:'third',referral_code:null},
+  ]);
+  assert.equal((await db.one('SELECT last_id FROM referral_id_counter')).last_id,1);
+  assert.equal(await activateMember(db,'third'),'2');
+  await assert.rejects(db.transaction(async()=>{await activateMember(db,'second');throw Error('payment rollback');}),/payment rollback/);
+  assert.equal((await db.one("SELECT referral_code FROM users WHERE id='second'")).referral_code,null);
+  assert.equal((await db.one('SELECT last_id FROM referral_id_counter')).last_id,2);
+  const ids=await Promise.all(['second','fourth'].map(member=>db.transaction(()=>activateMember(db,member))));
+  assert.deepEqual(ids.sort(),['3','4']);
+  assert.equal(await activateMember(db,'first'),'1');
+  assert.equal((await db.one('SELECT last_id FROM referral_id_counter')).last_id,4);
+  await db.execute("DELETE FROM referral_activations WHERE user_id='first'");
+  await db.execute("DELETE FROM wallet_transactions WHERE wallet_id='w-first'");
+  await db.execute("DELETE FROM wallets WHERE user_id='first'");
+  await db.execute("DELETE FROM users WHERE id='first'");
+  await insert('replacement');
+  assert.equal((await db.one("SELECT referral_code FROM users WHERE id='replacement'")).referral_code,null);
+}));
+
+test('unsigned, pending and failed chain purchases leave IDs blank; confirmation assigns once',()=>isolated(async db=>{
+  await migrate(db.pool,sources);
+  for(const member of ['chain-first','chain-member']) await db.execute("INSERT INTO users VALUES($1,$1,'hash',NULL,NULL,'2026-11-01')",member);
+  const address=`0x${'12'.repeat(20)}`;
+  await db.execute(`INSERT INTO referral_chain_purchases(id,user_id,request_key,level,amount,chain_id,contract_address,token_address,buyer_address,fee_recipient_address,payload,status,created_at,updated_at)
+    VALUES('id-purchase','chain-member','id-purchase',1,10000000,80002,$1,$1,$1,$1,'{}','awaiting_signature','2026-11-01','2026-11-01')`,address);
+  for(const status of ['awaiting_signature','pending','failed']) {
+    await db.execute("UPDATE referral_chain_purchases SET status=$1 WHERE id='id-purchase'",status);
+    assert.equal((await db.one("SELECT referral_code FROM users WHERE id='chain-member'")).referral_code,null);
+    assert.equal((await db.one('SELECT last_id FROM referral_id_counter')).last_id,1);
+  }
+  await db.execute("UPDATE referral_chain_purchases SET status='confirmed' WHERE id='id-purchase'");
+  assert.equal((await db.one("SELECT referral_code FROM users WHERE id='chain-member'")).referral_code,'2');
+  await db.execute("INSERT INTO referral_activations(user_id,chain_purchase_id,created_at) VALUES('chain-member','id-purchase','2026-11-01')");
+  await db.execute("UPDATE referral_chain_purchases SET status='confirmed' WHERE id='id-purchase'");
+  assert.equal((await db.one('SELECT last_id FROM referral_id_counter')).last_id,2);
+}));
+
+test('deferred ID migration preserves existing identities, sponsor links and counter',()=>isolated(async db=>{
+  await migrate(db.pool,sources.filter(item=>item.name<'0022_'));
+  for(const member of ['existing-first','existing-second']) await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,NULL,'2026-11-01')",member);
+  await db.execute("UPDATE users SET sponsor_id='existing-first' WHERE id='existing-second'");
+  const before=await db.all('SELECT id,referral_code,sponsor_id FROM users ORDER BY id');
+  await migrate(db.pool,sources);
+  assert.deepEqual(await db.all('SELECT id,referral_code,sponsor_id FROM users ORDER BY id'),before);
+  await db.execute("INSERT INTO users VALUES('new-member','new-member','hash','999',NULL,'2026-11-01')");
+  await db.execute("INSERT INTO wallets(id,user_id) VALUES('w-new','new-member')");
+  assert.equal((await db.one("SELECT referral_code FROM users WHERE id='new-member'")).referral_code,null);
+  assert.equal(await activateMember(db,'new-member'),'3');
+}));
+
 test('ref ID purchase access uses the stored numeric member ID and sponsor, with a strict configurable allowlist',()=>isolated(async db=>{
   await migrate(db.pool,sources);
   for(const member of ['access-root','access-member','access-unpaid']) await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,NULL,'2026-10-31')",member);
   const root=(await db.one("SELECT referral_code FROM users WHERE id='access-root'")).referral_code;
-  const member=(await db.one("SELECT referral_code FROM users WHERE id='access-member'")).referral_code;
+  await db.execute("INSERT INTO wallets(id,user_id) VALUES('w-access-member','access-member')");
+  const member=await activateMember(db,'access-member');
   assert.equal(root,'1');
   assert.deepEqual(await assertReferralPurchaseAllowed('access-root',db,'1'),{allowed:true,exempt:true,requiresSponsor:false});
   await assert.rejects(assertReferralPurchaseAllowed('access-member',db,'1'),error=>error.statusCode===409 && error.data.code==='REF_ID_REQUIRED');
@@ -299,7 +366,7 @@ test("numeric referral migration preserves accounts and legacy invites, and allo
   await db.execute(`INSERT INTO users VALUES
     ('a', 'first', 'hash', 'UNXO-1234ABCD', NULL, '2026-10-17'),
     ('b', 'second', 'hash', 'UNASSIGNED-b', 'a', '2026-10-18')`);
-  await migrate(db.pool, sources);
+  await migrate(db.pool, sources.filter(item=>item.name<'0022_'));
   assert.deepEqual(await db.all("SELECT id, referral_code, sponsor_id FROM users ORDER BY referral_code::BIGINT"), [
     { id: 'a', referral_code: '1', sponsor_id: null }, { id: 'b', referral_code: '2', sponsor_id: 'a' },
   ]);
@@ -316,7 +383,7 @@ test("numeric referral migration preserves accounts and legacy invites, and allo
 }));
 
 test("binary placements fill breadth first with two slots, survive rollback and attach existing branches without cycles", () => isolated(async db => {
-  await migrate(db.pool, sources);
+  await migrate(db.pool, sources.filter(item=>item.name<'0022_'));
   const insert = (id, sponsor = null) => db.execute("INSERT INTO users VALUES ($1,$1,'hash',$1,$2,'2026-10-19')", id, sponsor);
   await insert('root');
   await Promise.all(['a', 'b', 'c', 'd', 'e', 'f'].map(id => insert(id, 'root')));

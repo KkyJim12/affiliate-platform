@@ -39,6 +39,15 @@ export async function importSqlite(sourcePath, database) {
             ? "UPDATE platform_settings SET registration_open = $2, funding_open = $3, support_email = $4 WHERE id = $1"
             : `INSERT INTO ${table} (${columns.join(", ")}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(", ")})`;
           await database.query(sql, columns.map(column => row[column]));
+          // Imported accounts already existed before deferred signup IDs. Keep
+          // their historical registration-order identities and admin access.
+          if (table === "users") {
+            const imported = await database.one("SELECT referral_code FROM users WHERE id=$1",row.id);
+            if (!imported.referral_code) {
+              const next = await database.one("UPDATE referral_id_counter SET last_id=last_id+1 RETURNING last_id");
+              await database.execute("UPDATE users SET referral_code=$1 WHERE id=$2",String(next.last_id),row.id);
+            }
+          }
         }
         counts[table] = rows.length;
       }

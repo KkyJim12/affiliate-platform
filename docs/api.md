@@ -203,8 +203,10 @@ another charge, including retries with a different request key. Sponsor linking
 is free, can happen before activation, and cannot replace an established sponsor.
 Own codes, unavailable/suspended sponsors, and cycles at any depth are rejected.
 
-Member IDs are decimal strings starting at `1`, assigned consecutively at
-registration. Account responses include `memberId` even before activation;
+Member IDs are decimal strings assigned once after the first confirmed purchase,
+except the first account, which receives `1` at signup. Later unpaid accounts
+return `memberId: ""`; pending, failed and unsigned purchases assign no ID.
+Previously issued IDs are preserved. After the first confirmed purchase,
 `referralCode` is that same ID after activation and otherwise `null`. Internal
 `user.id` UUIDs remain unchanged. Previously shared `UNXO-` and `LOOP-` invites
 continue to resolve to the same account through aliases.

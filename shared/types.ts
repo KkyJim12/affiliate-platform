@@ -1,5 +1,6 @@
 export interface Account {
   id: string;
+  // Blank until the first confirmed purchase, except the first signup (ID 1).
   memberId: string;
   referralCode: string | null;
   sponsorCode: string | null;

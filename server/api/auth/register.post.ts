@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
     if (sponsorCode && !sponsor)
         throw createError({ statusCode: 400, statusMessage: "That invite code was not found. Check it or leave it blank." });
     // The retained database handle is private compatibility data, never a login or public identity.
-    const user: UserRow = { id: randomUUID(), username: `account_${randomUUID()}`, password_hash: await hashPassword(password), referral_code: `UNASSIGNED-${randomUUID()}`, sponsor_id: sponsor?.id || null, created_at: new Date().toISOString() };
+    const user: UserRow = { id: randomUUID(), username: `account_${randomUUID()}`, password_hash: await hashPassword(password), referral_code: null, sponsor_id: sponsor?.id || null, created_at: new Date().toISOString() };
     const evmWallet = await generateEncryptedEvmWallet(password, appNetwork().chainId);
     await transaction(async () => {
             if (sponsorCode && (await activeSponsor(sponsorCode))?.id !== sponsor?.id)
