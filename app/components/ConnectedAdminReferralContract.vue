@@ -29,7 +29,7 @@ onBeforeUnmount(() => clearInterval(timer));
 </script>
 <template>
   <section class="admin-panel admin-contract-panel"><div class="admin-panel-heading"><div><h2>{{ t('onchain.adminTitle') }}</h2><p>{{ t('connected.confirmInWallet') }}</p></div><button class="admin-text-button" @click="refresh()">{{ t('admin.refresh') }}</button></div><div class="admin-contract-content">
-    <WalletConnector v-if="!matches" @connected="refresh" />
+    <WalletConnector v-if="!matches && user?.memberId !== '1'" @connected="refresh" />
     <template v-if="data?.chain.configured"><dl class="admin-details"><div><dt>{{ t('onchain.totalDistributed') }}</dt><dd>{{ formatUsdt(data.totals.volume) }}</dd></div><div><dt>{{ t('onchain.uplinePaid') }}</dt><dd>{{ formatUsdt(data.totals.commissions) }}</dd></div><div><dt>{{ t('onchain.platformPaid') }}</dt><dd>{{ formatUsdt(data.totals.platform) }}</dd></div></dl>
       <p>{{ t('onchain.owner') }}</p><code class="connected-address">{{ data.chain.owner }}</code><p>{{ t('onchain.currentFee') }}</p><code class="connected-address" data-testid="chain-fee-address">{{ data.chain.feeRecipient }}</code>
       <form v-if="data.canManageFee" class="account-form" @submit.prevent="update"><label for="external-fee-recipient">{{ t('onchain.newFeeAddress') }}</label><input id="external-fee-recipient" v-model="address" class="auth-input" maxlength="42" required :disabled="busy" /><button class="button button-orange" :disabled="busy || !matches || data.feeUpdate?.status === 'pending'">{{ t('connected.signFeeUpdate') }}</button></form><p v-else>{{ t('onchain.ownerRequired') }}</p>

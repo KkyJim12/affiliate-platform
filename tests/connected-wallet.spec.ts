@@ -261,7 +261,7 @@ test('wallet-only mode rejects member credentials while retaining administrator 
   } finally { await database.close(); }
 });
 
-for (const role of ['member','admin']) test(`existing accounts link once as ${role}, retain account history, and keep the appropriate sign-in method`,async ({ playwright }) => {
+for (const role of ['member','admin']) test(role === 'admin' ? 'administrator IDs other than 1 cannot bind a wallet' : 'existing members link once and retain account history',async ({ playwright }) => {
   test.skip(role === 'member' && !passwordLogin, 'Member credential migration must be explicitly enabled.');
   const api = await playwright.request.newContext({ baseURL: origin }), database = openTestDatabase(), wallet = Wallet.createRandom();
   const id = randomUUID(), username = `old_${id.slice(0,8)}`, password = 'Existing account password 42!';
@@ -269,17 +269,23 @@ for (const role of ['member','admin']) test(`existing accounts link once as ${ro
   try {
     await database.execute('INSERT INTO users VALUES ($1,$2,$3,$4,NULL,$5)',id,username,await hashPassword(password),`UNASSIGNED-${id}`,new Date().toISOString());
     await database.execute('INSERT INTO wallets (id,user_id,available) VALUES ($1,$2,123000000)',`LW-${id}`,id);
+    if (!await memberIdFor(id)) {
+      const payment = randomUUID();
+      await database.execute("INSERT INTO wallet_transactions VALUES($1,$2,'referral_purchase',10000000,'completed','Historical migration fixture',$1,$3)",payment,`LW-${id}`,new Date().toISOString());
+      await database.execute("INSERT INTO referral_activations(user_id,transaction_id,created_at) VALUES($1,$2,$3)",id,payment,new Date().toISOString());
+    }
     if (role === 'admin') await database.execute("INSERT INTO user_access (user_id,role) VALUES ($1,'admin')",id);
     expect((await post(api,path,{ memberId: await memberIdFor(id),password })).status()).toBe(200);
+    if (role === 'admin') {
+      expect((await post(api,'/api/auth/wallet/challenge',{ address: wallet.address,purpose: 'link' })).status()).toBe(403);
+      expect(await database.one('SELECT address FROM connected_wallets WHERE user_id=$1',id)).toBeUndefined();
+      return;
+    }
     const challenge = await (await post(api,'/api/auth/wallet/challenge',{ address: wallet.address,purpose: 'link' })).json();
     expect((await post(api,'/api/auth/wallet/verify',{ id: challenge.id,signature: await wallet.signMessage(challenge.message) })).status()).toBe(200);
     expect((await database.one('SELECT available FROM wallets WHERE user_id = $1',id))!.available).toBe(123000000);
-    expect((await post(api,path,{ memberId: await memberIdFor(id),password })).status()).toBe(role === 'admin' ? 200 : 403);
-    if (role === 'member') expect(await login(api,wallet)).toMatchObject({ id,role });
-    else {
-      const loginChallenge = await (await post(api,'/api/auth/wallet/challenge',{ address: wallet.address })).json();
-      expect((await post(api,'/api/auth/wallet/verify',{ id: loginChallenge.id,signature: await wallet.signMessage(loginChallenge.message) })).status()).toBe(403);
-    }
+    expect((await post(api,path,{ memberId: await memberIdFor(id),password })).status()).toBe(403);
+    expect(await login(api,wallet)).toMatchObject({ id,role });
     const other = Wallet.createRandom(), replace = await (await post(api,'/api/auth/wallet/challenge',{ address: other.address,purpose: 'link' })).json();
     expect((await post(api,'/api/auth/wallet/verify',{ id: replace.id,signature: await other.signMessage(replace.message) })).status()).toBe(409);
   } finally { await api.dispose(); await database.close(); }

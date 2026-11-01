@@ -15,6 +15,13 @@ export default defineEventHandler(async event => {
   try { address = walletAddress(body?.address); } catch { throw createError({ statusCode: 400, statusMessage: "Connect a valid EVM wallet." }); }
   const purpose = body?.purpose === "link" ? "link" : "login";
   const user = purpose === "link" ? await requireUser(event) : null;
+  if (user?.role === "admin" && user.referral_code !== "1")
+    throw createError({ statusCode: 403, statusMessage: "Only administrator ID 1 can bind an admin wallet." });
+  if (user?.role === "admin") {
+    const existing = await db().one<{ address: string }>("SELECT address FROM connected_wallets WHERE user_id = $1", user.id);
+    if (existing && existing.address.toLowerCase() !== address.toLowerCase())
+      throw createError({ statusCode: 409, statusMessage: "This account already has a linked wallet. Use that wallet." });
+  }
   const now = Date.now(), id = randomUUID();
   const message = walletChallengeMessage(origin, address, randomBytes(24).toString("hex"), now, purpose, appNetwork().chainId);
   const sponsor = normalizeReferralCode(typeof body?.sponsorCode === "string" ? body.sponsorCode.slice(0, 24) : "");

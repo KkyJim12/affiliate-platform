@@ -26,6 +26,8 @@ export default defineEventHandler(async event => {
       FROM connected_wallets w JOIN users u ON u.id = w.user_id LEFT JOIN user_access a ON a.user_id = u.id WHERE lower(w.address) = lower($1)`, challenge.address);
     if (challenge.purpose === "link") {
       if (!session || session.id !== challenge.user_id) throw invalid();
+      if (session.role === "admin" && session.referral_code !== "1")
+        throw createError({ statusCode: 403, statusMessage: "Only administrator ID 1 can bind an admin wallet." });
       if (owner && owner.id !== session.id) throw createError({ statusCode: 409, statusMessage: "This wallet is already linked to another account." });
       const existing = await db().one("SELECT address FROM connected_wallets WHERE user_id = $1", session.id);
       if (existing && existing.address.toLowerCase() !== challenge.address.toLowerCase())

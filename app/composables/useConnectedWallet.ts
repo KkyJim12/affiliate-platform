@@ -84,6 +84,14 @@ export function useConnectedWallet() {
   }
   function accountChanged(provider: InjectedProvider, id: string, account: string | null, force = false) {
     if (provider !== activeProvider || !force && account === address.value) return;
+    if (user.value?.role === "admin") {
+      connectionVersion++;
+      address.value = account;
+      clearBalances();
+      error.value = account && account.toLowerCase() === wallet.value?.address.toLowerCase()
+        ? "" : "The admin wallet is permanently bound to ID 1. Select that wallet to continue.";
+      return;
+    }
     connectionVersion++;
     address.value = account;
     reauthenticating.value = true;
@@ -176,6 +184,8 @@ export function useConnectedWallet() {
     if (connectionVersion !== version || normalizedAccount(current[0]) !== normalizedAccount(accounts[0])
       || expectedAccount && normalizedAccount(accounts[0]) !== expectedAccount)
       throw new Error("Wallet or account changed. Please sign in again.");
+    if (user.value?.role === "admin" && wallet.value && normalizedAccount(accounts[0])?.toLowerCase() !== wallet.value.address.toLowerCase())
+      throw new Error("The admin wallet is permanently bound to ID 1. Select that wallet to continue.");
     attach(provider, id, accounts[0]);
     try { localStorage.setItem("unxo-wallet-provider", JSON.stringify({ id, name: walletName.value })); } catch {}
     if (user.value && wallet.value && address.value?.toLowerCase() !== wallet.value.address.toLowerCase()) {

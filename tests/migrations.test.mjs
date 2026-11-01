@@ -16,6 +16,21 @@ import { importSqlite } from "../scripts/lib/import-sqlite.mjs";
 
 const sources = readMigrations();
 
+test('ID 1 wallet binding survives migration and cannot be replaced, transferred or deleted',()=>isolated(async db=>{
+  await migrate(db.pool,sources.filter(item=>item.name<'0023_'));
+  await db.execute("INSERT INTO users VALUES('admin-one','admin-one','hash',NULL,NULL,'2026-11-01')");
+  await db.execute("INSERT INTO users VALUES('other','other','hash',NULL,NULL,'2026-11-01')");
+  await db.execute("INSERT INTO user_access(user_id,role) VALUES('admin-one','admin')");
+  const address=`0x${'ab'.repeat(20)}`, other=`0x${'cd'.repeat(20)}`;
+  await db.execute("INSERT INTO connected_wallets(user_id,address,created_at) VALUES('admin-one',$1,'2026-11-01')",address);
+  await migrate(db.pool,sources);
+  await assert.rejects(db.execute("UPDATE connected_wallets SET address=$1 WHERE user_id='admin-one'",other),/cannot be changed/);
+  await assert.rejects(db.execute("UPDATE connected_wallets SET user_id='other' WHERE user_id='admin-one'"),/cannot be changed/);
+  await assert.rejects(db.execute("DELETE FROM connected_wallets WHERE user_id='admin-one'"),/cannot be removed/);
+  await db.execute("UPDATE connected_wallets SET address=$1 WHERE user_id='admin-one'",`0x${'AB'.repeat(20)}`);
+  assert.equal((await db.one("SELECT lower(address) AS address FROM connected_wallets WHERE user_id='admin-one'")).address,address);
+}));
+
 async function activateMember(db, member, key = randomUUID()) {
   await db.execute("INSERT INTO wallet_transactions VALUES($1,(SELECT id FROM wallets WHERE user_id=$2),'referral_purchase',10000000,'completed','Activation',$1,'2026-11-01')",key,member);
   await db.execute("INSERT INTO referral_activations(user_id,transaction_id,created_at) VALUES($1,$2,'2026-11-01')",member,key);

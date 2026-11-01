@@ -538,6 +538,11 @@
     "yourWorkspace": "Your workspace",
     "personalPreferences": "Saved for this browser",
     "sessionAccount": "Your administrator account",
+    "walletBinding": "Admin wallet · ID 1",
+    "walletBindingHint": "Connect and sign once to permanently bind this wallet to administrator ID 1. It cannot be replaced or removed.",
+    "walletLocked": "This wallet is permanently bound to administrator ID 1.",
+    "walletMismatch": "The admin wallet is permanently bound to ID 1. Select that wallet to continue.",
+    "walletBindingRestricted": "Only administrator ID 1 can bind an admin wallet.",
     "securityHint": "Your session uses a protected cookie. Sign out when you finish on a shared device.",
     "status": {
       "active": "Active",

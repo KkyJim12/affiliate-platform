@@ -1,5 +1,7 @@
 // Source-message aliases for statuses, API errors, and activity records.
 export const messageKeys: Record<string, string> = {
+  "The admin wallet is permanently bound to ID 1. Select that wallet to continue.": "admin.walletMismatch",
+  "Only administrator ID 1 can bind an admin wallet.": "admin.walletBindingRestricted",
   "Your wallet changed. Sign a new message to continue.": "connected.accountChanged",
   "Your wallet disconnected. Connect it again to continue.": "connected.walletDisconnected",
   "Wallet or account changed. Please sign in again.": "connected.signInChanged",

@@ -24,10 +24,16 @@ their linked wallets sign transactions rather than admin sign-in messages.
 To enable legacy login later, set `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true` and
 restart the app. Existing members can then choose **Already
 have a member ID account?**, sign in with their existing credentials once, and
-link a wallet in the wallet page or admin contract panel. Linking also requires
+link a wallet in the wallet page. Linking also requires
 a wallet signature. It preserves the account ID, sponsor, levels and history.
 Once linked, member password login remains disabled for that account in external mode.
-Administrators can link a wallet after password sign-in and keep using credentials.
+Administrator ID 1 binds its wallet in **Admin → Settings** after password sign-in
+and keeps using credentials. A signed wallet challenge permanently binds the
+address to that existing account; it does not create a separate member. Other
+administrator IDs cannot bind an admin wallet. The bound address is shown in
+Settings and cannot be replaced, transferred or removed, including through
+database updates or deletion. Switching extension accounts keeps the admin
+session and requires selecting the original wallet before signing transactions.
 Set the flag back to `false` and restart when migration is complete. A linked
 wallet cannot be replaced or shared with another account through the public API.
 EOA message signatures are supported; contract-account/EIP-1271 login is not
@@ -136,5 +142,9 @@ password-login flag described above.
 `npm run test:connected` starts disposable local PostgreSQL and an Amoy EVM
 simulation, tests authentication and recovery, and supplies mock EIP-1193 wallet
 providers to real browser pages. Wallet keys exist only in the test harness.
+`npm run test:admin-wallet` uses a fresh disposable database to verify ID 1
+binding in Settings, rejection of unsigned and stale binding attempts, persistence
+after reload, wallet switching without changing the admin session, and rejection
+of binding by other administrator IDs.
 `npm run test:distributor`, `npm run test:db`, `npm run typecheck` and
 `npm run build` cover contract allocations, deployment, schema and compilation.
