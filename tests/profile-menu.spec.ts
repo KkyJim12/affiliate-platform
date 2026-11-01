@@ -1,7 +1,7 @@
-import { createTestAdmin, memberIdFor } from "./member-fixtures";
+import { createTestAdmin } from "./member-fixtures";
 import { expect, test, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { Wallet } from "ethers";
 import { openTestDatabase } from "./database";
 
 const origin = "http://127.0.0.1:3100";
@@ -20,10 +20,12 @@ test.beforeEach(async () => {
 
 test("signed-in navbar shows the owner's wallet, supports keyboard dismissal, and logs out on desktop and mobile", async ({ page }) => {
   test.setTimeout(90_000);
+  await createTestAdmin(password); // Reserve the bootstrap ID so this signup has no member ID.
   const username = `profile_${randomUUID().slice(0, 8)}`;
   const registration = await page.request.post("/api/auth/register", { headers: { Origin: origin }, data: { username, password } });
   expect(registration.status()).toBe(201);
   const memberId = (await (await page.request.get("/api/auth/session")).json()).user.memberId;
+  expect(memberId).toBe("");
   const address = (await (await page.request.get("/api/wallet/evm")).json()).wallet.address;
   let balanceReads = 0;
   await page.route("**/api/wallet/evm/balance", route => {
@@ -33,10 +35,12 @@ test("signed-in navbar shows the owner's wallet, supports keyboard dismissal, an
       token: { address: "0x1111111111111111111111111111111111111111", symbol: "USDT", decimals: 6, balance: "1234.567891", balanceUnits: "1234567891" } } });
   });
   await gotoReady(page, "/dashboard");
-  const trigger = page.getByRole("button", { name: `Profile menu for ID ${memberId}`, exact: true });
+  const trigger = page.getByRole("button", { name: "Your account", exact: true });
   const menu = page.getByRole("menu");
   await expect(trigger.getByTestId("profile-usdt-balance")).toContainText("1,234.57");
   await expect(trigger.getByTestId("profile-usdt-balance")).toContainText("USDT");
+  await expect(trigger.locator(".profile-menu-avatar svg")).toBeVisible();
+  await expect(trigger.locator(".profile-menu-avatar")).toHaveText("");
   await expect(page.locator(".dashboard-topbar .topbar-wallet")).toHaveCount(0);
   expect(balanceReads).toBe(1);
   await trigger.focus();
@@ -99,6 +103,8 @@ test("administrator profile menu links to admin settings and signs out to admin 
   await gotoReady(page, "/admin/dashboard");
   const trigger = page.getByRole("button", { name: `Profile menu for ID ${memberId}`, exact: true });
   const menu = page.getByRole("menu");
+  await expect(trigger.locator(".profile-menu-avatar")).toHaveText(memberId.slice(0, 2));
+  await expect(trigger.locator(".profile-menu-avatar svg")).toHaveCount(0);
   await expect(trigger.getByTestId("profile-usdt-balance")).toContainText("—");
   await trigger.click();
   await expect(menu.getByTestId("profile-wallet-address")).toHaveText(address);
@@ -109,6 +115,59 @@ test("administrator profile menu links to admin settings and signs out to admin 
   await menu.getByRole("menuitem", { name: "Sign out", exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/login$/);
   expect((await page.request.get("/api/admin/overview")).status()).toBe(401);
+});
+
+test("accounts without a member ID can load and navigate signed-in pages", async ({ page }) => {
+  test.setTimeout(60_000);
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await createTestAdmin(password);
+  const external = process.env.NUXT_PUBLIC_WALLET_MODE === "external";
+  const wallet = Wallet.createRandom();
+  const challengeResponse = external
+    ? await page.request.post("/api/auth/wallet/challenge", { headers: { Origin: origin }, data: { address: wallet.address } })
+    : null;
+  if (challengeResponse) expect(challengeResponse.status()).toBe(200);
+  const challenge = await challengeResponse?.json();
+  const registration = external
+    ? await page.request.post("/api/auth/wallet/verify", { headers: { Origin: origin }, data: { id: challenge.id, signature: await wallet.signMessage(challenge.message) } })
+    : await page.request.post("/api/auth/register", { headers: { Origin: origin }, data: { password } });
+  expect(registration.status()).toBe(external ? 200 : 201);
+  const { user } = await registration.json();
+  expect(user.memberId).toBe("");
+  await page.route("**/api/wallet/evm/balance", route => route.fulfill({ status: 503, json: {} }));
+  await page.route("**/api/wallet/evm/transactions", route => route.fulfill({ status: 503, json: {} }));
+  const trigger = page.getByRole("button", { name: "Your account", exact: true });
+  const menu = page.getByRole("menu");
+
+  for (const path of ["/dashboard", "/wallet", "/referrals", "/dashboard?view=settings"]) {
+    const response = await page.goto(path);
+    expect(response?.status()).toBe(200);
+    await expect(trigger.locator(".profile-menu-avatar svg")).toBeVisible();
+    await trigger.click();
+    await expect(menu).toBeVisible();
+    await expect(menu.locator(".profile-menu-heading")).toHaveText("Your account");
+    await expect(menu.getByRole("menuitem", { name: "Sign out", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
+  }
+
+  // Also tolerate session payloads with a nullable or absent ID.
+  for (const memberId of [null, undefined]) {
+    await page.route("**/api/auth/session", route => route.fulfill({ json: { user: { ...user, memberId } } }));
+    const restored = page.waitForResponse("**/api/auth/session");
+    await gotoReady(page, "/");
+    await restored;
+    await expect(trigger.locator(".profile-menu-avatar svg")).toBeVisible();
+    await page.locator('a[href="/dashboard"]').first().click();
+    await expect(page).toHaveURL(`${origin}/dashboard`);
+    await expect(page.locator(".dashboard-topbar .profile-menu-trigger")).toBeVisible();
+    await expect(trigger.locator(".profile-menu-avatar svg")).toBeVisible();
+    await trigger.click();
+    await menu.getByRole("menuitem", { name: "My wallet", exact: true }).click();
+    await expect(page).toHaveURL(`${origin}/wallet`);
+    await expect(trigger).toBeVisible();
+  }
+  expect(errors).toEqual([]);
 });
 
 test("profile USDT balance follows wallet refreshes and handles missing tokens and RPC errors", async ({ page }) => {
