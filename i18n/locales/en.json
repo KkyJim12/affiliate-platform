@@ -430,6 +430,7 @@
     "loginDescription": "A thoughtful space to manage your community, review payments, and keep everything connected.",
     "authorizedOnly": "For authorized administrators",
     "loginHint": "Sign in with your administrator member ID and password.",
+    "walletLoginHint": "Sign in with your administrator ID and password, or connect your bound admin wallet.",
     "usernamePlaceholder": "e.g. 1",
     "secureSession": "Protected access. Secure session.",
     "welcome": "Welcome back, ID {memberId}",

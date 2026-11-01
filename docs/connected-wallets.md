@@ -18,8 +18,13 @@ new wallet accounts. Sessions retain the existing HttpOnly cookie protections.
 
 Member member ID/password login is hidden and blocked by default
 (`NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=false`). Members sign in with MetaMask,
-Rabby or Phantom. Administrators always use member ID/password at `/admin/login`;
-their linked wallets sign transactions rather than admin sign-in messages.
+Rabby or Phantom. Administrators can use member ID/password at `/admin/login`
+or sign in with their bound wallet through the same wallet connection flow as
+members. Both methods restore the existing account and its stored admin role.
+The normal user login modal accepts the wallet bound to admin ID 1 and opens the
+user dashboard, retaining admin access through the Control center link.
+`/admin/login` offers both credentials and wallet choices, opens the admin
+dashboard, and preserves a requested admin-page redirect.
 
 To enable legacy login later, set `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true` and
 restart the app. Existing members can then choose **Already
@@ -28,8 +33,9 @@ link a wallet in the wallet page. Linking also requires
 a wallet signature. It preserves the account ID, sponsor, levels and history.
 Once linked, member password login remains disabled for that account in external mode.
 Administrator ID 1 binds its wallet in **Admin → Settings** after password sign-in
-and keeps using credentials. A signed wallet challenge permanently binds the
-address to that existing account; it does not create a separate member. Other
+and can then use either credentials or wallet sign-in. A signed wallet challenge
+permanently binds the address to that existing account; it does not create a
+separate member. Other
 administrator IDs cannot bind an admin wallet. The bound address is shown in
 Settings and cannot be replaced, transferred or removed, including through
 database updates or deletion. Switching extension accounts keeps the admin
@@ -145,6 +151,8 @@ providers to real browser pages. Wallet keys exist only in the test harness.
 `npm run test:admin-wallet` uses a fresh disposable database to verify ID 1
 binding in Settings, rejection of unsigned and stale binding attempts, persistence
 after reload, wallet switching without changing the admin session, and rejection
-of binding by other administrator IDs.
+of binding by other administrator IDs. It also verifies credential login, wallet
+login from both entry points, rejected signatures, redirects, and denial of admin
+access to member wallets and suspended accounts.
 `npm run test:distributor`, `npm run test:db`, `npm run typecheck` and
 `npm run build` cover contract allocations, deployment, schema and compilation.

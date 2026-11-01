@@ -31,7 +31,7 @@
     "test:onchain": "node scripts/test-onchain.mjs",
     "test:connected": "node scripts/test-onchain.mjs --external",
     "test:wallet-auth": "node --test tests/wallet-challenge.test.mjs",
-    "test:admin-wallet": "node scripts/test-onchain.mjs --external admin-wallet-binding.spec.ts --grep \"admin Settings permanently|administrator IDs other than 1\"",
+    "test:admin-wallet": "node scripts/test-onchain.mjs --external admin-wallet-binding.spec.ts --grep \"admin Settings permanently|administrator IDs other than 1|wallet-only members\"",
     "test:sends": "node --test tests/evm-send.test.mjs",
     "build": "nuxt build",
     "dev": "nuxt dev",

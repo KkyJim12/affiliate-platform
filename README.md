@@ -16,7 +16,7 @@ PDF สรุป / Summary PDFs: [ภาษาไทย · 4 หน้า](docs/
 
 Connected wallets are now the default for members: wallet signatures for login and every on-chain write, with 1% bonuses at each of 15 depths. See [connected wallet setup, existing-account linking and distributor replacement](docs/connected-wallets.md). In-app key management and password-authorized transactions below apply only when `NUXT_PUBLIC_WALLET_MODE=embedded` is explicitly enabled.
 
-Administrators sign in at `/admin/login` with their member ID and password, including after linking a transaction wallet. Member member ID/password login is hidden and disabled by default. Set `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true` and restart to enable legacy member login or link an existing account; embedded member login also requires this flag.
+Administrators sign in at `/admin/login` with their member ID and password or their bound wallet. The normal user login modal also accepts the wallet bound to admin ID 1 and opens the user dashboard, with admin access available through the Control center link. Member member ID/password login is hidden and disabled by default. Set `NUXT_PUBLIC_PASSWORD_LOGIN_ENABLED=true` and restart to enable legacy member login or link an existing account; embedded member login also requires this flag.
 
 Nuxt 4 app with a referral tree overview, 15-rank explorer, 15-level unilevel projections, wallet-signature accounts, and connected EVM wallets. The UNXO interface uses a modern gold palette with light and dark themes.
 

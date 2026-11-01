@@ -356,7 +356,7 @@ test('administrator fee changes must be sent by the connected contract owner',as
   } finally { await api.dispose(); await database.close(); provider.destroy(); }
 });
 
-test('wallet-only members see wallet choices and administrators see credentials',async ({ page }) => {
+test('wallet-only members see wallet choices and administrators can use credentials or wallets',async ({ page }) => {
   test.skip(passwordLogin, 'Password migration must be explicitly disabled for this check.');
   const provider = rpc(), wallet = Wallet.createRandom().connect(provider);
   try {
@@ -367,7 +367,7 @@ test('wallet-only members see wallet choices and administrators see credentials'
     await expect(member.locator('input[autocomplete="username"], input[type="password"], input[autocomplete="current-password"]')).toHaveCount(0);
     await expect(member.getByRole('button',{ name: 'Already have a member ID account?',exact: true })).toHaveCount(0);
     await page.goto('/admin/login');
-    for (const name of ['MetaMask','Rabby','Phantom']) await expect(page.getByRole('button',{ name,exact: true })).toHaveCount(0);
+    for (const name of ['MetaMask','Rabby','Phantom']) await expect(page.getByRole('button',{ name,exact: true })).toBeVisible();
     await expect(page.getByLabel('Member ID',{ exact: true })).toBeVisible();
     await expect(page.getByLabel('Password',{ exact: true })).toBeVisible();
     await expect(page.getByRole('button',{ name: 'Already have a member ID account?',exact: true })).toHaveCount(0);
