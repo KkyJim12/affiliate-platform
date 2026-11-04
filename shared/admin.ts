@@ -17,6 +17,8 @@ export interface AdminMember {
   status: "active" | "suspended";
   referralCode: string | null;
   sponsor: string | null;
+  hasPurchased: boolean;
+  hasPendingPurchase: boolean;
   createdAt: string;
   balance: number;
   referrals: number;

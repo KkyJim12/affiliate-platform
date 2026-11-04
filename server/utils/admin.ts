@@ -15,6 +15,17 @@ export async function platformSettings(): Promise<PlatformSettings> {
 export async function audit(adminId: string, action: string, target: string) {
     await db().execute("INSERT INTO admin_audit VALUES ($1, $2, $3, $4, $5)", randomUUID(), adminId, action, target, new Date().toISOString());
 }
+// Use the same purchase checks for the admin list and cancellation endpoint.
+// Activations also cover imported historical purchases.
+export const adminReferralPurchaseFields = `(
+  EXISTS (SELECT 1 FROM referral_activations WHERE user_id = u.id)
+  OR EXISTS (SELECT 1 FROM referral_purchases WHERE user_id = u.id)
+  OR EXISTS (SELECT 1 FROM referral_chain_purchases WHERE user_id = u.id AND status = 'confirmed')
+  OR EXISTS (SELECT 1 FROM wallet_transactions t JOIN wallets w ON w.id = t.wallet_id
+    WHERE w.user_id = u.id AND t.type = 'referral_purchase' AND t.status = 'completed')
+) AS "hasPurchased",
+EXISTS (SELECT 1 FROM referral_chain_purchases WHERE user_id = u.id
+  AND status IN ('pending','awaiting_signature')) AS "hasPendingPurchase"`;
 export function listQuery(event: H3Event) {
     const query = getQuery(event);
     const page = Math.max(1, Math.min(100000, Number.parseInt(String(query.page || "1"), 10) || 1));

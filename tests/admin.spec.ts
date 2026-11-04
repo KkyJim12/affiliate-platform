@@ -125,8 +125,8 @@ test("admin login and all management pages work in English, Thai, light and dark
     const settingsResponse = await page.request.get("/api/admin/settings");
     expect(settingsResponse.ok()).toBe(true);
     original = await settingsResponse.json();
-    await page.getByRole("textbox", { name: "Search by member ID", exact: true }).fill(memberName);
-    await page.getByRole("textbox", { name: "Search by member ID", exact: true }).press("Enter");
+    await page.getByRole("textbox", { name: "Search by member or account ID", exact: true }).fill(memberName);
+    await page.getByRole("textbox", { name: "Search by member or account ID", exact: true }).press("Enter");
     const row = page.getByRole("row").filter({ hasText: `ID ${memberName}` });
     await expect(row).toHaveCount(1);
     await row.getByRole("button", { name: "Manage", exact: true }).click();

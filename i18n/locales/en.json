@@ -480,7 +480,7 @@
     "nextPage": "Next page",
     "pageOf": "{page} of {pages}",
     "usersSubtitle": "Get to know your members and manage account access.",
-    "searchUsers": "Search by member ID",
+    "searchUsers": "Search by member or account ID",
     "search": "Search",
     "filterUsers": "Filter account status",
     "allStatuses": "All statuses",
@@ -490,7 +490,7 @@
     "administrator": "Administrator",
     "manage": "Manage",
     "noUsers": "No matching users",
-    "noUsersHint": "Try a different member ID or account status.",
+    "noUsersHint": "Try a different member or account ID, or account status.",
     "userDetails": "Account details",
     "role": "Role",
     "sponsor": "Invited by",
@@ -559,7 +559,8 @@
       "user_activated": "Member reactivated",
       "payment_approved": "Funding approved",
       "payment_rejected": "Funding rejected",
-      "settings_updated": "Platform settings updated"
+      "settings_updated": "Platform settings updated",
+      "user_referral_cancelled": "Ref ID cancelled"
     },
     "errors": {
       "access": "Administrator access is required.",
@@ -585,7 +586,16 @@
     "redirectedShares": "Redirected upline shares",
     "totalPayable": "Total awaiting settlement",
     "noReferralPayables": "No platform amounts have accrued yet.",
-    "invalidFeeAddress": "Enter a valid, nonzero EVM platform fee address."
+    "invalidFeeAddress": "Enter a valid, nonzero EVM platform fee address.",
+    "unpaidMember": "Awaiting first purchase",
+    "cancelReferral": "Cancel ref ID",
+    "cancelReferralHint": "Clear this user's sponsor ref ID before their first purchase so they can connect another sponsor.",
+    "cancelReferralConfirm": "Cancel ref ID {code}? This user will need to enter a valid ref ID before purchasing.",
+    "confirmCancelReferral": "Confirm cancellation",
+    "keepReferral": "Keep ref ID",
+    "referralCancelled": "Ref ID cancelled.",
+    "referralPurchasedHint": "The ref ID cannot be cancelled after a purchase.",
+    "referralPendingHint": "Wait for the pending blockchain purchase to finish before cancelling the ref ID."
   },
   "ui": {
     "rejected": "Rejected",

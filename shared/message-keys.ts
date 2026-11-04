@@ -1,5 +1,7 @@
 // Source-message aliases for statuses, API errors, and activity records.
 export const messageKeys: Record<string, string> = {
+  "The ref ID cannot be cancelled after a purchase.": "admin.referralPurchasedHint",
+  "Wait for the pending blockchain purchase to finish before cancelling the ref ID.": "admin.referralPendingHint",
   "The admin wallet is permanently bound to ID 1. Select that wallet to continue.": "admin.walletMismatch",
   "Only administrator ID 1 can bind an admin wallet.": "admin.walletBindingRestricted",
   "Your wallet changed. Sign a new message to continue.": "connected.accountChanged",
