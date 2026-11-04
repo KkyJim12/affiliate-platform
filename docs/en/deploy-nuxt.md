@@ -22,7 +22,7 @@ Prepare Node.js **24+**, npm, PostgreSQL **17+**, an existing database, a domain
 
 Run commands from the repository root. The examples use Bash on Linux; on Windows PowerShell use `npm.cmd` in place of `npm`.
 
-Keep the source and lockfile for the release. The repository's `compose.yaml` supplies a **development PostgreSQL service only**; it is not a production application deployment definition. Provision production database credentials and backups separately.
+Keep the source and lockfile for the release. The repository's `compose.yaml` supplies a **development PostgreSQL service only**; it is not a production application deployment definition. Provision production database credentials and configure [daily encrypted backup emails](../database-backups.md) on the production Node server.
 
 ## 2. Install and configure
 

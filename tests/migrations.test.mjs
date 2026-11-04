@@ -5,16 +5,72 @@ import { queuedReferralJobs, retryFailedReferralJobs } from "../server/utils/ref
 import { assertReferralPurchaseAllowed, referralPurchaseAccess } from "../server/utils/referral-purchase-access.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { randomUUID } from "node:crypto";
-import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { createHash, randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { createDatabase } from "../server/lib/postgres.ts";
 import { migrate, migrationStatus, prepareMigrations, readMigrations, resetDatabase } from "../server/lib/migrations.ts";
 import { importSqlite } from "../scripts/lib/import-sqlite.mjs";
+import { runDailyBackup } from "../scripts/lib/database-backup.mjs";
 
 const sources = readMigrations();
+
+test('daily backup delivery survives restarts, locks competing replicas, and retries failed mail with a cooldown',()=>isolated(async db=>{
+  await migrate(db.pool,sources);
+  const config = { directory: '.data/backups' };
+  let sends=0, dumps=0, releaseSend, started;
+  const sending = new Promise(done=>{started=done;});
+  const hold = new Promise(done=>{releaseSend=done;});
+  const operations = {
+    async createBackup() { dumps++;return { filename:'fixture.dump.enc',sha256:'fixture',path:'fixture',bytes:1 }; },
+    async sendBackup() { sends++;started();await hold; },
+    async pruneBackups() {},
+  };
+  const first=runDailyBackup(config,'2026-11-04',db.pool,operations);
+  await sending;
+  assert.equal(await runDailyBackup(config,'2026-11-04',db.pool,operations),'busy');
+  releaseSend();assert.equal(await first,'sent');
+  assert.equal(await runDailyBackup(config,'2026-11-04',db.pool,operations),'skipped');
+  assert.equal(sends,1);assert.equal(dumps,1);
+  const failed = { ...operations, async sendBackup() { throw Error('Backup email delivery failed.'); } };
+  await assert.rejects(runDailyBackup(config,'2026-11-05',db.pool,failed),/delivery failed/);
+  assert.deepEqual(await db.one("SELECT status,attempts FROM database_backup_runs WHERE scheduled_date='2026-11-05'"),{status:'failed',attempts:1});
+  assert.equal(await runDailyBackup(config,'2026-11-05',db.pool,operations),'skipped');
+  await db.execute("UPDATE database_backup_runs SET attempted_at=CURRENT_TIMESTAMP-INTERVAL '16 minutes' WHERE scheduled_date='2026-11-05'");
+  assert.equal(await runDailyBackup(config,'2026-11-05',db.pool,operations),'sent');
+  assert.deepEqual(await db.one("SELECT status,attempts FROM database_backup_runs WHERE scheduled_date='2026-11-05'"),{status:'sent',attempts:2});
+}));
+
+test('daily backup retries reuse the saved encrypted archive and stop after four failed attempts',()=>isolated(async db=>{
+  await migrate(db.pool,sources);
+  const directory=mkdtempSync(join(tmpdir(),'unxo-backup-retry-'));
+  try {
+    let dumps=0,sends=0;
+    const filename='unxo-db-20261104T030000000Z-abcd.dump.enc',path=join(directory,filename);
+    const operations={
+      async createBackup() {
+        dumps++;writeFileSync(path,'encrypted fixture');
+        return {filename,path,bytes:17,sha256:createHash('sha256').update('encrypted fixture').digest('hex')};
+      },
+      async sendBackup(config,backup) { sends++;assert.equal(backup.path,path);throw Error('Backup email delivery failed.'); },
+      async pruneBackups() { throw Error('Failed deliveries must retain their archive.'); },
+    };
+    for(let attempt=1;attempt<=4;attempt++) {
+      await assert.rejects(runDailyBackup({directory},'2026-11-04',db.pool,operations),/delivery failed/);
+      await db.execute("UPDATE database_backup_runs SET attempted_at=CURRENT_TIMESTAMP-INTERVAL '16 minutes'");
+    }
+    assert.equal(await runDailyBackup({directory},'2026-11-04',db.pool,operations),'skipped');
+    assert.equal(dumps,1);assert.equal(sends,4);
+    assert.equal(readFileSync(path,'utf8'),'encrypted fixture');
+    assert.equal((await db.one('SELECT attempts FROM database_backup_runs')).attempts,4);
+  } finally {
+    assert.equal(dirname(resolve(directory)),resolve(tmpdir()));
+    assert.ok(basename(directory).startsWith('unxo-backup-retry-'));
+    rmSync(directory,{recursive:true,force:true});
+  }
+}));
 
 test('ID 1 wallet binding survives migration and cannot be replaced, transferred or deleted',()=>isolated(async db=>{
   await migrate(db.pool,sources.filter(item=>item.name<'0023_'));

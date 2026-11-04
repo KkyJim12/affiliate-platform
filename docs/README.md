@@ -3,6 +3,9 @@
 [Polygon mainnet deployment and application setup](en/polygon-mainnet.md):
 real Polygon USDT (USDT0), isolated mainnet configuration, deployment and recovery.
 
+[Daily encrypted database backup emails](database-backups.md): production schedule,
+SMTP configuration, retention and recovery.
+
 [การเปลี่ยนระบบและ API มาใช้ ID สมาชิก / Member ID update](member-id-update.md): current login, registration, read-only identity, searches and compatibility details.
 
 ตรวจสอบจากซอร์สโค้ดวันที่ **28 ตุลาคม 2026** (Asia/Bangkok), revision `cf2583b` พร้อมระบบรีเบิร์ธและอัปเกรดยูนิเลเวลใน working tree เอกสารอธิบายสิ่งที่โปรเจกต์รองรับ ไม่ได้ยืนยันสถานะการตั้งค่าหรือการ deploy ของระบบที่เปิดใช้งานจริง

@@ -2,6 +2,7 @@ import { db } from "../utils/database";
 import { migrate, prepareMigrations } from "../lib/migrations";
 import { bindDatabaseNetwork } from "../lib/database-network";
 import { appNetwork } from "../utils/network";
+import { startBackupScheduler } from "../../scripts/lib/database-backup.mjs";
 
 export default defineNitroPlugin(async nitro => {
   const assets = useStorage("assets:migrations");
@@ -13,5 +14,6 @@ export default defineNitroPlugin(async nitro => {
   }));
   await migrate(db().pool, prepareMigrations(sources));
   await bindDatabaseNetwork(db(),appNetwork().chainId);
-  nitro.hooks.hook("close", () => db().close());
+  const stopBackups = startBackupScheduler();
+  nitro.hooks.hook("close", async () => { await stopBackups(); await db().close(); });
 });
