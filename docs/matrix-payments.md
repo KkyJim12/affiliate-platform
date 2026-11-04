@@ -64,9 +64,10 @@ rebirth payment activates both linked entries; creating the companion entry
 does not charge again or queue another level upgrade. Cycle numbers are
 assigned separately in each program and can differ.
 
-Registration previews level 1 in both programs and creates empty higher-level
-cards. Higher-level cards reserve no position. When a member enters a level,
-each program follows the original level-1 invitation chain to the nearest
+Registration and adding a referral ID create no placement in either program.
+Locked cards are empty placeholders; positions at every level, including level 1,
+are assigned in purchase order when a purchase starts. Level 1 uses the recorded
+inviter. At higher levels, each program follows the original invitation chain to the nearest
 inviter who has purchased the target level, skipping unpaid inviters. This
 reference always comes from the original invitations, including at levels
 3 through 15, rather than the previous level's placement. For example, if
@@ -117,10 +118,13 @@ Reserved future cycles stay out of the slot list and public cycle selector
 until their own program completes or a completion in the other program opens
 a linked rebirth entry.
 
-The owner's root remains visible for context. Level 1 retains unpaid members
-and their connections. New higher-level entries skip unpaid inviters; historical
+The owner's root remains visible for context. Level 1 shows purchase entries,
+including pending quoted positions. New higher-level entries skip unpaid inviters; historical
 paid and quoted branches retain their original paths. The open slot refreshes
-every fifteen seconds while the tab is visible.
+every fifteen seconds while the tab is visible. Migration
+`0024_purchase_order_level_one_slots.sql` releases unused level-1 registration
+positions, retaining paid and quoted branches and their ancestors. Invitation
+links are unchanged.
 Opening a completed card shows all fourteen members in that exact level and
 cycle, even after later rebirths; the new slot has its own separate tree.
 Unilevel, the direct referral tree and the member list remain separate views

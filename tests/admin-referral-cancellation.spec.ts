@@ -23,6 +23,43 @@ async function chainPurchase(database: ReturnType<typeof openTestDatabase>, user
   return id;
 }
 
+test("ref ID links leave slots empty and level-1 placement follows purchase order", async ({ playwright }, info) => {
+  test.skip(unavailable || info.project.name !== "desktop");
+  const database = openTestDatabase();
+  const earlier = await playwright.request.newContext({ baseURL: origin });
+  const buyer = await playwright.request.newContext({ baseURL: origin });
+  try {
+    await database.execute('DELETE FROM rate_limits');
+    const sponsorCode = await createTestAdmin(password);
+    const firstSignup = await register(earlier, "");
+    expect((await post(earlier, '/api/referrals/sponsor', { code: sponsorCode })).status()).toBe(200);
+    const firstBuyer = await register(buyer, sponsorCode);
+    const tree = async (mode: string) => (await (await buyer.get(`/api/referrals/tree?id=${sponsorCode}&mode=${mode}&level=1`)).json());
+    for (const mode of ['matrix','unilevel']) {
+      const empty = await tree(mode);
+      expect(empty.members).toEqual([empty.root]);
+    }
+    await database.execute('UPDATE wallets SET available=10000000 WHERE user_id=ANY($1::TEXT[])', [firstSignup.id, firstBuyer.id]);
+    const purchase = await post(buyer, '/api/referrals/activate', { password, requestKey: randomUUID() });
+    expect(purchase.status(), await purchase.text()).toBe(200);
+    const buyerCode = (await purchase.json()).user.memberId;
+    for (const mode of ['matrix','unilevel']) {
+      const filled = await tree(mode);
+      expect(filled.members).toEqual([filled.root,{ id: buyerCode, path: '0', parentId: sponsorCode, purchased: true }]);
+    }
+    const laterPurchase = await post(earlier, '/api/referrals/activate', { password, requestKey: randomUUID() });
+    expect(laterPurchase.status(), await laterPurchase.text()).toBe(200);
+    const laterCode = (await laterPurchase.json()).user.memberId;
+    for (const mode of ['matrix','unilevel']) {
+      const filled = await tree(mode);
+      expect(filled.members).toEqual([filled.root,
+        { id: buyerCode, path: '0', parentId: sponsorCode, purchased: true },
+        { id: laterCode, path: '1', parentId: sponsorCode, purchased: true },
+      ]);
+    }
+  } finally { await earlier.dispose(); await buyer.dispose(); await database.close(); }
+});
+
 test("admin ref ID cancellation enforces authorization and purchase guards, clears placement, and permits a new sponsor", async ({ playwright }, info) => {
   test.skip(unavailable || info.project.name !== "desktop");
   const database = openTestDatabase();
@@ -70,13 +107,17 @@ test("admin ref ID cancellation enforces authorization and purchase guards, clea
 
     expect((await post(member, "/api/referrals/sponsor", { code: replacementCode })).status()).toBe(200);
     const replacement = await database.one("SELECT id FROM users WHERE referral_code=$1", replacementCode);
+    expect(await database.one("SELECT parent_id FROM referral_placements WHERE user_id=$1", user.id)).toBeUndefined();
+    for (const table of ["matrix_slots", "unilevel_slots"]) {
+      expect((await database.one(`SELECT parent_id FROM ${table} WHERE user_id=$1 AND level=1`, user.id))!.parent_id).toBeNull();
+    }
+    const purchased = await post(member, "/api/referrals/activate", { password, requestKey: randomUUID() });
+    expect(purchased.status(), await purchased.text()).toBe(200);
     expect((await database.one("SELECT parent_id FROM referral_placements WHERE user_id=$1", user.id))!.parent_id).toBe(replacement!.id);
     for (const table of ["matrix_slots", "unilevel_slots"]) {
       const parent = await database.one(`SELECT p.user_id FROM ${table} s JOIN ${table} p ON p.id=s.parent_id WHERE s.user_id=$1 AND s.level=1`, user.id);
       expect(parent!.user_id).toBe(replacement!.id);
     }
-    const purchased = await post(member, "/api/referrals/activate", { password, requestKey: randomUUID() });
-    expect(purchased.status(), await purchased.text()).toBe(200);
     expect(await list()).toMatchObject({ sponsor: replacementCode, hasPurchased: true });
     expect((await cancel(admin, user.id)).status()).toBe(409);
     expect((await database.one("SELECT sponsor_id FROM users WHERE id=$1", user.id))!.sponsor_id).toBe(replacement!.id);

@@ -19,20 +19,29 @@ async function confirmedUpgrade(userId: string,level: number) {
       VALUES($1,$2,$1,$3,$4,80002,$5,$5,$5,$5,'{}','confirmed',$6,$7,$7)`,purchase,userId,level,10_000_000*2**(level-1),`0x${'12'.repeat(20)}`,`0x${randomBytes(32).toString('hex')}`,timestamp);
   } finally {await database.close();}
 }
+// Browsing fixtures include pre-migration member IDs and quoted unpaid entries.
+async function historicalEntry(database: ReturnType<typeof openTestDatabase>, userId: string) {
+  await database.execute('SELECT enter_referral_level($1,1)',userId);
+  return database.one(`WITH assigned AS (
+    UPDATE referral_id_counter SET last_id=last_id+1 RETURNING last_id
+  ) UPDATE users SET referral_code=assigned.last_id::TEXT FROM assigned WHERE id=$1 RETURNING referral_code`,userId);
+}
 async function fixture(paidChildren=14) {
   const database=openTestDatabase(), owner=randomUUID(), timestamp=new Date().toISOString();
   try {
-    const member=await database.one("INSERT INTO users VALUES($1,$2,$3,$1,NULL,$4) RETURNING referral_code",owner,`slots_${owner.slice(0,8)}`,await hashPassword(password),timestamp);
+    await database.execute("INSERT INTO users VALUES($1,$2,$3,$1,NULL,$4)",owner,`slots_${owner.slice(0,8)}`,await hashPassword(password),timestamp);
     await database.execute("INSERT INTO wallets(id,user_id) VALUES($1,$2)",`w-${owner}`,owner);
     // Import already paid levels, with no pending purchase or automatic job.
     const purchase=randomUUID();
     await database.execute(`INSERT INTO referral_chain_purchases(id,user_id,request_key,level,amount,chain_id,contract_address,token_address,buyer_address,fee_recipient_address,payload,status,transaction_hash,created_at,updated_at)
       VALUES($1,$2,$1,3,40000000,80002,$3,$3,$3,$3,'{}','confirmed',$4,$5,$5)`,purchase,owner,`0x${'12'.repeat(20)}`,`0x${randomBytes(32).toString('hex')}`,timestamp);
     await database.execute("INSERT INTO referral_activations(user_id,chain_purchase_id,created_at) VALUES($1,$2,$3)",owner,purchase,timestamp);
+    const member=await database.one('SELECT referral_code FROM users WHERE id=$1',owner);
     const children:string[]=[],childIds:string[]=[];
     for (let index=0;index<15;index++) {
       const id=randomUUID();
-      const child=await database.one("INSERT INTO users VALUES($1,$2,'unused',$1,$3,$4) RETURNING referral_code",id,`slot_child_${id.slice(0,8)}`,owner,timestamp);
+      await database.execute("INSERT INTO users VALUES($1,$2,'unused',$1,$3,$4)",id,`slot_child_${id.slice(0,8)}`,owner,timestamp);
+      const child=await historicalEntry(database,id);
       children.push(child!.referral_code);
       childIds.push(id);
       if(index<paidChildren) await database.execute("UPDATE matrix_slots SET unlocked=TRUE WHERE user_id=$1 AND level=1",id);
@@ -99,7 +108,7 @@ test("higher program levels place members by purchase order without reserving re
   } finally {await database.close();}
 });
 
-test("level-1 trees tag unpaid referrals and hide reserved rebirths until every position purchases",async({page},info)=>{
+test("historical level-1 trees retain quoted unpaid positions and hide reserved rebirths until every position purchases",async({page},info)=>{
   const member=await fixture(1);
   const first=await (await page.request.get(`/api/referrals/tree?id=${member.memberId}&mode=matrix&level=1`)).json();
   expect(first.members.map((row:{id:string})=>row.id)).toEqual([member.memberId,...member.children.slice(0,14)]);
@@ -138,7 +147,8 @@ test("completed cards show their own full referral branches across levels and re
   try {
     for(let index=0;index<13;index++) {
       const id=randomUUID(),sponsor=index===1 || index===2 ? member.childIds[14] : member.owner;
-      const row=await database.one("INSERT INTO users VALUES($1,$2,'unused',$1,$3,$4) RETURNING referral_code",id,`completed_${id.slice(0,8)}`,sponsor,new Date().toISOString());
+      await database.execute("INSERT INTO users VALUES($1,$2,'unused',$1,$3,$4)",id,`completed_${id.slice(0,8)}`,sponsor,new Date().toISOString());
+      const row=await historicalEntry(database,id);
       second.push(row!.referral_code);secondIds.push(id);
     }
     await database.execute("UPDATE matrix_slots SET unlocked=TRUE WHERE user_id=ANY($1::TEXT[]) AND level=1",secondIds);
@@ -146,6 +156,7 @@ test("completed cards show their own full referral branches across levels and re
     await database.execute("UPDATE matrix_slots SET completed_at=$1 WHERE user_id=$2 AND ((level=1 AND cycle=1) OR (level=2 AND cycle=0))",new Date().toISOString(),member.owner);
     const extra=randomUUID();
     await database.execute("INSERT INTO users VALUES($1,$2,'unused',$1,$3,$4)",extra,`new_cycle_${extra.slice(0,8)}`,member.owner,new Date().toISOString());
+    await historicalEntry(database,extra);
   } finally {await database.close();}
   expect((await page.request.post(`${origin}/api/auth/login`,{headers:{Origin:origin},data:{memberId:member.memberId,password}})).status()).toBe(200);
   await page.goto('/referrals');
@@ -346,11 +357,13 @@ test("dashboard direct referrals open an ID list and the invitation tree keeps p
   try {
     for(let index=0;index<11;index++) {
       const id=randomUUID();
-      const row=await database.one("INSERT INTO users VALUES($1,$2,'unused',$1,$3,$4) RETURNING referral_code",id,`direct_${id.slice(0,8)}`,member.owner,new Date().toISOString());
+      await database.execute("INSERT INTO users VALUES($1,$2,'unused',$1,$3,$4)",id,`direct_${id.slice(0,8)}`,member.owner,new Date().toISOString());
+      const row=await historicalEntry(database,id);
       directIds.push(row!.referral_code);
     }
     const id=randomUUID();
-    grandchild=(await database.one("INSERT INTO users VALUES($1,$2,'unused',$1,$3,$4) RETURNING referral_code",id,`indirect_${id.slice(0,8)}`,member.childIds[0],new Date().toISOString()))!.referral_code;
+    await database.execute("INSERT INTO users VALUES($1,$2,'unused',$1,$3,$4)",id,`indirect_${id.slice(0,8)}`,member.childIds[0],new Date().toISOString());
+    grandchild=(await historicalEntry(database,id))!.referral_code;
   } finally {await database.close();}
   const errors:string[]=[];
   page.on('pageerror',error=>errors.push(error.message));

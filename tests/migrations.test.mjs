@@ -37,6 +37,83 @@ async function activateMember(db, member, key = randomUUID()) {
   return (await db.one('SELECT referral_code FROM users WHERE id=$1',member)).referral_code;
 }
 
+test('adding a ref ID leaves branches empty; level-1 slots follow purchase order in both programs',()=>isolated(async db=>{
+  await migrate(db.pool,sources);
+  for(const member of ['purchase-root','early-signup','first-buyer','second-buyer']) {
+    await db.execute("INSERT INTO users VALUES($1,$1,'hash',NULL,NULL,'2026-11-04')",member);
+    await db.execute('INSERT INTO wallets(id,user_id) VALUES($1,$2)',`w-${member}`,member);
+  }
+  await activateMember(db,'purchase-root');
+  for(const member of ['early-signup','first-buyer','second-buyer'])
+    await db.execute("UPDATE users SET sponsor_id='purchase-root' WHERE id=$1",member);
+  assert.equal((await db.one('SELECT COUNT(*) AS count FROM referral_placements')).count,0);
+  for(const program of ['matrix','unilevel'])
+    assert.equal((await db.one(`SELECT COUNT(*) AS count FROM ${program}_slots WHERE parent_id IS NOT NULL`)).count,0);
+
+  await db.transaction(()=>activateMember(db,'first-buyer'));
+  await db.transaction(()=>activateMember(db,'second-buyer'));
+  // A failed purchase rolls back placement as well as payment and member ID.
+  await assert.rejects(db.transaction(async()=>{
+    await referralRecipients('early-signup',1,'ledger',db);
+    throw Error('payment failed');
+  }),/payment failed/);
+  for(const program of ['matrix','unilevel']) {
+    assert.deepEqual(await db.all(`SELECT user_id,parent_id,branch FROM ${program}_slots
+      WHERE level=1 AND user_id<>'purchase-root' ORDER BY user_id`),[
+      {user_id:'early-signup',parent_id:null,branch:null},
+      {user_id:'first-buyer',parent_id:`${program}:1:purchase-root:0`,branch:0},
+      {user_id:'second-buyer',parent_id:`${program}:1:purchase-root:0`,branch:1},
+    ]);
+  }
+  await db.transaction(()=>activateMember(db,'early-signup'));
+  for(const program of ['matrix','unilevel'])
+    assert.equal((await db.one(`SELECT parent_id FROM ${program}_slots WHERE user_id='early-signup' AND level=1`)).parent_id,`${program}:1:first-buyer:0`);
+  assert.deepEqual(await db.one("SELECT parent_id,slot FROM referral_placements WHERE user_id='early-signup'"),{parent_id:'first-buyer',slot:0});
+}));
+
+test('registration with a ref ID does not place slots; confirmed chain receipts place once',()=>isolated(async db=>{
+  await migrate(db.pool,sources);
+  await db.execute("INSERT INTO users VALUES('quote-root','quote-root','hash',NULL,NULL,'2026-11-04')");
+  await db.execute("INSERT INTO users VALUES('quote-buyer','quote-buyer','hash',NULL,'quote-root','2026-11-04')");
+  for(const program of ['matrix','unilevel'])
+    assert.equal((await db.one(`SELECT parent_id FROM ${program}_slots WHERE user_id='quote-buyer' AND level=1`)).parent_id,null);
+  // Signed quotes still fix their recipients during the purchase flow.
+  const recipients=await db.transaction(()=>referralRecipients('quote-buyer',1,'ledger',db));
+  const address=`0x${'12'.repeat(20)}`;
+  await db.execute(`INSERT INTO referral_chain_purchases(id,user_id,request_key,level,amount,chain_id,contract_address,token_address,buyer_address,fee_recipient_address,payload,status,created_at,updated_at)
+    VALUES('slot-quote','quote-buyer','slot-quote',1,10000000,80002,$1,$1,$1,$1,'{}','awaiting_signature','2026-11-04','2026-11-04')`,address);
+  for(const status of ['pending','confirmed','confirmed']) {
+    await db.execute("UPDATE referral_chain_purchases SET status=$1 WHERE id='slot-quote'",status);
+    assert.deepEqual(await db.transaction(()=>referralRecipients('quote-buyer',1,'ledger',db)),recipients);
+  }
+  for(const program of ['matrix','unilevel'])
+    assert.deepEqual(await db.one(`SELECT parent_id,branch,unlocked FROM ${program}_slots WHERE user_id='quote-buyer' AND level=1`),
+      {parent_id:`${program}:1:quote-root:0`,branch:0,unlocked:true});
+}));
+
+test('purchase-order migration releases unpaid registration slots and preserves paid and quoted ancestors',()=>isolated(async db=>{
+  await migrate(db.pool,sources.filter(item=>item.name<'0024_'));
+  await db.execute("INSERT INTO users VALUES('old-root','old-root','hash',NULL,NULL,'2026-11-04')");
+  for(const member of ['old-ancestor','old-unused','old-paid','old-quote','old-failed'])
+    await db.execute("INSERT INTO users VALUES($1,$1,'hash',NULL,'old-root','2026-11-04')",member);
+  await db.execute('INSERT INTO wallets(id,user_id) VALUES(\'w-old-paid\',\'old-paid\')');
+  await activateMember(db,'old-paid');
+  const address=`0x${'12'.repeat(20)}`;
+  for(const [member,status] of [['old-quote','awaiting_signature'],['old-failed','failed']])
+    await db.execute(`INSERT INTO referral_chain_purchases(id,user_id,request_key,level,amount,chain_id,contract_address,token_address,buyer_address,fee_recipient_address,payload,status,created_at,updated_at)
+      VALUES($1,$1,$1,1,10000000,80002,$2,$2,$2,$2,'{}',$3,'2026-11-04','2026-11-04')`,member,address,status);
+  const snapshot=()=>Promise.all(['matrix','unilevel'].map(program=>db.all(`SELECT id,parent_id,branch,unlocked FROM ${program}_slots
+    WHERE level=1 AND user_id IN ('old-root','old-ancestor','old-paid','old-quote') ORDER BY id`)));
+  const before=await snapshot();
+  await migrate(db.pool,sources);
+  assert.deepEqual(await snapshot(),before);
+  for(const program of ['matrix','unilevel'])
+    assert.deepEqual(await db.all(`SELECT parent_id,branch FROM ${program}_slots WHERE level=1 AND user_id IN ('old-unused','old-failed')`),
+      [{parent_id:null,branch:null},{parent_id:null,branch:null}]);
+  assert.deepEqual((await db.all('SELECT user_id FROM referral_placements ORDER BY user_id')).map(row=>row.user_id),['old-ancestor','old-paid','old-quote']);
+  assert.equal((await db.one("SELECT sponsor_id FROM users WHERE id='old-unused'")).sponsor_id,'old-root');
+}));
+
 test('only the first signup gets ID 1; later IDs follow first completed purchases rather than signup order',()=>isolated(async db=>{
   await migrate(db.pool,sources);
   const insert=async member=>{
@@ -630,6 +707,7 @@ test("matrix slots limit each cycle to three descendant rows, recycle once and q
   for(let i=1;i<=16;i++) {
     await db.execute("INSERT INTO users VALUES($1,$1,'hash',$1,'root',$2)",`child${i}`,`2026-10-28T00:00:${String(i).padStart(2,'0')}Z`);
     await db.execute("INSERT INTO wallets(id,user_id) VALUES($1,$2)",`w-child${i}`,`child${i}`);
+    await db.execute("SELECT enter_referral_level($1,1)",`child${i}`);
   }
   const matrix=await db.all(`WITH RECURSIVE positions AS (
     SELECT id,0 AS depth FROM matrix_slots WHERE user_id='root' AND level=1 AND cycle=0
@@ -671,6 +749,7 @@ test("matrix placement attaches existing root branches when a sponsor is linked 
   await migrate(db.pool,sources);
   await db.execute("INSERT INTO users VALUES('a','late_a','hash','a',NULL,'2026-10-28'),('b','late_b','hash','b',NULL,'2026-10-28')");
   await db.execute("INSERT INTO users VALUES('c','late_c','hash','c','b','2026-10-28')");
+  for(const member of ['b','c']) await db.transaction(()=>unlockMatrixLevel(member,1,db));
   await db.execute("UPDATE users SET sponsor_id='a' WHERE id='b'");
   const placement=await db.one("SELECT p.user_id FROM matrix_slots s JOIN matrix_slots p ON p.id=s.parent_id WHERE s.user_id='b' AND s.level=1 AND s.cycle=0");
   assert.equal(placement.user_id,'a');
@@ -827,6 +906,7 @@ test("higher levels reference original invitations even after level-1 spillover,
   };
   await create('entry-root');
   for(const id of ['entry-a','entry-b','entry-c']) await create(id,'entry-root');
+  for(const id of ['entry-a','entry-b','entry-c']) await db.execute('SELECT enter_referral_level($1,1)',id);
   for(const table of ['matrix_slots','unilevel_slots']) {
     assert.deepEqual((await db.all(`SELECT parent_id FROM ${table} WHERE level=2 AND user_id<>'entry-root'`)).map(row=>row.parent_id),[null,null,null]);
   }
