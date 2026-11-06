@@ -35,9 +35,10 @@ export default defineEventHandler(async (event): Promise<ReferralTreeData> => {
       FROM network WHERE cardinality(path) = 0) AS root,
     COALESCE((SELECT json_agg(json_build_object('id',referral_code,'path',array_to_string(path,'/'),'parentId',parent_code,'purchased',purchased)
       ORDER BY cardinality(path),path) FROM network
-      WHERE path[1:cardinality($3::INTEGER[])] = $3::INTEGER[] AND cardinality(path) <= $4),'[]'::JSON) AS members,
+      WHERE (purchased OR cardinality(path) = 0)
+        AND path[1:cardinality($3::INTEGER[])] = $3::INTEGER[] AND cardinality(path) <= $4),'[]'::JSON) AS members,
     COALESCE((SELECT json_agg(counts) FROM (
-      SELECT cardinality(path) AS depth,COUNT(*)::INTEGER AS filled FROM network WHERE ${mode === "matrix" ? "purchased AND" : ""} cardinality(path) > 0
+      SELECT cardinality(path) AS depth,COUNT(*)::INTEGER AS filled FROM network WHERE purchased AND cardinality(path) > 0
       GROUP BY cardinality(path) ORDER BY depth
     ) counts),'[]'::JSON) AS counts`, root.id,maxDepth,slots,slots.length + visibleDepth,level,cycle);
   const counts = result!.counts as { depth: number; filled: number }[];

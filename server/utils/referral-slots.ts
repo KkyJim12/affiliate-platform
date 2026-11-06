@@ -31,7 +31,7 @@ export async function referralSlotCatalog(member: { id: string; referral_code: s
       UNION ALL SELECT p.root,s.id,s.unlocked,p.depth+1 FROM positions p
         JOIN ${table} s ON s.parent_id = p.id WHERE p.depth < ${depth}
     ) SELECT s.level,s.cycle,s.unlocked,s.completed_at IS NOT NULL AS completed,
-      COUNT(*) FILTER (WHERE p.depth > 0) AS filled,
+      COUNT(*) FILTER (WHERE p.depth > 0 AND p.unlocked) AS filled,
       COUNT(*) FILTER (WHERE p.depth > 0 AND p.unlocked) AS paid
       FROM selected s JOIN positions p ON p.root = s.id
       GROUP BY s.id,s.level,s.cycle,s.unlocked,s.completed_at ORDER BY s.level,s.cycle`,member.id,level,pageSize,(page-1)*pageSize),

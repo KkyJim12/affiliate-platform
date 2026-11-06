@@ -49,11 +49,24 @@ export async function unlockMatrixLevel(userId: string, level: number, database 
 
 export const matrixCycleHash = (cycleId: string) => hashId(cycleId);
 
+// Quotes carry a recipient snapshot, but must not occupy branches before payment.
+// Call inside the genealogy transaction; roll back every placement side effect.
+export async function previewReferralRecipients(userId: string, level: number, mode: "external" | "embedded" | "ledger", database = db()) {
+  await database.execute("SELECT pg_advisory_xact_lock(782438, 2)");
+  await database.execute("SAVEPOINT referral_quote_preview");
+  try {
+    return await referralRecipients(userId, level, mode, database);
+  } finally {
+    await database.execute("ROLLBACK TO SAVEPOINT referral_quote_preview");
+    await database.execute("RELEASE SAVEPOINT referral_quote_preview");
+  }
+}
+
 // The first three entries are matrix slot ancestry; the remaining fifteen
 // follow the selected level's unilevel slots, starting at the buyer's parent.
 export async function referralRecipients(userId: string, level: number, mode: "external" | "embedded" | "ledger", database = db(), cycles = { matrix: 0, unilevel: 0 }) {
-  // Call inside the genealogy transaction. Reserve the actual entry position
-  // before signing a quote; confirmations and retries keep that position.
+  // Ledger purchases enter atomically with payment. Contract quotes use the
+  // preview above; their actual position is assigned by the confirmed receipt.
   await database.execute("SELECT enter_referral_level($1,$2)", userId, level);
   const walletTable = mode === "external" ? "connected_wallets" : mode === "ledger" ? "wallets" : "evm_wallets";
   const walletField = mode === "ledger" ? "w.id" : "w.address";

@@ -74,7 +74,6 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer); });
             <strong class="slot-card-name">{{ slotName(slot) }}</strong>
             <span class="slot-card-progress">{{ t('matrixSlots.paidProgress',{paid:number(slot.paid),capacity:number(slot.capacity)}) }}</span>
             <span class="slot-progress-track" aria-hidden="true"><span :style="{width:`${slot.paid/slot.capacity*100}%`}"></span></span>
-            <span class="slot-card-reserved">{{ t('matrixSlots.reservedProgress',{filled:number(slot.filled),capacity:number(slot.capacity)}) }}</span>
             <span class="slot-card-action">{{ t(slot.status === 'locked' ? 'matrixSlots.previewTree' : slot.status === 'completed' ? 'matrixSlots.viewCompletedTree' : 'matrixSlots.viewTree') }}<AppIcon name="ArrowUpRight" :size="16" /></span>
           </button>
         </div>
@@ -103,7 +102,7 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer); });
 .slot-card-icon { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: var(--gold-soft); color: var(--gold-text); }.locked .slot-card-icon { color: var(--text-secondary); background: var(--tree-bg); }
 .slot-status { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 20px; padding: 5px 9px; font-size: 10px; line-height: 1.5; color: var(--text-secondary); }.slot-status.open { border-color: var(--gold-border); color: var(--gold-text); background: var(--gold-soft); }.slot-status.completed { color: var(--success); background: var(--success-soft); border-color: var(--success); }
 .slot-card-level { color: var(--gold-text); font-size: 11px; font-weight: 600; }.slot-card-name { font-size: 19px; margin: 7px 0 22px; overflow-wrap: anywhere; font-weight: 600; }
-.slot-card-progress, .slot-card-reserved { color: var(--text-secondary); font-size: 11px; line-height: 1.6; }.slot-card-progress { color: var(--text-primary); }
+.slot-card-progress { color: var(--text-primary); font-size: 11px; line-height: 1.6; }
 .slot-progress-track { display: block; height: 5px; border-radius: 6px; background: var(--border); overflow: hidden; margin: 9px 0; }.slot-progress-track > span { display: block; height: 100%; background: var(--gold); border-radius: inherit; }.completed .slot-progress-track > span { background: var(--success); }
 .slot-card-action { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--border); padding-top: 15px; margin-top: 20px; color: var(--gold-text); font-size: 12px; font-weight: 600; }
 .slot-detail-heading h3 { margin: 8px 0; font-size: 22px; overflow-wrap: anywhere; }.slot-lock-note, .slot-detail-note { font-size: 12px; line-height: 1.8; color: var(--text-secondary); margin-bottom: 18px; }.slot-lock-note { display: flex; align-items: center; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; }.slot-lock-note svg { flex-shrink: 0; }

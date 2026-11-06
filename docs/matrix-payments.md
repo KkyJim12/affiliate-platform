@@ -78,10 +78,13 @@ entry has no parent. The member's sponsor ID stays unchanged. Previously
 purchased levels stay unlocked; existing entries retain their reserved positions
 when skipped inviters upgrade later.
 
-For contract payments, entry is reserved when preparing the signed quote.
-That reservation survives confirmation delays and retries so the tree matches
-the signed recipients. Failed or expired quotes do not unlock the level.
-Ledger reservations roll back if the purchase fails.
+For contract payments, preparing a signed quote previews recipients without
+reserving any tree position. Initial positions are assigned when the receipt
+is confirmed, in confirmation order. Unsigned, pending, failed and expired
+purchases do not fill the tree. Ledger placement commits atomically with payment.
+The signed quote keeps its original commission recipients for settlement and
+accounting; another purchase can take the previewed branch before confirmation,
+so those historical recipients can differ from the final tree ancestry.
 
 Failed automatic rebirths and level upgrades stay in the durable queue and
 retry automatically, with at least fifteen seconds between attempts. There is
@@ -105,22 +108,20 @@ The member referral page starts with a grid of matrix slots. The Unilevel tab
 also starts with its own slot cards, including initial slots and reborns at
 every purchase level. Matrix capacity is 14; Unilevel capacity is 65,534.
 Cards show locked, filling or
-completed status, paid positions and reserved positions separately. Select a
+completed status and paid positions. Select a
 card to open that exact level and cycle, then return to the grid to choose
 another. The level filter and pagination support accounts with many rebirths.
 Locked cards preview existing descendants; opening one does not purchase a level.
-Level 1 shows referred members when they register. Higher levels show members
-when they enter that level.
-Members who have not purchased the selected level carry a "Not purchased yet"
-tag. Tree counts show paid
+All levels show descendants only after their purchases are confirmed.
+Tree counts show paid
 positions. Registration alone does not open a rebirth or trigger an upgrade.
 Reserved future cycles stay out of the slot list and public cycle selector
 until their own program completes or a completion in the other program opens
 a linked rebirth entry.
 
-The owner's root remains visible for context. Level 1 shows purchase entries,
-including pending quoted positions. New higher-level entries skip unpaid inviters; historical
-paid and quoted branches retain their original paths. The open slot refreshes
+The owner's root remains visible for context. Unpaid descendants are omitted
+from both program trees and slot progress. New higher-level entries skip unpaid inviters;
+historical paid branches retain their original paths. The open slot refreshes
 every fifteen seconds while the tab is visible. Migration
 `0024_purchase_order_level_one_slots.sql` releases unused level-1 registration
 positions, retaining paid and quoted branches and their ancestors. Invitation
@@ -348,6 +349,12 @@ Migration `0020_skip_unpaid_level_inviters.sql` makes new entries at levels 2–
 skip original inviters who do not own the target level. Existing placements,
 paid branches and outstanding quotes keep their recipients, including parentless
 quotes. No historical payments are redistributed and no contract change is required.
+
+Migration `0026_release_unpaid_purchase_positions.sql` releases unused initial
+positions for unsigned, pending and failed quotes at every level. Paid branches,
+their historical ancestors and rebirth entries remain intact. Signed recipient
+payloads and historical allocations are unchanged. The tree omits unpaid
+descendants, including any historical ancestors retained for paid branches.
 
 For an existing version-3 installation:
 

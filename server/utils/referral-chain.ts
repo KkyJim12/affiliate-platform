@@ -1,4 +1,4 @@
-import { completeRebirth, rebirthRecipients, referralRecipients, unlockMatrixLevel, type ReferralJob } from "./matrix";
+import { completeRebirth, rebirthRecipients, previewReferralRecipients, unlockMatrixLevel, type ReferralJob } from "./matrix";
 import { createError } from "h3";
 import { commissionAuthorization, reconcileHeldChainAllocations } from "./commission-qualification";
 import { ZeroHash, getAddress, id as hashId, parseUnits } from "ethers";
@@ -96,7 +96,7 @@ export async function submitChainPurchase(userId: string, password: string, leve
       const program = await referralProgram(userId);
       if (program.nextLevel !== level || (state.currentLevel !== 0 && state.currentLevel !== program.currentLevel))
         throw createError({ statusCode: 409, statusMessage: "Purchase the next referral level in order. The maximum is level 15." });
-      const recipients = await referralRecipients(userId, level, "embedded");
+      const recipients = await previewReferralRecipients(userId, level, "embedded");
       const id = randomUUID(), timestamp = new Date().toISOString();
       const uplines = recipients.map(row => row.address);
       const block = await reader.provider.getBlock("latest");
@@ -324,7 +324,7 @@ async function processReferralAutoUpgrades() {
           if (state.paused) throw new Error("Automatic upgrades are paused with contract purchases.");
           if (state.currentLevel !== 0 && state.currentLevel !== program.currentLevel) throw new Error("Waiting for level reconciliation.");
           const mode = externalWalletMode() ? "external" : "embedded";
-          const recipients = job.kind === 'rebirth' ? await rebirthRecipients(job,mode) : await referralRecipients(job.user_id,job.level,mode);
+          const recipients = job.kind === 'rebirth' ? await rebirthRecipients(job,mode) : await previewReferralRecipients(job.user_id,job.level,mode);
           const uplines = recipients.map(item => item.address), block = await reader.provider.getBlock("latest");
           if (!block) throw new Error("Chain head unavailable.");
           const id = randomUUID(), timestamp = new Date().toISOString();
