@@ -18,7 +18,7 @@ useHead({
   htmlAttrs: { lang: computed(() => localeTag.value), dir: "ltr" },
   title: "UNXO",
   meta: [
-    { name: "theme-color", content: computed(() => colorMode.value === "dark" ? "#0d1017" : "#f5f6f8") },
+    { name: "theme-color", content: computed(() => colorMode.value === "dark" ? "#020c24" : "#edf5ff") },
     { name: "description", content: computed(() => t('ui.your_three_layer_binary_matrix_15_referral_levels_and_in_app_usdt_wallet_sign_in_a4950')) },
   ],
 });

@@ -7,6 +7,7 @@ const { t, tr, localeTag, formatDate } = useLoopI18n();
     :aria-label="t('ui.illustrative_matrix_connections_and_usdt_commission_preview')"
     role="img"
   >
+    <NetworkGlobe />
     <div class="visual-grid"></div>
     <div class="orbital orbital-one"></div>
     <div class="orbital orbital-two"></div>
@@ -23,7 +24,7 @@ const { t, tr, localeTag, formatDate } = useLoopI18n();
       <circle cx="422" cy="356" r="4" fill="#EF734B" />
     </svg>
     <div class="center-token">
-      <BrandLogo symbol />
+      <BrandLogo />
     </div>
     <div class="friend-card friend-one">
       <span class="visual-avatar avatar-peach">J<span>✦</span></span>

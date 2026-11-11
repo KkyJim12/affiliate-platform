@@ -21,6 +21,7 @@ export default defineNuxtConfig({
     "~/assets/css/motion.css",
     "~/assets/css/connected-wallet.css",
     "~/assets/css/workspace.css",
+    "~/assets/css/unxo.css",
   ],
   colorMode: {
     preference: "dark",

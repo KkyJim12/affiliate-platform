@@ -215,7 +215,7 @@ test("single theme icon toggles light/dark, persists, and exports themed trees",
   await openLandingAuth(page);
   await expect(page.getByRole("dialog")).toBeVisible();
   const dialogBackground = await page.getByRole("dialog").evaluate((element) => getComputedStyle(element).backgroundColor);
-  expect(dialogBackground).toBe("rgb(21, 26, 35)");
+  expect(dialogBackground).toBe("rgb(6, 22, 50)");
   await page.keyboard.press("Escape");
   await page.screenshot({ path: `test-results/gold-landing-dark-${testInfo.project.name}.png`, fullPage: true });
   await gotoReady(page, "/dashboard?view=wallet");
@@ -229,7 +229,7 @@ test("single theme icon toggles light/dark, persists, and exports themed trees",
   const downloadEvent = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download image", exact: true }).click();
   const svg = await readFile((await (await downloadEvent).path())!, "utf8");
-  expect(svg).toContain('fill="#11161f"');
+  expect(svg).toContain('fill="#03122c"');
   expect(svg).not.toContain("var(--");
   await noOverflow(page);
   await page.screenshot({ path: `test-results/gold-tree-dark-${testInfo.project.name}.png`, fullPage: true });

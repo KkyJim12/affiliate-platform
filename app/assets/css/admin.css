@@ -57,7 +57,7 @@
 .admin-quick-icon { color: var(--gold-text); margin-bottom: 15px; }
 .admin-quick-card p { font-size: 11px; line-height: 1.8; color: var(--text-secondary); margin: 10px 0 20px; max-width: 280px; }
 .admin-quick-card > .admin-text-button { margin-top: 8px; }
-.admin-table-scroll { width: 100%; overflow-x: auto; border-radius: 0 0 15px 15px; }
+.admin-table-scroll { position: relative; width: 100%; overflow-x: auto; border-radius: 0 0 15px 15px; }
 .admin-table { width: 100%; text-align: left; border-collapse: collapse; white-space: nowrap; }
 .admin-table th { padding: 13px 24px; color: var(--text-tertiary); background: var(--surface-alt); font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .7px; border-block: 1px solid var(--border); }
 .admin-table td { padding: 18px 24px; border-bottom: 1px solid var(--border); color: var(--text-secondary); font-size: 11px; }
